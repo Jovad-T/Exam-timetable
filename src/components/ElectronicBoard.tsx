@@ -1232,6 +1232,37 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 <Clock className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
                 <span>{currentTime}</span>
               </span>
+
+              {/* 알림 소리 ON/OFF 버튼 */}
+              {alertSettings && onChangeAlertSettings && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChangeAlertSettings({
+                      ...alertSettings,
+                      soundEnabled: !alertSettings.soundEnabled,
+                    });
+                  }}
+                  className={`px-2.5 py-1 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-1 shadow-xs border ${
+                    alertSettings.soundEnabled
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-600'
+                  }`}
+                  title={alertSettings.soundEnabled ? '시험 종료/시작 알림 소리 켜짐 (클릭하여 무음으로 전환)' : '알림 소리 꺼짐 (클릭하여 소리 켜기)'}
+                >
+                  {alertSettings.soundEnabled ? (
+                    <>
+                      <Volume2 className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
+                      <span>알림 ON</span>
+                    </>
+                  ) : (
+                    <>
+                      <VolumeX className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span>알림 OFF</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
 
