@@ -1,0 +1,128 @@
+import React from 'react';
+import { Monitor, Settings, Sparkles, School, ShieldAlert, ArrowRight } from 'lucide-react';
+
+interface AppModeSelectorProps {
+  onSelectClassroomMode: () => void;
+  onSelectAdminMode: () => void;
+}
+
+export const AppModeSelector: React.FC<AppModeSelectorProps> = ({
+  onSelectClassroomMode,
+  onSelectAdminMode,
+}) => {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white flex items-center justify-center p-4 sm:p-8 lg:p-12">
+      <div className="max-w-6xl w-full mx-auto space-y-10">
+        
+        {/* Header Branding */}
+        <div className="text-center space-y-4">
+          <div className="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/30 px-4 py-1.5 rounded-full text-indigo-300 text-xs font-bold tracking-wider uppercase backdrop-blur-md break-keep">
+            <Sparkles className="w-4 h-4 text-yellow-400 shrink-0" />
+            <span>고등학교 스마트 시험 시간표 & 전자칠판 통합 시스템</span>
+          </div>
+          <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white drop-shadow-md break-keep">
+            시작할 모드를 선택해 주세요
+          </h1>
+          <p className="text-slate-400 text-sm sm:text-base max-w-2xl mx-auto break-keep leading-relaxed">
+            교실에 배포하는 디스플레이용 <strong className="text-emerald-400">전자칠판 모드</strong>와 시간표 편집을 위한 <strong className="text-indigo-400">관리자 모드</strong> 중 선택하세요.
+          </p>
+        </div>
+
+        {/* Two Mode Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+          
+          {/* 1. Classroom Electronic Board Mode Card */}
+          <div 
+            onClick={onSelectClassroomMode}
+            className="group relative bg-gradient-to-b from-slate-900/95 to-slate-950/95 border-2 border-emerald-500/30 hover:border-emerald-400 rounded-3xl p-8 sm:p-10 shadow-2xl transition-all duration-300 hover:scale-[1.02] cursor-pointer flex flex-col justify-between overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl group-hover:bg-emerald-500/25 transition-all"></div>
+            
+            <div className="space-y-5 relative z-10">
+              <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                <Monitor className="w-8 h-8" />
+              </div>
+              
+              <div>
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-widest bg-emerald-500 text-slate-950 px-2.5 py-1 rounded-full break-keep">
+                    교실 배포용
+                  </span>
+                  <span className="text-xs text-emerald-400 font-bold break-keep">초기 학년/반 설정 후 직행</span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black text-white group-hover:text-emerald-300 transition-colors break-keep">
+                  전자칠판 모드
+                </h2>
+              </div>
+
+              <p className="text-sm sm:text-base text-slate-300 leading-relaxed break-keep">
+                교실에 설치된 전자칠판 및 디스플레이에 최적화된 모드입니다.<br className="hidden sm:block" />
+                초기에 학년과 반을 설정한 뒤 불필요한 메뉴 없이<br className="hidden sm:block" />
+                곧바로 전자칠판 시간표 화면으로 진입하여<br className="hidden sm:block" />
+                실시간 시험 진행, TTS 음성 안내, 과목 자동 스크롤을 실행합니다.
+              </p>
+            </div>
+
+            <div className="pt-6 mt-8 border-t border-slate-800/80 flex items-center justify-between relative z-10">
+              <span className="text-xs sm:text-sm font-bold text-emerald-400 flex items-center gap-2 break-keep">
+                <School className="w-4 h-4" />
+                <span>교실 디스플레이 실행</span>
+              </span>
+              <div className="w-10 h-10 rounded-xl bg-emerald-500 text-slate-950 flex items-center justify-center font-black group-hover:translate-x-1 transition-transform shadow-md">
+                <ArrowRight className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Admin / Teacher Mode Card */}
+          <div 
+            onClick={onSelectAdminMode}
+            className="group relative bg-gradient-to-b from-slate-900/95 to-slate-950/95 border-2 border-indigo-500/30 hover:border-indigo-400 rounded-3xl p-8 sm:p-10 shadow-2xl transition-all duration-300 hover:scale-[1.02] cursor-pointer flex flex-col justify-between overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl group-hover:bg-indigo-500/25 transition-all"></div>
+            
+            <div className="space-y-5 relative z-10">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                <Settings className="w-8 h-8" />
+              </div>
+              
+              <div>
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-widest bg-indigo-600 text-white px-2.5 py-1 rounded-full break-keep">
+                    교사 및 관리자용
+                  </span>
+                  <span className="text-xs text-indigo-300 font-bold break-keep">시간표 편집 & AI 추출</span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black text-white group-hover:text-indigo-300 transition-colors break-keep">
+                  관리자 모드
+                </h2>
+              </div>
+
+              <p className="text-sm sm:text-base text-slate-300 leading-relaxed break-keep">
+                시간표 데이터를 수동으로 편집하거나 AI 시험 시간표 이미지 추출,<br className="hidden sm:block" />
+                공지사항 관리, 테마 설정, 알림 설정, 소스 코드 내보내기 등<br className="hidden sm:block" />
+                전체 시스템을 관리하고 수정할 수 있는 모드입니다.
+              </p>
+            </div>
+
+            <div className="pt-6 mt-8 border-t border-slate-800/80 flex items-center justify-between relative z-10">
+              <span className="text-xs sm:text-sm font-bold text-indigo-400 flex items-center gap-2 break-keep">
+                <ShieldAlert className="w-4 h-4" />
+                <span>관리자 대시보드 열기</span>
+              </span>
+              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black group-hover:translate-x-1 transition-transform shadow-md">
+                <ArrowRight className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div className="text-center text-xs sm:text-sm text-slate-400 pt-4 break-keep">
+          ※ 선택하신 모드는 브라우저에 저장되며, 언제든지 상단 메뉴에서 모드를 변경하거나 전환할 수 있습니다.
+        </div>
+
+      </div>
+    </div>
+  );
+};

@@ -1,0 +1,70 @@
+{
+  "entities": {
+    "School": {
+      "title": "School",
+      "description": "School profile and display configuration",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "School name"
+        },
+        "slug": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "School unique URL slug"
+        },
+        "logoUrl": {
+          "type": "string",
+          "description": "Optional school logo data or URL"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["name", "slug", "updatedAt"]
+    },
+    "Schedule": {
+      "title": "Schedule",
+      "description": "Exam schedule and notice data for a school",
+      "type": "object",
+      "properties": {
+        "schoolSlug": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "School slug identifier"
+        },
+        "schoolName": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "School display name"
+        },
+        "scheduleJson": {
+          "type": "string",
+          "description": "Serialized complete schedule JSON data"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["schoolSlug", "scheduleJson", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/schools/{schoolSlug}": {
+      "schema": {
+        "$ref": "School"
+      },
+      "description": "School metadata and settings document"
+    },
+    "/schools/{schoolSlug}/schedules/{scheduleId}": {
+      "schema": {
+        "$ref": "Schedule"
+      },
+      "description": "Exam schedules collection for the school"
+    }
+  }
+}
