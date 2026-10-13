@@ -580,25 +580,41 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
     return { isMatch: false, isExplicit: false, isElective: true };
   };
 
+  // Helper to filter out subjects belonging to other grades (동학년 과목만 남기기)
+  const filterSameGradeSubjects = (subjects: SubjectItem[], grade: string) => {
+    const currentGradeStr = `${grade}학년`;
+    const otherGrades = ['1학년', '2학년', '3학년'].filter((g) => g !== currentGradeStr);
+    return subjects.filter((s) => {
+      const target = (s.targetClass || '').trim();
+      const mentionsOtherGrade = otherGrades.some((g) => target.includes(g));
+      if (mentionsOtherGrade && !target.includes(currentGradeStr)) {
+        return false;
+      }
+      return true;
+    });
+  };
+
   // Get subjects that belong to the active class for a specific period
   const getPeriodSubjectsForClass = (subjects: SubjectItem[], grade: string, classNum: string) => {
-    const explicitMatches = subjects.filter((s) => matchSubjectForClass(s, grade, classNum).isMatch);
+    const sameGradeSubjects = filterSameGradeSubjects(subjects, grade);
+    const explicitMatches = sameGradeSubjects.filter((s) => matchSubjectForClass(s, grade, classNum).isMatch);
     if (explicitMatches.length > 0) {
       return explicitMatches;
     }
     // If no explicit matches, check if period only has elective/room-moving subjects (e.g. 3교시: 미적분1 [지정반], 자습 [A205])
-    const electives = subjects.filter((s) => matchSubjectForClass(s, grade, classNum).isElective);
+    const electives = sameGradeSubjects.filter((s) => matchSubjectForClass(s, grade, classNum).isElective);
     if (electives.length > 0) {
       return electives;
     }
-    // Fallback: return all subjects so no period is empty
-    return subjects;
+    // Fallback: return same grade subjects so no period is empty
+    return sameGradeSubjects;
   };
 
   // Get elective/room-moving notes for a period (e.g. 기하 A206)
   const getElectiveNotesForPeriod = (subjects: SubjectItem[], grade: string, classNum: string) => {
-    const matching = getPeriodSubjectsForClass(subjects, grade, classNum);
-    return subjects.filter((s) => !matching.includes(s));
+    const sameGradeSubjects = filterSameGradeSubjects(subjects, grade);
+    const matching = getPeriodSubjectsForClass(sameGradeSubjects, grade, classNum);
+    return sameGradeSubjects.filter((s) => !matching.includes(s));
   };
 
   // Parse all periods and exams from current daySchedule (synchronized with class timetable)
@@ -1096,7 +1112,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       </div>
     );
 
-  const BASE_HEIGHT = Math.max(920, measuredBaseHeight);
+  // 사용자 요청: "날짜마다 내가 첨부한 부분이 사이즈가 달라지는데? 이건 고정해야 되지 않아?"
+  // BASE_HEIGHT를 930으로 고정하여 날짜별 교시 수나 내용에 상관없이 칠판 및 첨부 영역 사이즈가 항상 일정하게 유지되도록 함
+  const BASE_HEIGHT = 930;
 
   // Safety margins:
   // 사용자 요청: "감지 해상도 부분은 안 보이게 해주고 마우스가 가면 나타나게 해줄래? 그 아래 부분이 윗부분까지 채워줘."
@@ -1757,9 +1775,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
         period: '1교시',
         subjects: [],
       };
-    const targetSubjects = targetPeriod.subjects || [];
+    const rawSubjects = targetPeriod.subjects || [];
+    const targetSubjects = filterSameGradeSubjects(rawSubjects, attendance.grade);
     const classMatchedSubjects = getPeriodSubjectsForClass(
-      targetSubjects,
+      rawSubjects,
       attendance.grade,
       attendance.classNum
     );
@@ -2454,6 +2473,51 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               <span>2.시험진행</span>
             </button>
           </div>
+
+          {/* Simulation / Test Mode Switcher */}
+          <div className="flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded-xl border border-slate-800 text-xs">
+            <span className="text-amber-400 text-[11px] font-bold mr-0.5 hidden sm:inline">테스트:</span>
+            <button
+              type="button"
+              onClick={() => setSimMode('realtime')}
+              className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                simMode === 'realtime' ? 'bg-emerald-600 text-white font-black' : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="실제 시스템 시간 모드"
+            >
+              실시간
+            </button>
+            <button
+              type="button"
+              onClick={() => setSimMode('p1')}
+              className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                simMode === 'p1' ? 'bg-amber-600 text-white font-black' : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="1교시 진행 중 시뮬레이션 테스트"
+            >
+              1교시중
+            </button>
+            <button
+              type="button"
+              onClick={() => setSimMode('p2')}
+              className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                simMode === 'p2' ? 'bg-amber-600 text-white font-black' : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="2교시 진행 중 시뮬레이션 테스트"
+            >
+              2교시중
+            </button>
+            <button
+              type="button"
+              onClick={() => setSimMode('warningAlert')}
+              className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                simMode === 'warningAlert' ? 'bg-rose-600 text-white font-black' : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="시험 종료 임박(5분 전) 경고 시뮬레이션 테스트"
+            >
+              종료임박
+            </button>
+          </div>
         </div>
 
         {/* Action Controls */}
@@ -2664,6 +2728,16 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           </div>
         </div>
 
+        {/* Graphical Time Progress Bar */}
+        <div className="w-full h-2.5 sm:h-3 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-700 shadow-inner relative">
+          <div 
+            className="h-full bg-gradient-to-r from-emerald-500 via-yellow-400 to-rose-500 rounded-full transition-all duration-1000 shadow-sm relative"
+            style={{ width: `${Math.min(100, Math.max(0, (currentExam.elapsedSeconds / (currentExam.totalSeconds || 1)) * 100))}%` }}
+          >
+            <div className="absolute inset-0 bg-white/20 animate-pulse rounded-full" />
+          </div>
+        </div>
+
         {/* Warning Alert Notice (시험 종료 5분전/10분전 OMR 점검 강조 & 소리 상태 표시) */}
         {currentExam.isEndingSoon && (
           <div className="bg-rose-900/90 border border-rose-500 rounded-xl px-3 py-1.5 flex items-center justify-between gap-2 text-xs sm:text-sm font-black text-amber-200 animate-pulse shadow-md">
@@ -2829,6 +2903,53 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 title="화면 가로 전체로 칠판 확장"
               >
                 <span>가로 전체 확장</span>
+              </button>
+            </div>
+
+            <span className="text-slate-600 hidden sm:inline">|</span>
+
+            {/* Simulation / Test Mode Switcher in Fullscreen */}
+            <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-lg border border-slate-700/80 text-xs shrink-0">
+              <span className="text-amber-400 text-[10px] font-bold px-1 hidden md:inline">테스트:</span>
+              <button
+                type="button"
+                onClick={() => setSimMode('realtime')}
+                className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
+                  simMode === 'realtime' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:text-white'
+                }`}
+                title="실제 시스템 시간 모드"
+              >
+                실시간
+              </button>
+              <button
+                type="button"
+                onClick={() => setSimMode('p1')}
+                className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
+                  simMode === 'p1' ? 'bg-amber-600 text-white' : 'text-slate-300 hover:text-white'
+                }`}
+                title="1교시 진행 중 테스트"
+              >
+                1교시중
+              </button>
+              <button
+                type="button"
+                onClick={() => setSimMode('p2')}
+                className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
+                  simMode === 'p2' ? 'bg-amber-600 text-white' : 'text-slate-300 hover:text-white'
+                }`}
+                title="2교시 진행 중 테스트"
+              >
+                2교시중
+              </button>
+              <button
+                type="button"
+                onClick={() => setSimMode('warningAlert')}
+                className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
+                  simMode === 'warningAlert' ? 'bg-rose-600 text-white' : 'text-slate-300 hover:text-white'
+                }`}
+                title="시험 임박 경고 테스트"
+              >
+                종료임박
               </button>
             </div>
 
@@ -3015,6 +3136,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   // Normal Window Mode Layout
   return (
     <div ref={!isFullscreen ? boardContainerRef : undefined} className="max-w-[1380px] mx-auto w-full px-2 sm:px-4 space-y-3">
+      {renderClockAndControls()}
       {effectiveScreen === 'break_view' ? renderChalkboardContent() : renderFocusedExamScreen()}
       {renderCenterNotificationModal()}
 
