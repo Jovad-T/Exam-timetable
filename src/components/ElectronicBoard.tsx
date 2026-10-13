@@ -1106,7 +1106,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   const sideReservedSpace = isFullscreen ? 0 : 0;
 
   const availableWidth = Math.max(360, windowSize.width - sideReservedSpace);
-  const availableHeight = Math.max(300, windowSize.height - (topReservedSpace + bottomReservedSpace));
+  const availableHeight = Math.max(300, windowSize.height - (isFullscreen ? 16 : 0));
 
   const targetVerticalScale = availableHeight / BASE_HEIGHT;
   const targetHorizontalScale = availableWidth / BASE_WIDTH;
@@ -1115,15 +1115,15 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   let dynamicBaseWidth: number;
 
   if (fullscreenAspectMode === 'photo') {
-    // [기본값] 첨부 사진 비율 고정: 칠판 가로세로 비율(1520x920, 약 1.63:1)을 화면 크기에 관계없이 항상 일정하게 유지
-    // 세로/가로 모두 화면 안에 쏙 들어가며 아래쪽 여백도 72px 이상 넉넉하게 보장됨
+    // [기본값] 첨부 사진 비율 고정: 칠판 가로세로 비율(1380x920 이상)을 화면 크기에 관계없이 항상 일정하게 유지
+    // 안전 계수(0.94)를 적용하여 전체화면에서 하단 튀어나감 없이 깔끔하게 한 화면에 쏙 들어오도록 보장
     dynamicBaseWidth = BASE_WIDTH;
-    autoCalculatedScale = Math.min(targetVerticalScale, targetHorizontalScale);
+    autoCalculatedScale = Math.min(targetVerticalScale, targetHorizontalScale) * 0.94;
   } else {
     // [선택 모드] 가로 전체 확장: 와이드 화면 가로를 꽉 채우도록 베이스 너비 확장
     const idealBaseWidth = availableWidth / targetVerticalScale;
     dynamicBaseWidth = Math.round(Math.max(1380, idealBaseWidth));
-    autoCalculatedScale = targetVerticalScale;
+    autoCalculatedScale = targetVerticalScale * 0.94;
   }
 
   const effectiveScale = scaleMode === 'auto' ? autoCalculatedScale : customScale;
