@@ -29,7 +29,19 @@ export function getBaseUrl(overrideDomain?: string): string {
     } catch {}
   }
 
-  // 2. Environment variables (Vercel / Vite env vars)
+  // 2. Browser window location (Current visiting domain takes precedence in browser runtime)
+  if (typeof window !== 'undefined') {
+    let origin = window.location.origin;
+    if (origin.includes('ais-dev-')) {
+      origin = origin.replace('ais-dev-', 'ais-pre-');
+    }
+    const pathname = window.location.pathname.replace(/\/+$/, '');
+    if (origin && origin !== 'null') {
+      return `${origin}${pathname}`;
+    }
+  }
+
+  // 3. Environment variables (Vercel / Vite env vars fallback)
   const envAppUrl =
     (import.meta as any).env?.VITE_APP_URL ||
     (import.meta as any).env?.VITE_PUBLIC_URL ||
@@ -46,18 +58,6 @@ export function getBaseUrl(overrideDomain?: string): string {
   const vercelUrl = (import.meta as any).env?.VITE_VERCEL_URL;
   if (vercelUrl && typeof vercelUrl === 'string' && vercelUrl.trim()) {
     return `https://${vercelUrl.trim().replace(/\/+$/, '')}`;
-  }
-
-  // 3. Browser window location fallback
-  if (typeof window !== 'undefined') {
-    let origin = window.location.origin;
-    // CRITICAL FIX: Google AI Studio development container uses 'ais-dev-', which is private to the developer.
-    // Replace 'ais-dev-' with 'ais-pre-' (Public Shared App URL) so external devices, phones, and classrooms can connect!
-    if (origin.includes('ais-dev-')) {
-      origin = origin.replace('ais-dev-', 'ais-pre-');
-    }
-    const pathname = window.location.pathname.replace(/\/+$/, '');
-    return `${origin}${pathname}`;
   }
 
   return '';
