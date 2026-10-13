@@ -1189,14 +1189,14 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
         {/* Top Banner Header */}
         <div
-          className={`relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-4 border-b-2 ${currentTheme.headerBorder}`}
+          className={`relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b-2 ${currentTheme.headerBorder}`}
         >
-          {/* School Emblem & Title strictly on ONE SINGLE LINE */}
-          <div className="flex items-center gap-3 shrink-0">
-            {/* School Emblem - 관리자 모드에서 첨부한 학교 마크로 교체 표시 */}
+          {/* School Emblem & Title */}
+          <div className="flex items-center gap-3 min-w-0 flex-1 flex-wrap">
+            {/* School Emblem */}
             {schoolLogo ? (
               <div
-                className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white/95 border-2 border-yellow-400 p-1 flex items-center justify-center shadow-lg shrink-0 overflow-hidden"
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/95 border-2 border-yellow-400 p-1 flex items-center justify-center shadow-lg shrink-0 overflow-hidden"
                 title="학교 마크 (관리자 모드에서 첨부됨)"
               >
                 <img
@@ -1207,41 +1207,43 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               </div>
             ) : (
               <div
-                className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-red-700 border-2 border-yellow-400 flex items-center justify-center shadow-lg shrink-0"
-                title="기본 高 마크 (관리자 모드에서 학교 마크를 첨부하면 이 자리에 표시됩니다)"
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-red-700 border-2 border-yellow-400 flex items-center justify-center shadow-lg shrink-0"
+                title="기본 高 마크"
               >
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-yellow-300/80 flex items-center justify-center text-yellow-300 font-extrabold text-xs sm:text-sm tracking-tighter">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-yellow-300/80 flex items-center justify-center text-yellow-300 font-extrabold text-xs tracking-tighter">
                   高
                 </div>
               </div>
             )}
 
-            {/* Title with Date attached next to it */}
-            <h2 className="text-lg sm:text-2xl md:text-3xl font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] flex items-center gap-2.5 flex-wrap">
+            {/* Title with Date and Clock attached next to it */}
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
               {schoolName && !daySchedule.fullTitle?.includes(schoolName) && (
-                <span className="text-yellow-300 font-black">{schoolName}</span>
+                <span className="text-yellow-300 font-black text-sm sm:text-lg md:text-2xl">{schoolName}</span>
               )}
-              <span>{(daySchedule.fullTitle || `2026학년도 2학기 1차 고사 시간표(${daySchedule.date})`).replace(/\s*\([^)]*\)/g, '').trim()}</span>
-              <span className="text-sm sm:text-base md:text-lg font-black text-yellow-300 bg-yellow-400/20 px-3.5 py-1.5 rounded-xl border border-yellow-400/40 flex items-center gap-2 shadow-xs">
-                <Calendar className="w-5 h-5 text-yellow-300" />
+              <span className="text-sm sm:text-lg md:text-2xl font-black text-white tracking-tight drop-shadow-xs">
+                {(daySchedule.fullTitle || `2026학년도 2학기 1차 고사 시간표(${daySchedule.date})`).replace(/\s*\([^)]*\)/g, '').trim()}
+              </span>
+              <span className="text-xs sm:text-sm md:text-base font-black text-yellow-300 bg-yellow-400/20 px-3 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs">
+                <Calendar className="w-4 h-4 text-yellow-300 shrink-0" />
                 <span>{currentFullDate}</span>
               </span>
-              <span className="text-sm sm:text-base md:text-lg font-black text-emerald-300 bg-emerald-950/70 px-3.5 py-1.5 rounded-xl border border-emerald-500/50 flex items-center gap-2 shadow-xs font-mono">
-                <Clock className="w-5 h-5 text-emerald-400 animate-pulse" />
+              <span className="text-xs sm:text-sm md:text-base font-black text-emerald-300 bg-emerald-950/70 px-3 py-1 rounded-xl border border-emerald-500/50 flex items-center gap-1.5 shadow-xs font-mono">
+                <Clock className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
                 <span>{currentTime}</span>
               </span>
-            </h2>
+            </div>
           </div>
 
-          {/* Right Top Notice Banner strictly on ONE SINGLE LINE */}
+          {/* Right Top Notice Banner */}
           <div
-            className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-4.5 py-2.5 flex items-center gap-2.5 text-sm sm:text-base md:text-lg font-black text-yellow-300 shadow-md shrink-0 whitespace-nowrap overflow-x-auto scrollbar-none`}
+            className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-3.5 py-2 flex items-center gap-2 text-xs sm:text-sm md:text-base font-black text-yellow-300 shadow-md shrink-0 whitespace-nowrap overflow-x-auto scrollbar-none`}
           >
             <span className="text-yellow-200 font-black whitespace-nowrap drop-shadow-xs">
               {daySchedule.notice || '최선을 다하기! 부정행위 금지! 책상 서랍 비우기! 수정테이프 불가!'}
             </span>
             <span
-              className="inline-block w-3.5 h-5 bg-white/90 rotate-12 rounded-xs ml-1 shadow-xs shrink-0"
+              className="inline-block w-3 h-4 bg-white/90 rotate-12 rounded-xs ml-1 shadow-xs shrink-0"
               title="분필 아이콘"
             />
           </div>
@@ -1422,6 +1424,21 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                     <span>숫자 입력</span>
                   </>
                 )}
+              </button>
+
+              {/* Realtime Drawing Mode Toggle Button */}
+              <button
+                type="button"
+                onClick={() => setIsDrawingActive(!isDrawingActive)}
+                className={`px-2.5 py-2 rounded-xl text-xs font-black transition cursor-pointer border flex items-center gap-1 shadow-2xs ${
+                  isDrawingActive
+                    ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-400 animate-pulse font-black'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                }`}
+                title="전자칠판 화면 위에 직접 펜으로 판서하기"
+              >
+                <Edit3 className={`w-3.5 h-3.5 ${isDrawingActive ? 'text-slate-950' : 'text-indigo-600'}`} />
+                <span>{isDrawingActive ? '판서 켜짐' : '판서모드'}</span>
               </button>
 
               {/* Quick Reset to Blank for Handwriting (판서용 비우기) */}
@@ -2793,7 +2810,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   if (isFullscreen) {
     return (
       <div
-        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center justify-start overflow-auto select-none p-0 m-0 transition-colors duration-500`}
+        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center justify-center overflow-auto select-none p-0 m-0 transition-colors duration-500`}
         onMouseMove={(e) => {
           // 화면 최상단 55px 이내로 마우스가 올라오면 해상도 및 컨트롤러 노출
           if (e.clientY <= 55) {

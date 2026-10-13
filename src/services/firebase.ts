@@ -48,9 +48,14 @@ export interface FirestoreErrorInfo {
   };
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): void {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota') || errMsg.includes('PERMISSION_DENIED')) {
+    console.warn('Firestore quota exceeded or permission limited. Operating in local storage resilience mode.');
+    return;
+  }
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMsg,
     authInfo: {
       userId: auth?.currentUser?.uid,
       email: auth?.currentUser?.email,
@@ -66,7 +71,6 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     path
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
 }
 
 // Validate connection on startup as required by Firebase skill
