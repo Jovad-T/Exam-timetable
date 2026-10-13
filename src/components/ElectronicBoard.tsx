@@ -1133,15 +1133,28 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   let dynamicBaseWidth: number;
 
   if (fullscreenAspectMode === 'photo') {
-    // [기본값] 첨부 사진 비율 고정: 칠판 가로세로 비율(1380x980 이상)을 화면 크기에 관계없이 항상 일정하게 유지
-    // 안전 계수(0.91)를 적용하여 전체화면에서 상하 5% 추가 축소 적용
+    // 칠판 컨테이너 비율(BASE_WIDTH/BASE_HEIGHT)과 화면 비율(availableWidth/availableHeight)을 비교하여
+    // 어느 한쪽도 잘리지 않도록 더 작은 비율을 선택하여 자동 스케일링
+    const containerAspect = BASE_WIDTH / BASE_HEIGHT;
+    const screenAspect = availableWidth / availableHeight;
+
+    if (screenAspect > containerAspect) {
+      // 화면이 더 가로로 길면 높이 기준으로 맞춤
+      autoCalculatedScale = targetVerticalScale;
+    } else {
+      // 화면이 더 세로로 길면 가로 기준으로 맞춤
+      autoCalculatedScale = targetHorizontalScale;
+    }
+    
+    // 약간의 여유를 위해 98%만 사용 (완벽한 밀착 방지)
+    autoCalculatedScale *= 0.98;
+    
     dynamicBaseWidth = BASE_WIDTH;
-    autoCalculatedScale = Math.min(targetVerticalScale, targetHorizontalScale) * 0.91;
   } else {
     // [선택 모드] 가로 전체 확장: 와이드 화면 가로를 꽉 채우도록 베이스 너비 확장
     const idealBaseWidth = availableWidth / targetVerticalScale;
     dynamicBaseWidth = Math.round(Math.max(1380, idealBaseWidth));
-    autoCalculatedScale = targetVerticalScale * 0.91;
+    autoCalculatedScale = targetVerticalScale * 0.98;
   }
 
   const effectiveScale = scaleMode === 'auto' ? autoCalculatedScale : customScale;
