@@ -1234,6 +1234,22 @@ export default function App() {
                       );
                     })}
                   </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-100 flex-wrap gap-2">
+                    <span className="text-xs text-slate-500 font-bold">
+                      설정하신 최대 반 개수({maxClasses}반까지)가 전자칠판 반 선택 목록에 적용됩니다.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleUpdateMaxClasses(maxClasses);
+                        alert(`최대 학급 반 개수가 [${maxClasses}반까지]로 안전하게 저장되었습니다!`);
+                      }}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>설정 저장하기</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* 전자칠판 고급 다크 모드 텍스처 & 글자 가독성 설정 */}
