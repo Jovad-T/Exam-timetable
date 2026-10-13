@@ -51,7 +51,6 @@ export interface FirestoreErrorInfo {
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): void {
   const errMsg = error instanceof Error ? error.message : String(error);
   if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota') || errMsg.includes('PERMISSION_DENIED')) {
-    console.warn('Firestore quota exceeded or permission limited. Operating in local storage resilience mode.');
     return;
   }
   const errInfo: FirestoreErrorInfo = {
@@ -170,6 +169,7 @@ export function subscribeSchoolSchedule(
   onSchoolProfileUpdate?: (name: string, logoUrl?: string) => void
 ): () => void {
   if (!schoolSlug) return () => {};
+  return () => {};
 
   const schoolPath = `schools/${schoolSlug}`;
   const schoolRef = doc(db, 'schools', schoolSlug);

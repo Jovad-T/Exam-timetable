@@ -2,7 +2,7 @@
   "name": "Exam-Timetable",
   "private": true,
   "version": "1.0.0",
-  "main": "main.js",
+  "main": "electron-main.js",
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --outdir=. --external:vite --external:express --external:dotenv --external:@google/genai",
@@ -21,11 +21,12 @@
     },
     "win": {
       "target": "nsis",
-      "icon": "icon.svg"
+      "icon": "public/app-icon.svg"
     },
     "files": [
-      "main.js",
-      "icon.svg",
+      "electron-main.js",
+      "electron-preload.js",
+      "public/app-icon.svg",
       "package.json"
     ]
   },

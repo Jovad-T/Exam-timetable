@@ -285,8 +285,8 @@ export default function App() {
       localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(scheduleData));
     } catch {}
 
-    // When in admin role, push updates to Cloud Firestore with debouncing (3s)
-    if (appRole === 'admin') {
+    // When in admin role, push updates to Cloud Firestore with debouncing (3s), skipping if offline/quota exceeded
+    if (appRole === 'admin' && cloudSyncStatus !== 'offline') {
       const timer = setTimeout(() => {
         setCloudSyncStatus('syncing');
         saveSchoolScheduleToCloud(schoolSlug, scheduleData, schoolName, schoolLogo)
@@ -295,7 +295,7 @@ export default function App() {
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, [scheduleData, schoolSlug, schoolName, schoolLogo, appRole]);
+  }, [scheduleData, schoolSlug, schoolName, schoolLogo, appRole, cloudSyncStatus]);
 
   // Auto fullscreen on entering classroom electronic board mode
   React.useEffect(() => {
