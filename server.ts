@@ -88,134 +88,81 @@ app.post('/api/extract-schedule', async (req, res) => {
     - "targetClass": 대상 반 (예: "1~3반", "1학년 전반")
 `;
 
+    const isPdf = (mimeType && mimeType.includes('pdf')) || (imageBase64 && imageBase64.includes('application/pdf'));
     const promptText = extractedText
       ? `다음은 PDF 문서에서 추출한 텍스트 데이터입니다:\n\n${extractedText}\n\n이 텍스트를 위 사고 과정(CoT) 지침에 따라 철저히 분석하여, PDF 내 '입실'/'입실 시간' 열을 자동 감지해 각 과목의 'entryTime'에 정확히 매핑하고, 3교시를 포함한 모든 교시를 누락 없이 지정된 JSON 구조로 변환해 주세요.`
-      : `이 고등학교 시험 시간표 이미지를 분석하여 입실시간(entryTime) 및 3교시를 포함한 모든 교시 데이터를 누락 없이 date, notice, schedule(period, subjects) 구조의 JSON 배열로 추출해 주세요.`;
+      : isPdf
+      ? `이 고등학교 시험 시간표 PDF 문서를 시각적 표 구조와 함께 정밀 분석하여, 각 시험 일자별로 분리하고, 입실시간(entryTime), 과목코드, 자습/조례 및 3교시를 포함한 모든 교시 데이터를 누락 없이 date, notice, schedule(period, subjects) 구조의 JSON 배열로 추출해 주세요.`
+      : `이 고등학교 시험 시간표 이미지를 분석하여 각 시험 일자별로 분리하고, 입실시간(entryTime), 과목코드, 자습/조례 및 3교시를 포함한 모든 교시 데이터를 누락 없이 date, notice, schedule(period, subjects) 구조의 JSON 배열로 추출해 주세요.`;
 
     let parsedData: any = null;
 
-    const geminiPromise = (async () => {
-      const geminiModel = effectiveModel.includes('pro') ? 'gemini-2.5-pro' : 'gemini-3.8-flash';
-      const parts: any[] = [];
-      if (extractedText) {
-        parts.push({ text: promptText });
-      } else if (imageBase64) {
-        const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '').replace(/^data:application\/pdf;base64,/, '');
-        const effectiveMimeType = mimeType || 'image/jpeg';
-        parts.push({ inlineData: { mimeType: effectiveMimeType, data: base64Data } });
+    const geminiModel = effectiveModel.includes('pro') ? 'gemini-3.1-pro-preview' : 'gemini-3.8-flash';
+    const parts: any[] = [];
+    if (extractedText) {
+      parts.push({ text: promptText });
+    }
+    if (imageBase64) {
+      const base64Data = imageBase64
+        .replace(/^data:image\/\w+;base64,/, '')
+        .replace(/^data:application\/pdf;base64,/, '');
+      const effectiveMimeType = isPdf ? 'application/pdf' : (mimeType || 'image/jpeg');
+      parts.push({ inlineData: { mimeType: effectiveMimeType, data: base64Data } });
+      if (!extractedText) {
         parts.push({ text: promptText });
       }
+    }
 
-      const response = await ai.models.generateContent({
-        model: geminiModel,
-        contents: { parts },
-        config: {
-          systemInstruction,
-          responseMimeType: 'application/json',
-          temperature: thinkingLevel === 'deep' ? 0.0 : 0.2,
-          responseSchema: {
-            type: Type.ARRAY,
-            description: '날짜별 시험 시간표 배열',
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                date: { type: Type.STRING, description: '시험 날짜 (예: "10/13(목)")' },
-                notice: { type: Type.STRING, description: '유의사항' },
-                schedule: {
-                  type: Type.ARRAY,
-                  description: '교시별 시험 목록',
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      period: { type: Type.STRING, description: '교시명 (예: "1교시")' },
-                      subjects: {
-                        type: Type.ARRAY,
-                        description: '해당 교시 과목 목록',
-                        items: {
-                          type: Type.OBJECT,
-                          properties: {
-                            name: { type: Type.STRING, description: '과목명 (괄호 및 코드 제외)' },
-                            subjectCode: { type: Type.STRING, description: '과목코드 (예: "04")' },
-                            entryTime: { type: Type.STRING, description: '입실 시간 (예: "09:10")' },
-                            time: { type: Type.STRING, description: '시험 시간 (예: "09:20~10:20")' },
-                            duration: { type: Type.INTEGER, description: '시험 시간(분)' },
-                            targetClass: { type: Type.STRING, description: '대상 반 또는 학년' },
-                          },
-                          required: ['name', 'subjectCode', 'entryTime', 'time', 'duration', 'targetClass'],
+    const response = await ai.models.generateContent({
+      model: geminiModel,
+      contents: { parts },
+      config: {
+        systemInstruction,
+        responseMimeType: 'application/json',
+        temperature: thinkingLevel === 'deep' ? 0.0 : 0.2,
+        responseSchema: {
+          type: Type.ARRAY,
+          description: '날짜별 시험 시간표 배열',
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              date: { type: Type.STRING, description: '시험 날짜 (예: "10/13(목)")' },
+              notice: { type: Type.STRING, description: '유의사항' },
+              schedule: {
+                type: Type.ARRAY,
+                description: '교시별 시험 목록',
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    period: { type: Type.STRING, description: '교시명 (예: "1교시")' },
+                    subjects: {
+                      type: Type.ARRAY,
+                      description: '해당 교시 과목 목록',
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          name: { type: Type.STRING, description: '과목명 (괄호 및 코드 제외)' },
+                          subjectCode: { type: Type.STRING, description: '과목코드 (예: "04")' },
+                          entryTime: { type: Type.STRING, description: '입실 시간 (예: "09:10")' },
+                          time: { type: Type.STRING, description: '시험 시간 (예: "09:20~10:20")' },
+                          duration: { type: Type.INTEGER, description: '시험 시간(분)' },
+                          targetClass: { type: Type.STRING, description: '대상 반 또는 학년' },
                         },
+                        required: ['name', 'subjectCode', 'entryTime', 'time', 'duration', 'targetClass'],
                       },
                     },
-                    required: ['period', 'subjects'],
                   },
+                  required: ['period', 'subjects'],
                 },
               },
-              required: ['date', 'notice', 'schedule'],
             },
+            required: ['date', 'notice', 'schedule'],
           },
         },
-      });
-      return JSON.parse(response.text || '[]');
-    })();
+      },
+    });
 
-    const groqPromise = (async () => {
-      const groqApiKey = process.env.GROQ_API_KEY || 'gsk_mock_cross_validator';
-      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${groqApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: promptText }
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.0,
-        }),
-      });
-
-      if (groqRes.ok) {
-        const groqData = await groqRes.json();
-        const content = groqData.choices?.[0]?.message?.content || '{}';
-        const parsed = JSON.parse(content);
-        return Array.isArray(parsed) ? parsed : (parsed.data || parsed.schedule || [parsed]);
-      }
-      throw new Error('Groq cross-validator failed');
-    })();
-
-    const results = await Promise.allSettled([geminiPromise, groqPromise]);
-
-    if (results[0].status === 'fulfilled' && Array.isArray(results[0].value) && results[0].value.length > 0) {
-      parsedData = results[0].value;
-      if (results[1].status === 'fulfilled' && Array.isArray(results[1].value) && results[1].value.length > 0) {
-        const groqParsed = results[1].value;
-        parsedData = parsedData.map((dayItem: any, dIdx: number) => {
-          const gDay = groqParsed[dIdx] || {};
-          return {
-            ...dayItem,
-            schedule: (dayItem.schedule || []).map((periodItem: any, pIdx: number) => {
-              const gPeriod = (gDay.schedule || [])[pIdx] || {};
-              return {
-                ...periodItem,
-                subjects: (periodItem.subjects || []).map((subj: any, sIdx: number) => {
-                  const gSubj = (gPeriod.subjects || [])[sIdx] || {};
-                  return {
-                    ...subj,
-                    entryTime: subj.entryTime || gSubj.entryTime || '09:10',
-                  };
-                }),
-              };
-            }),
-          };
-        });
-      }
-    } else if (results[1].status === 'fulfilled' && Array.isArray(results[1].value) && results[1].value.length > 0) {
-      parsedData = results[1].value;
-    } else {
-      throw new Error('AI 모델 파싱 및 교차 검증에 실패했습니다.');
-    }
+    parsedData = JSON.parse(response.text || '[]');
 
     parsedData = parsedData.map((item: any, idx: number) => ({
       id: item.id || `day-parsed-${Date.now()}-${idx}`,

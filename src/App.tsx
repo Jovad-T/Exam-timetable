@@ -17,7 +17,7 @@ import { InitialClassSetupModal } from './components/InitialClassSetupModal';
 import { ScheduleUploadCard } from './components/ScheduleUploadCard';
 import { SchoolSettingsCard } from './components/SchoolSettingsCard';
 import { ShareSchoolModal } from './components/ShareSchoolModal';
-import { Sparkles, Calendar, BookOpen, Monitor, Code, RefreshCw, CheckCircle2, Palette, Hash, Grid, Cloud } from 'lucide-react';
+import { Sparkles, Calendar, BookOpen, Monitor, Code, RefreshCw, CheckCircle2, Palette, Hash, Grid, Cloud, Trash2 } from 'lucide-react';
 import { cleanSlug, generateSchoolSlug } from './utils/slugUtils';
 import {
   saveSchoolScheduleToCloud,
@@ -271,14 +271,14 @@ export default function App() {
       localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(scheduleData));
     } catch {}
 
-    // When in admin role, push updates to Cloud Firestore with debouncing
+    // When in admin role, push updates to Cloud Firestore with debouncing (3s)
     if (appRole === 'admin') {
       const timer = setTimeout(() => {
         setCloudSyncStatus('syncing');
         saveSchoolScheduleToCloud(schoolSlug, scheduleData, schoolName, schoolLogo)
           .then(() => setCloudSyncStatus('synced'))
           .catch(() => setCloudSyncStatus('offline'));
-      }, 700);
+      }, 3000);
       return () => clearTimeout(timer);
     }
   }, [scheduleData, schoolSlug, schoolName, schoolLogo, appRole]);
@@ -416,9 +416,16 @@ export default function App() {
   );
 
   // Selected single day object
-  const currentDaySchedule =
+  const currentDaySchedule: DayExamSchedule =
     scheduleData.find((d) => d.id === activeTab || d.date === activeTab) ||
-    scheduleData[0];
+    scheduleData[0] || {
+      id: 'empty-day',
+      date: '시간표 등록 대기',
+      fullTitle: `${schoolName} 시험 시간표 (등록 대기중)`,
+      notice: FIXED_NOTICE,
+      bottomNotice: DEFAULT_BOTTOM_NOTICE,
+      schedule: [],
+    };
 
   // Copy scheduleData code
   const handleCopyCode = () => {
@@ -500,6 +507,18 @@ export default function App() {
     if (confirm('기본 10/12 ~ 10/16 시험 시간표 샘플 데이터로 복원하시겠습니까?')) {
       setScheduleData(defaultScheduleData);
       setActiveTab('day-1012');
+    }
+  };
+
+  // Clear all schedule data
+  const handleClearAllSchedule = () => {
+    if (
+      confirm(
+        '현재 등록된 시험 시간표 데이터를 모두 비우시겠습니까?\n\n- 빈 상태로 시작하여 새 시간표 파일을 업로드하거나 직접 추가할 수 있습니다.\n- 언제든 [샘플 복원] 버튼으로 예시 시간표를 다시 불러올 수 있습니다.'
+      )
+    ) {
+      setScheduleData([]);
+      setActiveTab('');
     }
   };
 
@@ -960,13 +979,26 @@ export default function App() {
                 </button>
               </div>
 
-              <button
-                onClick={handleResetSample}
-                className="text-xs text-slate-300 hover:text-white flex items-center gap-1 font-medium transition cursor-pointer"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">샘플 초기화</span>
-              </button>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <button
+                  type="button"
+                  onClick={handleClearAllSchedule}
+                  className="text-xs text-rose-300 hover:text-white hover:bg-rose-500/25 border border-rose-400/30 px-2 sm:px-2.5 py-1 rounded-lg flex items-center gap-1 font-semibold transition cursor-pointer"
+                  title="등록된 시험 시간표(더미 데이터 포함)를 모두 비우고 빈 상태로 만듭니다"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span>시간표 비우기</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetSample}
+                  className="text-xs text-slate-300 hover:text-white hover:bg-slate-700/60 border border-slate-600/50 px-2 sm:px-2.5 py-1 rounded-lg flex items-center gap-1 font-semibold transition cursor-pointer"
+                  title="체험용 기본 샘플 시간표로 다시 복원합니다"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>샘플 복원</span>
+                </button>
+              </div>
             </div>
           </div>
 

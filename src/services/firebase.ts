@@ -115,7 +115,12 @@ export async function saveSchoolScheduleToCloud(
         },
         { merge: true }
       );
-    } catch (err) {
+    } catch (err: any) {
+      const errMsg = err?.message || String(err);
+      if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota')) {
+        console.warn('Firestore quota exceeded. Continuing with local storage mode.');
+        return;
+      }
       handleFirestoreError(err, OperationType.WRITE, schoolPath);
     }
 
@@ -133,12 +138,21 @@ export async function saveSchoolScheduleToCloud(
         },
         { merge: true }
       );
-    } catch (err) {
+    } catch (err: any) {
+      const errMsg = err?.message || String(err);
+      if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota')) {
+        console.warn('Firestore quota exceeded. Continuing with local storage mode.');
+        return;
+      }
       handleFirestoreError(err, OperationType.WRITE, schedulePath);
     }
-  } catch (err) {
+  } catch (err: any) {
+    const errMsg = err?.message || String(err);
+    if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota')) {
+      console.warn('Firestore quota exceeded. Continuing with local storage mode.');
+      return;
+    }
     console.error('Failed to sync schedule data to Firebase:', err);
-    throw err;
   }
 }
 

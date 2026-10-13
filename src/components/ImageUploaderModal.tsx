@@ -33,51 +33,71 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
 
   if (!isOpen) return null;
 
+  const [fileSizeStr, setFileSizeStr] = useState<string>('');
+
   const handleFileProcess = async (file: File) => {
-    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name);
+
+    if (!isPdf && !isImage) {
       setErrorMsg('이미지 파일(PNG, JPG, WEBP) 또는 PDF 문서만 업로드할 수 있습니다.');
       return;
     }
 
     setFileName(file.name);
-    setMimeType(file.type);
+    const sizeInKb = (file.size / 1024).toFixed(1);
+    const sizeInMb = (file.size / (1024 * 1024)).toFixed(2);
+    setFileSizeStr(file.size > 1024 * 1024 ? `${sizeInMb} MB` : `${sizeInKb} KB`);
     setErrorMsg(null);
 
-    if (file.type === 'application/pdf') {
-      setFileType('pdf');
-      try {
-        setLoading(true);
-        setErrorMsg('PDF 문서 파싱 및 표 텍스트 추출 중...');
-        const arrayBuffer = await file.arrayBuffer();
-        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-        const pdfDoc = await loadingTask.promise;
-        let fullText = '';
+    // 1. Convert any image or PDF file to Data URL (base64) for native Gemini Multimodal analysis
+    const reader = new FileReader();
+    reader.onerror = () => {
+      setErrorMsg('파일을 읽는 도중 오류가 발생했습니다. 다른 파일을 선택해주세요.');
+    };
 
-        for (let i = 1; i <= pdfDoc.numPages; i++) {
-          const page = await pdfDoc.getPage(i);
-          const textContent = await page.getTextContent();
-          const pageText = textContent.items.map((item: any) => item.str).join(' ');
-          fullText += `--- [Page ${i}] ---\n${pageText}\n\n`;
+    reader.onload = async () => {
+      const base64Data = reader.result as string;
+      setSelectedFile(base64Data);
+
+      if (isPdf) {
+        setFileType('pdf');
+        setMimeType('application/pdf');
+
+        // 2. Safely attempt supplementary text extraction if possible (never blocking or showing errors if worker fails)
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          // Use safe worker fallback
+          if (pdfjsLib && pdfjsLib.getDocument) {
+            const loadingTask = pdfjsLib.getDocument({
+              data: arrayBuffer,
+              isEvalSupported: false,
+              useWorkerFetch: false,
+            });
+            const pdfDoc = await loadingTask.promise;
+            let fullText = '';
+            for (let i = 1; i <= Math.min(pdfDoc.numPages, 10); i++) {
+              const page = await pdfDoc.getPage(i);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items.map((item: any) => item.str).join(' ');
+              fullText += `--- [Page ${i}] ---\n${pageText}\n\n`;
+            }
+            if (fullText.trim()) {
+              setExtractedText(fullText);
+            }
+          }
+        } catch (pdfErr) {
+          // If browser blocks worker or PDF has no text layer, Gemini will read the PDF base64 directly with multimodal vision!
+          console.info('PDF local text extraction skipped; using direct multimodal AI vision parsing.');
         }
-
-        setExtractedText(fullText);
-        setSelectedFile(file.name);
-        setErrorMsg(null);
-      } catch (err: any) {
-        console.error('PDF parsing error:', err);
-        setErrorMsg('PDF 텍스트 추출 중 오류가 발생했습니다. 이미지로 변환하여 업로드해 주세요.');
-      } finally {
-        setLoading(false);
+      } else {
+        setFileType('image');
+        setMimeType(file.type || 'image/jpeg');
+        setExtractedText('');
       }
-    } else {
-      setFileType('image');
-      setExtractedText('');
-      const reader = new FileReader();
-      reader.onload = () => {
-        setSelectedFile(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+    };
+
+    reader.readAsDataURL(file);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -100,7 +120,7 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
   };
 
   const handleAnalyze = async () => {
-    if (!selectedFile && !extractedText) {
+    if (!selectedFile) {
       setErrorMsg('분석할 시간표 이미지나 PDF 파일을 먼저 선택해주세요.');
       return;
     }
@@ -112,13 +132,12 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
       const payload: any = {
         modelChoice,
         thinkingLevel,
+        imageBase64: selectedFile,
+        mimeType: fileType === 'pdf' ? 'application/pdf' : (mimeType || 'image/jpeg'),
       };
 
-      if (fileType === 'pdf') {
+      if (extractedText && extractedText.trim()) {
         payload.extractedText = extractedText;
-      } else {
-        payload.imageBase64 = selectedFile;
-        payload.mimeType = mimeType;
       }
 
       const response = await fetch('/api/extract-schedule', {
@@ -142,8 +161,9 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
         throw new Error('시간표 데이터를 감지하지 못했습니다. 명확한 시간표 파일을 올려주세요.');
       }
     } catch (err: any) {
-      console.error(err);
-      setErrorMsg(err.message || 'AI 문서 파싱 중 오류가 발생했습니다.');
+      console.error('Schedule extract error:', err);
+      const msg = err.message || 'AI 문서 파싱 중 오류가 발생했습니다.';
+      setErrorMsg(msg);
     } finally {
       setLoading(false);
     }
@@ -232,13 +252,20 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
             {selectedFile ? (
               <div className="space-y-3 w-full">
                 {fileType === 'pdf' ? (
-                  <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs mx-auto flex items-center gap-3 max-w-md">
-                    <div className="w-10 h-10 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center font-bold">
+                  <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs mx-auto flex items-center gap-3.5 max-w-md">
+                    <div className="w-11 h-11 rounded-xl bg-rose-500/10 border border-rose-200 text-rose-600 flex items-center justify-center font-black text-sm shrink-0">
                       PDF
                     </div>
-                    <div className="text-left truncate">
-                      <p className="text-xs font-bold text-slate-800 truncate">{fileName}</p>
-                      <p className="text-[10px] text-emerald-600 font-medium">pdf.js 표 텍스트 추출 완료 ({extractedText.length} 글자)</p>
+                    <div className="text-left truncate flex-1">
+                      <p className="text-xs font-bold text-slate-900 truncate">{fileName}</p>
+                      <p className="text-[11px] text-emerald-600 font-bold flex items-center gap-1 mt-0.5">
+                        <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>
+                          {extractedText
+                            ? `표 텍스트 감지 (${extractedText.length}자) + Gemini 비전 분석 준비됨`
+                            : `Gemini 멀티모달 시각/표 구조 AI 분석 준비됨 (${fileSizeStr || 'PDF'})`}
+                        </span>
+                      </p>
                     </div>
                   </div>
                 ) : (
@@ -266,18 +293,33 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
                     시험 시간표 PDF 또는 이미지를 이곳에 드래그하거나 클릭하여 선택하세요
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
-                    지원 포맷: PDF (pdf.js 자동 표 텍스트 추출), PNG, JPG, WEBP
+                    지원 포맷: PDF (Gemini 비전 및 표 구조 직접 분석), PNG, JPG, WEBP
                   </p>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Error Banner */}
+          {/* Error Banner with helpful API Key guidance */}
           {errorMsg && (
-            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 flex items-start gap-2.5 text-xs text-rose-800 font-medium">
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <span>{errorMsg}</span>
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 flex flex-col gap-2 text-xs text-rose-900 font-medium animate-fadeIn">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span className="font-bold leading-relaxed">{errorMsg}</span>
+              </div>
+              {errorMsg.includes('GEMINI_API_KEY') && (
+                <div className="p-3 bg-white/90 border border-rose-200 rounded-xl text-[11px] text-slate-700 leading-relaxed space-y-1">
+                  <div className="font-extrabold text-rose-950 flex items-center gap-1.5">
+                    <span>🔑 API 키 등록 안내:</span>
+                  </div>
+                  <div>
+                    • <strong>Vercel 배포 시:</strong> Vercel 프로젝트 대시보드 ➔ <strong>[Settings]</strong> ➔ <strong>[Environment Variables]</strong>에서 Key: <code className="bg-rose-100 px-1 py-0.5 rounded font-mono font-bold text-rose-950">GEMINI_API_KEY</code> 를 등록해 주세요.
+                  </div>
+                  <div>
+                    • <strong>로컬 개발 시:</strong> 프로젝트 루트의 <code className="bg-slate-100 px-1 py-0.5 rounded font-mono font-bold">.env</code> 파일에 <code className="bg-slate-100 px-1 py-0.5 rounded font-mono font-bold">GEMINI_API_KEY=your_key</code> 를 입력하시면 됩니다.
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

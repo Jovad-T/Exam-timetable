@@ -364,7 +364,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
         if (saved === 'wide' || saved === 'photo') return saved;
       } catch {}
     }
-    return 'photo';
+    return 'wide';
   });
 
   const handleUpdateFullscreenAspectMode = (mode: 'photo' | 'wide') => {
@@ -991,6 +991,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch((e) => console.log(e));
       setInternalIsFullscreen(true);
+      setFullscreenAspectMode('wide');
     } else {
       if (document.exitFullscreen) {
         document.exitFullscreen().catch((e) => console.log(e));
@@ -1519,8 +1520,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                     ref={(el) => {
                       periodItemRefs.current[pIdx] = el;
                     }}
-                    className={`space-y-1.5 rounded-2xl transition-all duration-300 ${
-                      isCurrentActivePeriod ? `p-1.5 ring-4 ${currentTheme.activePeriodRing} shadow-lg` : ''
+                    className={`space-y-1.5 rounded-2xl transition-all duration-500 ${
+                      isCurrentActivePeriod ? `p-2.5 ring-4 ring-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.8)] animate-pulse` : ''
                     }`}
                   >
                     {/* Red Period Badge with Live Status Indicator */}
@@ -1547,7 +1548,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                     </div>
 
                     {/* Subjects Grid Table - 가독성을 높이기 위해 폰트 굵기(font-black) 및 고대비 적용 */}
-                    <div className="bg-white rounded-2xl overflow-hidden border-2 border-slate-300 shadow-md divide-y-2 divide-slate-200">
+                    <div className={`rounded-2xl overflow-hidden border-2 shadow-md divide-y-2 divide-slate-200 transition-all duration-500 ${
+                      isCurrentActivePeriod ? 'border-yellow-400 ring-4 ring-yellow-400/90 shadow-[0_0_25px_rgba(250,204,21,0.7)] animate-pulse bg-amber-50/95' : 'border-slate-300 bg-white'
+                    }`}>
                       {displayedSubjects.map((sub, sIdx) => {
                         const matchInfo = matchSubjectForClass(sub, attendance.grade, attendance.classNum);
                         const isThisClassSubject = matchInfo.isMatch;
@@ -1579,11 +1582,11 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                             </div>
 
                             {/* Entry Time (입실) - 시인성 강화 (한 줄 아래로 줄바꿈) */}
-                            <div className="col-span-2 text-center text-slate-900 font-black text-xs sm:text-sm md:text-base bg-slate-200 border border-slate-300 py-1 px-2 rounded-xl flex flex-col items-center justify-center leading-tight">
+                            <div className="col-span-2 text-center text-indigo-950 font-black text-sm sm:text-base md:text-xl bg-indigo-50 border-2 border-indigo-300 py-1.5 px-2.5 rounded-xl shadow-xs flex flex-col items-center justify-center leading-tight">
                               {sub.entryTime ? (
                                 <>
-                                  <span className="font-mono">{sub.entryTime.replace('입실', '').trim()}</span>
-                                  <span className="text-[10px] sm:text-xs text-slate-600 font-bold">입실</span>
+                                  <span className="font-mono tracking-tight text-indigo-700 text-base sm:text-lg md:text-2xl font-black">{sub.entryTime.replace('입실', '').trim()}</span>
+                                  <span className="text-[11px] sm:text-xs text-indigo-600 font-extrabold uppercase">입실</span>
                                 </>
                               ) : (
                                 <span className="text-slate-400">입실-</span>
@@ -2179,6 +2182,27 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                       집중 시험 안내 모드
                     </span>
                   )}
+                </div>
+
+                {/* 실시간 시험 남은 시간 & 진행률 긴 Progress Bar (사용자 요청) */}
+                <div className="bg-slate-950/90 rounded-2xl p-3.5 sm:p-4 border-2 border-slate-700/80 shadow-lg space-y-2">
+                  <div className="flex items-center justify-between text-xs sm:text-sm font-bold text-slate-300">
+                    <span className="flex items-center gap-1.5 text-yellow-300 font-black">
+                      <Clock className="w-4 h-4 text-amber-400 animate-spin" />
+                      <span>{currentExam.periodName} ({currentExam.startTime} ~ {currentExam.endTime}) 진행 상황</span>
+                    </span>
+                    <span className="font-mono font-black text-emerald-400">
+                      남은 시간: {currentExam.remainingFormatted} ({Math.round((currentExam.elapsedSeconds / (currentExam.totalSeconds || 1)) * 100)}% 경과)
+                    </span>
+                  </div>
+                  <div className="w-full h-5 sm:h-6 bg-slate-900 rounded-full overflow-hidden p-0.5 border-2 border-slate-700 shadow-inner relative">
+                    <div 
+                      className="h-full bg-gradient-to-r from-emerald-500 via-yellow-400 to-rose-500 rounded-full transition-all duration-1000 shadow-md relative"
+                      style={{ width: `${Math.min(100, Math.max(0, (currentExam.elapsedSeconds / (currentExam.totalSeconds || 1)) * 100))}%` }}
+                    >
+                      <div className="absolute inset-0 bg-white/20 animate-pulse rounded-full" />
+                    </div>
+                  </div>
                 </div>
 
                 {/* 1. 과목명 (Extra Large High-Visibility Headline) */}

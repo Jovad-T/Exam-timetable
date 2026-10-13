@@ -50,7 +50,12 @@ export function getBaseUrl(overrideDomain?: string): string {
 
   // 3. Browser window location fallback
   if (typeof window !== 'undefined') {
-    const origin = window.location.origin;
+    let origin = window.location.origin;
+    // CRITICAL FIX: Google AI Studio development container uses 'ais-dev-', which is private to the developer.
+    // Replace 'ais-dev-' with 'ais-pre-' (Public Shared App URL) so external devices, phones, and classrooms can connect!
+    if (origin.includes('ais-dev-')) {
+      origin = origin.replace('ais-dev-', 'ais-pre-');
+    }
     const pathname = window.location.pathname.replace(/\/+$/, '');
     return `${origin}${pathname}`;
   }

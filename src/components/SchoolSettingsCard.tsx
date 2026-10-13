@@ -424,11 +424,11 @@ export const SchoolSettingsCard: React.FC<SchoolSettingsCardProps> = ({
 
           {/* Collapsible / Interactive Custom Domain Setting Box */}
           {isEditingDomain && (
-            <div className="p-4 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border-2 border-blue-200/80 rounded-2xl space-y-2.5 text-xs animate-fadeIn shadow-xs">
+            <div className="p-4 bg-gradient-to-r from-blue-50/90 to-indigo-50/90 border-2 border-blue-200/90 rounded-2xl space-y-3 text-xs animate-fadeIn shadow-xs">
               <div className="flex items-center justify-between font-extrabold text-blue-950 flex-wrap gap-2">
                 <span className="flex items-center gap-1.5">
                   <Globe className="w-4 h-4 text-blue-600" />
-                  <span>Vercel 또는 학교 고유 도메인 설정</span>
+                  <span>배포 도메인 주소 설정 (Vercel 또는 학교 도메인)</span>
                 </span>
                 {customDomain && (
                   <button
@@ -437,10 +437,10 @@ export const SchoolSettingsCard: React.FC<SchoolSettingsCardProps> = ({
                       setCustomDomain('');
                       try { localStorage.removeItem('custom_deploy_domain'); } catch {}
                     }}
-                    className="text-[11px] text-slate-500 hover:text-red-600 flex items-center gap-1 cursor-pointer font-bold transition"
+                    className="text-[11px] text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-lg flex items-center gap-1 cursor-pointer font-bold transition"
                   >
                     <RotateCcw className="w-3 h-3" />
-                    <span>기본값(접속 도메인 자동 감지)으로 복원</span>
+                    <span>사용자 지정 도메인 지우기 (접속 주소로 복원)</span>
                   </button>
                 )}
               </div>
@@ -462,18 +462,27 @@ export const SchoolSettingsCard: React.FC<SchoolSettingsCardProps> = ({
                         }
                       } catch {}
                     }}
-                    placeholder="sajik-high.vercel.app 또는 exam.sajik.hs.kr"
+                    placeholder="실제 배포된 Vercel 주소 (예: my-exam.vercel.app)"
                     className="w-full bg-transparent focus:outline-none text-slate-900 placeholder:text-slate-400 font-mono"
                   />
                 </div>
               </div>
 
-              <div className="bg-white/80 border border-blue-200/60 rounded-xl p-2.5 text-[11px] text-blue-900 leading-relaxed space-y-1">
+              {customDomain && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 p-2.5 rounded-xl text-[11px] leading-relaxed flex items-start gap-2">
+                  <span className="text-amber-600 font-bold">⚠️ 주의:</span>
+                  <div className="flex-1">
+                    현재 입력된 도메인(<code className="font-mono font-bold">{customDomain}</code>)으로 링크가 복사됩니다. 아직 Vercel에 실제로 배포되지 않았거나 주소에 오타가 있으면 접속 시 <strong>'연결할 수 없음'</strong> 에러가 발생합니다. 배포 전이시라면 위 <strong>[사용자 지정 도메인 지우기]</strong>를 눌러주세요.
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-white/90 border border-blue-200/70 rounded-xl p-2.5 text-[11px] text-blue-900 leading-relaxed space-y-1.5">
                 <div>
-                  🚀 <strong>자동 감지 안내:</strong> 나중에 Vercel 배포 후 생성된 주소(예: <code className="bg-blue-100/80 px-1 py-0.5 rounded font-mono font-bold text-blue-950">https://your-app.vercel.app</code>)로 접속하시면, <strong>코드를 단 한 줄도 수정하지 않아도 해당 Vercel 주소가 100% 자동 감지</strong>되어 복사 링크에 즉시 반영됩니다.
+                  🚀 <strong>자동 감지 기본 작동:</strong> Vercel 배포 후 생성된 주소(예: <code className="bg-blue-100/80 px-1 py-0.5 rounded font-mono font-bold text-blue-950">https://your-app.vercel.app</code>)로 접속하시면, <strong>코드를 단 한 줄도 수정하지 않아도 해당 Vercel 주소가 100% 자동 감지</strong>되어 복사 링크에 즉시 반영됩니다.
                 </div>
                 <div>
-                  💡 지금 미리 Vercel 도메인으로 링크 주소를 복사하고 싶으실 때만 위 입력창에 입력하시면 됩니다.
+                  💡 <strong>지금 테스트할 때:</strong> AI Studio 환경에서는 다른 브라우저나 교실 화면에서도 접속 가능한 <strong>공개 공유 주소(ais-pre-)</strong>가 자동으로 복사되므로, 별도 입력 없이 기본 주소 그대로 복사하셔도 안전하게 연결됩니다.
                 </div>
               </div>
             </div>
