@@ -26,14 +26,16 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
   // AI Model & Thinking options
   const [modelChoice, setModelChoice] = useState<string>('gemini-3.8-flash');
   const [thinkingLevel, setThinkingLevel] = useState<string>('balanced');
+  const [customApiKey, setCustomApiKey] = useState<string>(() => localStorage.getItem('custom_gemini_key') || '');
+  const [customGroqApiKey, setCustomGroqApiKey] = useState<string>(() => localStorage.getItem('custom_groq_key') || '');
+  const [showApiKeySettings, setShowApiKeySettings] = useState<boolean>(false);
 
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [fileSizeStr, setFileSizeStr] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
-
-  const [fileSizeStr, setFileSizeStr] = useState<string>('');
 
   const handleFileProcess = async (file: File) => {
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
@@ -134,6 +136,8 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
         thinkingLevel,
         imageBase64: selectedFile,
         mimeType: fileType === 'pdf' ? 'application/pdf' : (mimeType || 'image/jpeg'),
+        customApiKey,
+        customGroqApiKey,
       };
 
       if (extractedText && extractedText.trim()) {
@@ -227,6 +231,56 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
                 <option value="balanced">균형 (Balanced)</option>
                 <option value="deep">심층 추론 (Deep Thinking / Temp 0.0)</option>
               </select>
+            </div>
+
+            {/* Custom API Key Toggle & Inputs */}
+            <div className="pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setShowApiKeySettings(!showApiKeySettings)}
+                className="w-full flex items-center justify-between text-xs font-extrabold text-indigo-700 hover:text-indigo-950 transition py-1 cursor-pointer"
+              >
+                <span className="flex items-center gap-1.5">
+                  <span>🔑</span> 커스텀 API 키 설정 (Gemini / Groq 선택 입력)
+                </span>
+                <span className="text-slate-500 text-[11px] font-bold">
+                  {showApiKeySettings ? '접기 ▲' : '열기 ▼'}
+                </span>
+              </button>
+
+              {showApiKeySettings && (
+                <div className="mt-3 space-y-3 bg-white p-3 rounded-lg border border-slate-200 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Gemini API Key (선택)</label>
+                    <input
+                      type="password"
+                      value={customApiKey}
+                      onChange={(e) => {
+                        setCustomApiKey(e.target.value);
+                        localStorage.setItem('custom_gemini_key', e.target.value);
+                      }}
+                      placeholder="AIzaSy... (입력 시 서버 기본키 대신 사용)"
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Groq API Key (Groq 선택 시 필수)</label>
+                    <input
+                      type="password"
+                      value={customGroqApiKey}
+                      onChange={(e) => {
+                        setCustomGroqApiKey(e.target.value);
+                        localStorage.setItem('custom_groq_key', e.target.value);
+                      }}
+                      placeholder="gsk_... (Groq 모델 사용 시 입력)"
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    입력하신 키는 브라우저 로컬 저장소(localStorage)에만 안전하게 보관되며 외부로 유출되지 않습니다.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 

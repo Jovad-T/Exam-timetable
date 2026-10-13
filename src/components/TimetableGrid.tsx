@@ -20,6 +20,7 @@ import { DaySettingsModal } from './DaySettingsModal';
 interface TimetableGridProps {
   daySchedules: DayExamSchedule[];
   selectedGrade: string;
+  setSelectedGrade?: (grade: string) => void;
   onEditSubject: (
     dayIndex: number,
     periodIndex: number,
@@ -49,6 +50,7 @@ interface TimetableGridProps {
 export const TimetableGrid: React.FC<TimetableGridProps> = ({
   daySchedules,
   selectedGrade,
+  setSelectedGrade,
   onEditSubject,
   onDeleteSubject,
   onAddSubject,
@@ -150,6 +152,40 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>새 시험 일자 추가</span>
           </button>
+        )}
+      </div>
+
+      {/* Grade Selector Toolbar (사용자 요청: 이 화면에서 학년을 선택할 수 있게) */}
+      <div className="bg-indigo-900 text-white rounded-2xl p-4 shadow-md flex flex-col sm:flex-row items-center justify-between gap-3 border border-indigo-800">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-indigo-800 border border-indigo-700 flex items-center justify-center shrink-0">
+            <Users className="w-5 h-5 text-indigo-200" />
+          </div>
+          <div>
+            <h4 className="text-sm font-black text-white">조회 및 관리 대상 학년 선택</h4>
+            <p className="text-xs text-indigo-200">학년별로 시간표와 과목 대상 반이 필터링됩니다.</p>
+          </div>
+        </div>
+
+        {setSelectedGrade && (
+          <div className="flex items-center gap-1.5 bg-indigo-950/80 p-1.5 rounded-xl border border-indigo-700/80">
+            {['1학년', '2학년', '3학년'].map((grade) => {
+              const isSelected = selectedGrade === grade;
+              return (
+                <button
+                  key={grade}
+                  onClick={() => setSelectedGrade(grade)}
+                  className={`px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer ${
+                    isSelected
+                      ? 'bg-white text-indigo-950 shadow-md scale-105'
+                      : 'text-indigo-200 hover:text-white hover:bg-indigo-800/60'
+                  }`}
+                >
+                  {grade}
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
 

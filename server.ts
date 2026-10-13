@@ -45,7 +45,7 @@ const DEFAULT_BOTTOM_NOTICE = "※ 시험 시작 10분 전까지 입실을 완�
 // API Route: Extract Exam Schedule from Image/File/PDF Text
 app.post('/api/extract-schedule', async (req, res) => {
   try {
-    const { imageBase64, mimeType, extractedText, modelChoice, thinkingLevel } = req.body;
+    const { imageBase64, mimeType, extractedText, modelChoice, thinkingLevel, customApiKey, customGroqApiKey } = req.body;
 
     if (!imageBase64 && !extractedText) {
       return res.status(400).json({ error: '이미지 또는 PDF 텍스트 데이터가 필요합니다.' });
@@ -97,72 +97,114 @@ app.post('/api/extract-schedule', async (req, res) => {
 
     let parsedData: any = null;
 
-    const geminiModel = effectiveModel.includes('pro') ? 'gemini-3.1-pro-preview' : 'gemini-3.8-flash';
-    const parts: any[] = [];
-    if (extractedText) {
-      parts.push({ text: promptText });
-    }
-    if (imageBase64) {
-      const base64Data = imageBase64
-        .replace(/^data:image\/\w+;base64,/, '')
-        .replace(/^data:application\/pdf;base64,/, '');
-      const effectiveMimeType = isPdf ? 'application/pdf' : (mimeType || 'image/jpeg');
-      parts.push({ inlineData: { mimeType: effectiveMimeType, data: base64Data } });
-      if (!extractedText) {
+    if (effectiveModel.startsWith('groq-')) {
+      const groqKey = customGroqApiKey || process.env.GROQ_API_KEY;
+      if (!groqKey) {
+        return res.status(400).json({ success: false, error: 'Groq API 키가 입력되지 않았습니다. API 키 설정에서 Groq API Key를 입력해주세요.' });
+      }
+
+      const groqModel = effectiveModel.includes('deepseek') ? 'deepseek-r1-distill-llama-70b' : 'llama-3.3-70b-versatile';
+      const userMessageContent = extractedText 
+        ? `${promptText}\n\n추출된 텍스트:\n${extractedText}`
+        : `${promptText}\n\n(참고: 이미지 파일이 첨부되었습니다.)`;
+
+      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${groqKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: [
+            { role: 'system', content: systemInstruction + '\n\nIMPORTANT: Return ONLY a valid JSON array of day schedules.' },
+            { role: 'user', content: userMessageContent }
+          ],
+          response_format: { type: 'json_object' },
+          temperature: thinkingLevel === 'deep' ? 0.0 : 0.2,
+        }),
+      });
+
+      const groqData = await groqRes.json();
+      if (!groqRes.ok || !groqData.choices?.[0]?.message?.content) {
+        throw new Error(groqData.error?.message || 'Groq API 호출 실패');
+      }
+
+      const contentStr = groqData.choices[0].message.content;
+      let parsedObj = JSON.parse(contentStr);
+      parsedData = Array.isArray(parsedObj) ? parsedObj : (parsedObj.schedule || parsedObj.data || Object.values(parsedObj).find(v => Array.isArray(v)) || []);
+      if (!Array.isArray(parsedData)) parsedData = [parsedData];
+    } else {
+      const geminiKey = customApiKey || process.env.GEMINI_API_KEY;
+      const clientAI = geminiKey ? new GoogleGenAI({ apiKey: geminiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } }) : ai;
+
+      const geminiModel = effectiveModel.includes('pro') ? 'gemini-3.1-pro-preview' : 'gemini-3.8-flash';
+      const parts: any[] = [];
+      if (extractedText) {
         parts.push({ text: promptText });
       }
-    }
+      if (imageBase64) {
+        const base64Data = imageBase64
+          .replace(/^data:image\/\w+;base64,/, '')
+          .replace(/^data:application\/pdf;base64,/, '');
+        const effectiveMimeType = isPdf ? 'application/pdf' : (mimeType || 'image/jpeg');
+        parts.push({ inlineData: { mimeType: effectiveMimeType, data: base64Data } });
+        if (!extractedText) {
+          parts.push({ text: promptText });
+        }
+      }
 
-    const response = await ai.models.generateContent({
-      model: geminiModel,
-      contents: { parts },
-      config: {
-        systemInstruction,
-        responseMimeType: 'application/json',
-        temperature: thinkingLevel === 'deep' ? 0.0 : 0.2,
-        responseSchema: {
-          type: Type.ARRAY,
-          description: '날짜별 시험 시간표 배열',
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              date: { type: Type.STRING, description: '시험 날짜 (예: "10/13(목)")' },
-              notice: { type: Type.STRING, description: '유의사항' },
-              schedule: {
-                type: Type.ARRAY,
-                description: '교시별 시험 목록',
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    period: { type: Type.STRING, description: '교시명 (예: "1교시")' },
-                    subjects: {
-                      type: Type.ARRAY,
-                      description: '해당 교시 과목 목록',
-                      items: {
-                        type: Type.OBJECT,
-                        properties: {
-                          name: { type: Type.STRING, description: '과목명 (괄호 및 코드 제외)' },
-                          subjectCode: { type: Type.STRING, description: '과목코드 (예: "04")' },
-                          entryTime: { type: Type.STRING, description: '입실 시간 (예: "09:10")' },
-                          time: { type: Type.STRING, description: '시험 시간 (예: "09:20~10:20")' },
-                          duration: { type: Type.INTEGER, description: '시험 시간(분)' },
-                          targetClass: { type: Type.STRING, description: '대상 반 또는 학년' },
+      const response = await clientAI.models.generateContent({
+        model: geminiModel,
+        contents: { parts },
+        config: {
+          systemInstruction,
+          responseMimeType: 'application/json',
+          temperature: thinkingLevel === 'deep' ? 0.0 : 0.2,
+          responseSchema: {
+            type: Type.ARRAY,
+            description: '날짜별 시험 시간표 배열',
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                date: { type: Type.STRING, description: '시험 날짜 (예: "10/13(목)")' },
+                notice: { type: Type.STRING, description: '유의사항' },
+                schedule: {
+                  type: Type.ARRAY,
+                  description: '교시별 시험 목록',
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      period: { type: Type.STRING, description: '교시명 (예: "1교시")' },
+                      subjects: {
+                        type: Type.ARRAY,
+                        description: '해당 교시 과목 목록',
+                        items: {
+                          type: Type.OBJECT,
+                          properties: {
+                            name: { type: Type.STRING, description: '과목명 (괄호 및 코드 제외)' },
+                            subjectCode: { type: Type.STRING, description: '과목코드 (예: "04")' },
+                            entryTime: { type: Type.STRING, description: '입실 시간 (예: "09:10")' },
+                            time: { type: Type.STRING, description: '시험 시간 (예: "09:20~10:20")' },
+                            duration: { type: Type.INTEGER, description: '시험 시간(분)' },
+                            targetClass: { type: Type.STRING, description: '대상 반 또는 학년' },
+                          },
+                          required: ['name', 'subjectCode', 'entryTime', 'time', 'duration', 'targetClass'],
                         },
-                        required: ['name', 'subjectCode', 'entryTime', 'time', 'duration', 'targetClass'],
                       },
                     },
+                    required: ['period', 'subjects'],
                   },
-                  required: ['period', 'subjects'],
                 },
               },
+              required: ['date', 'notice', 'schedule'],
             },
-            required: ['date', 'notice', 'schedule'],
           },
         },
-      },
-    });
+      });
 
-    parsedData = JSON.parse(response.text || '[]');
+      parsedData = JSON.parse(response.text || '[]');
+    }
 
     parsedData = parsedData.map((item: any, idx: number) => ({
       id: item.id || `day-parsed-${Date.now()}-${idx}`,

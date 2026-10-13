@@ -1049,7 +1049,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   // Fullscreen Auto-Scaling & Aspect Ratio Calculation:
   // 사용자 요청 1: "나는 전체화면이 항상 첨부한 비율이 좋을거 같고"
   // BASE_WIDTH = 1520px, BASE_HEIGHT = Math.max(920, measuredBaseHeight) (첨부 사진 속 칠판 황금비율 ~1.63:1 유지)
-  const BASE_WIDTH = 1520;
+  const BASE_WIDTH = 1380;
   // Center Floating Notification Modal Helper
   const renderCenterNotificationModal = () =>
     activeCenterNotification && (
@@ -1101,9 +1101,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   // Safety margins:
   // 사용자 요청: "감지 해상도 부분은 안 보이게 해주고 마우스가 가면 나타나게 해줄래? 그 아래 부분이 윗부분까지 채워줘."
   // 해상도 바를 마우스 오버 시에만 나타나는 플로팅 오버레이로 전환하고, 상단 여백을 대폭 줄여 칠판이 화면 상단까지 꽉 차게 확장
-  const topReservedSpace = isFullscreen ? 12 : 0;
-  const bottomReservedSpace = isFullscreen ? 68 : 0;
-  const sideReservedSpace = isFullscreen ? 24 : 0;
+  const topReservedSpace = isFullscreen ? 0 : 0;
+  const bottomReservedSpace = isFullscreen ? 0 : 0;
+  const sideReservedSpace = isFullscreen ? 0 : 0;
 
   const availableWidth = Math.max(360, windowSize.width - sideReservedSpace);
   const availableHeight = Math.max(300, windowSize.height - (topReservedSpace + bottomReservedSpace));
@@ -1204,16 +1204,20 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 <span className="text-yellow-300 font-black">{schoolName}</span>
               )}
               <span>{(daySchedule.fullTitle || `2026학년도 2학기 1차 고사 시간표(${daySchedule.date})`).replace(/\s*\([^)]*\)/g, '').trim()}</span>
-              <span className="text-xs sm:text-sm md:text-base font-extrabold text-yellow-300 bg-yellow-400/20 px-3 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs">
-                <Calendar className="w-4 h-4 text-yellow-300" />
+              <span className="text-sm sm:text-base md:text-lg font-black text-yellow-300 bg-yellow-400/20 px-3.5 py-1.5 rounded-xl border border-yellow-400/40 flex items-center gap-2 shadow-xs">
+                <Calendar className="w-5 h-5 text-yellow-300" />
                 <span>{currentFullDate}</span>
+              </span>
+              <span className="text-sm sm:text-base md:text-lg font-black text-emerald-300 bg-emerald-950/70 px-3.5 py-1.5 rounded-xl border border-emerald-500/50 flex items-center gap-2 shadow-xs font-mono">
+                <Clock className="w-5 h-5 text-emerald-400 animate-pulse" />
+                <span>{currentTime}</span>
               </span>
             </h2>
           </div>
 
           {/* Right Top Notice Banner strictly on ONE SINGLE LINE */}
           <div
-            className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-4 py-2 flex items-center gap-2 text-xs sm:text-sm md:text-base font-black text-yellow-300 shadow-md shrink-0 whitespace-nowrap overflow-x-auto scrollbar-none`}
+            className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-4.5 py-2.5 flex items-center gap-2.5 text-sm sm:text-base md:text-lg font-black text-yellow-300 shadow-md shrink-0 whitespace-nowrap overflow-x-auto scrollbar-none`}
           >
             <span className="text-yellow-200 font-black whitespace-nowrap drop-shadow-xs">
               {daySchedule.notice || '최선을 다하기! 부정행위 금지! 책상 서랍 비우기! 수정테이프 불가!'}
@@ -2715,7 +2719,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   if (isFullscreen) {
     return (
       <div
-        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center justify-start overflow-auto select-none pt-2 pb-6 px-2.5 transition-colors duration-500`}
+        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center justify-start overflow-auto select-none p-0 m-0 transition-colors duration-500`}
         onMouseMove={(e) => {
           // 화면 최상단 55px 이내로 마우스가 올라오면 해상도 및 컨트롤러 노출
           if (e.clientY <= 55) {
@@ -2916,7 +2920,6 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             }}
             className="flex flex-col space-y-2 select-none"
           >
-            {renderClockAndControls(true)}
             {effectiveScreen === 'break_view' ? renderChalkboardContent() : renderFocusedExamScreen()}
           </div>
         </div>
@@ -3011,8 +3014,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
   // Normal Window Mode Layout
   return (
-    <div ref={!isFullscreen ? boardContainerRef : undefined} className="space-y-3">
-      {renderClockAndControls(false)}
+    <div ref={!isFullscreen ? boardContainerRef : undefined} className="max-w-[1380px] mx-auto w-full px-2 sm:px-4 space-y-3">
       {effectiveScreen === 'break_view' ? renderChalkboardContent() : renderFocusedExamScreen()}
       {renderCenterNotificationModal()}
 

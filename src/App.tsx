@@ -17,7 +17,7 @@ import { InitialClassSetupModal } from './components/InitialClassSetupModal';
 import { ScheduleUploadCard } from './components/ScheduleUploadCard';
 import { SchoolSettingsCard } from './components/SchoolSettingsCard';
 import { ShareSchoolModal } from './components/ShareSchoolModal';
-import { Sparkles, Calendar, BookOpen, Monitor, Code, RefreshCw, CheckCircle2, Palette, Hash, Grid, Cloud, Trash2 } from 'lucide-react';
+import { Sparkles, Calendar, BookOpen, Monitor, Code, RefreshCw, CheckCircle2, Palette, Hash, Grid, Cloud, Trash2, Sliders } from 'lucide-react';
 import { cleanSlug, generateSchoolSlug } from './utils/slugUtils';
 import {
   saveSchoolScheduleToCloud,
@@ -93,6 +93,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'board' | 'developer'>('board'); // "board" = Electronic Chalkboard, "developer" = Code/Grid
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
+  const [isSettingsExpanded, setIsSettingsExpanded] = useState<boolean>(false);
 
   // App Deployment Mode Role ('selector' | 'classroom' | 'admin') with unique URL hash addresses
   const [appRole, setAppRole] = useState<'selector' | 'classroom' | 'admin'>(() => {
@@ -818,7 +819,7 @@ export default function App() {
   // 2. Classroom Electronic Board Mode (Direct classroom deployment with initial grade/class setup)
   if (appRole === 'classroom') {
     return (
-      <div className={`min-h-screen bg-slate-950 text-white font-sans ${isFullscreen ? 'pb-2' : 'pb-10'}`}>
+      <div className={`min-h-screen bg-slate-950 text-white font-sans ${isFullscreen ? 'p-0 m-0' : 'pb-10'}`}>
         <ElectronicBoard
           daySchedule={currentDaySchedule}
           allDays={scheduleData}
@@ -1019,7 +1020,7 @@ export default function App() {
       {/* Main Container */}
       <main className={
         isFullscreen
-          ? "w-full p-2 sm:p-4 space-y-3 overflow-x-hidden"
+          ? "w-full p-0 m-0 space-y-0 overflow-x-hidden"
           : "w-full px-3 sm:px-5 lg:px-8 pt-6 space-y-6 overflow-x-hidden"
       }>
         
@@ -1053,176 +1054,12 @@ export default function App() {
             }}
           />
         ) : (
-          /* Admin Mode & Developer View */
+          /* Admin Mode & Developer View: Timetable Grid first at top, followed by collapsible settings/tools toolbox */
           <>
-            {/* 학교명 및 고유 링크 주소 설정 (관리자 모드 전용) */}
-            <SchoolSettingsCard
-              schoolName={schoolName}
-              schoolSlug={schoolSlug}
-              onSaveSchoolInfo={handleUpdateSchoolInfo}
-              cloudSyncStatus={cloudSyncStatus}
-              onOpenShareModal={() => setIsShareModalOpen(true)}
-              onOpenClassroomMode={() => {
-                changeAppRole('classroom');
-                setViewMode('board');
-              }}
-            />
-
-            {/* 시험 시간표 PDF 및 이미지 AI 자동 파싱 업로드 카드 (관리자 모드 전용) */}
-            <ScheduleUploadCard
-              onOpenUpload={() => setIsUploadModalOpen(true)}
-              onSwitchToBoard={() => {
-                changeAppRole('classroom');
-                setViewMode('board');
-              }}
-            />
-
-            {/* 학교 마크(로고) 첨부 및 칠판 연동 (관리자 모드 전용) */}
-            <SchoolLogoCard
-              schoolLogo={schoolLogo}
-              onChangeLogo={handleUpdateSchoolLogo}
-              fullTitle={currentDaySchedule?.fullTitle}
-            />
-
-            {/* 총 반 개수 설정 (관리자 모드 전용) */}
-            <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
-                    <Grid className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                      <span>최대 학급 반 개수 설정</span>
-                    </h3>
-                    <p className="text-xs text-slate-500 font-medium">
-                      전자칠판 및 초기 설정에서 선택 가능한 최대 반 번호(예: 10반, 15반, 20반)를 설정합니다.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-200">
-                  현재 설정: <strong className="text-indigo-900">{maxClasses}반까지</strong>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {Array.from({ length: 15 }, (_, i) => i + 1).map((cnt) => {
-                  const isSelected = maxClasses === cnt;
-                  return (
-                    <button
-                      key={cnt}
-                      type="button"
-                      onClick={() => handleUpdateMaxClasses(cnt)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border ${
-                        isSelected
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md ring-2 ring-indigo-500/30'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                      }`}
-                    >
-                      {cnt}반까지
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 전자칠판 고급 다크 모드 텍스처 & 글자 가독성 설정 (관리자 모드 전용) */}
-            <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-slate-900 text-yellow-300 flex items-center justify-center shadow-xs">
-                    <Palette className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                      <span>전자칠판 다크 모드 텍스처 & 글자 가독성 설정</span>
-                      <span className="text-xs bg-yellow-100 text-yellow-800 font-bold px-2 py-0.5 rounded-full border border-yellow-200">
-                        기본 다크 모드 적용
-                      </span>
-                    </h3>
-                    <p className="text-xs text-slate-500 font-medium">
-                      고급스러운 다크 모드 칠판 질감과 원거리에서도 선명한 고대비 볼드 폰트가 적용됩니다.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
-                  현재 질감: <strong className="text-slate-900">{THEME_CONFIGS[boardTheme].name}</strong>
-                </div>
-              </div>
-
-              {/* 3 Themes Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                {(['obsidian', 'emerald', 'midnight'] as BoardTheme[]).map((tKey) => {
-                  const cfg = THEME_CONFIGS[tKey];
-                  const isSelected = boardTheme === tKey;
-                  return (
-                    <button
-                      key={tKey}
-                      type="button"
-                      onClick={() => handleUpdateBoardTheme(tKey)}
-                      className={`text-left p-3.5 rounded-xl border-2 transition cursor-pointer flex flex-col justify-between space-y-2.5 ${
-                        isSelected
-                          ? 'border-yellow-400 bg-slate-950 text-white shadow-md ring-2 ring-yellow-400/30'
-                          : 'border-slate-200 hover:border-slate-400 bg-slate-50/80 text-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black flex items-center gap-1.5">
-                          {tKey === 'obsidian' && '🌌'}
-                          {tKey === 'emerald' && '🌲'}
-                          {tKey === 'midnight' && '🌑'}
-                          <span className={isSelected ? 'text-yellow-300' : 'text-slate-900'}>
-                            {cfg.name}
-                          </span>
-                        </span>
-                        {isSelected && (
-                          <span className="text-[10px] bg-yellow-400 text-slate-950 font-black px-1.5 py-0.5 rounded-md">
-                            적용 중
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Mini Texture Preview swatch */}
-                      <div
-                        className={`h-10 rounded-lg p-2 flex items-center justify-between border ${
-                          tKey === 'obsidian'
-                            ? 'bg-gradient-to-b from-[#111925] via-[#0c121c] to-[#070b12] border-slate-700'
-                            : tKey === 'emerald'
-                            ? 'bg-gradient-to-b from-[#0e251b] via-[#091a13] to-[#050f0b] border-emerald-800'
-                            : 'bg-gradient-to-b from-[#0e182c] via-[#091020] to-[#050a14] border-indigo-800'
-                        }`}
-                      >
-                        <span className="text-[11px] font-black text-white">가독성 테스트</span>
-                        <span className="text-[11px] font-black text-yellow-300 font-mono">08:50 ~ 09:40</span>
-                      </div>
-
-                      <p className={`text-[11px] leading-relaxed ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
-                        {cfg.desc}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 시험 종료 전 경고 알림 & 음향 설정 (소리 켜기/끄기, 5분전/10분전 셋팅) */}
-            <AlertSettingsCard
-              settings={alertSettings}
-              onChangeSettings={handleUpdateAlertSettings}
-            />
-
-            <NoticeBanner
-              notice={currentDaySchedule?.notice || FIXED_NOTICE}
-              bottomNotice={currentDaySchedule?.bottomNotice || DEFAULT_BOTTOM_NOTICE}
-              onEditTopNotice={handleUpdateAllTopNotices}
-              onEditBottomNotice={handleUpdateAllBottomNotices}
-            />
-
             <TimetableGrid
               daySchedules={displayedSchedules}
               selectedGrade={selectedGrade}
+              setSelectedGrade={setSelectedGrade}
               onEditSubject={(dayIdx, periodIdx, subIdx, subject) => {
                 const targetDay = displayedSchedules[dayIdx];
                 const realIdx = scheduleData.findIndex(
@@ -1305,13 +1142,202 @@ export default function App() {
               onAddDay={handleAddDay}
             />
 
-            <div className="print:hidden pt-4">
-              <CodeOutputViewer
-                scheduleData={scheduleData}
-                onCopyCode={handleCopyCode}
-                copied={copied}
-              />
+            {/* 학교 설정 및 환경설정 툴박스 (접이식 아코디언) */}
+            <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex items-center justify-between print:hidden mt-6">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs">
+                  <Sliders className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">학교 설정 및 AI 업로드·환경설정 툴박스</h3>
+                  <p className="text-xs text-slate-500">학교명, 고유 링크, AI 자동 파싱, 학교 로고, 최대 반 개수, 테마 설정</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSettingsExpanded(!isSettingsExpanded)}
+                className="px-4 py-2 rounded-xl text-xs font-black bg-slate-900 hover:bg-slate-800 text-white transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <span>{isSettingsExpanded ? '설정 접기 🔼' : '설정 펼치기 🔽'}</span>
+              </button>
             </div>
+
+            {isSettingsExpanded && (
+              <div className="space-y-6 pt-4 animate-fadeIn print:block">
+                {/* 학교명 및 고유 링크 주소 설정 */}
+                <SchoolSettingsCard
+                  schoolName={schoolName}
+                  schoolSlug={schoolSlug}
+                  onSaveSchoolInfo={handleUpdateSchoolInfo}
+                  cloudSyncStatus={cloudSyncStatus}
+                  onOpenShareModal={() => setIsShareModalOpen(true)}
+                  onOpenClassroomMode={() => {
+                    changeAppRole('classroom');
+                    setViewMode('board');
+                  }}
+                />
+
+                {/* 시험 시간표 PDF 및 이미지 AI 자동 파싱 업로드 카드 */}
+                <ScheduleUploadCard
+                  onOpenUpload={() => setIsUploadModalOpen(true)}
+                  onSwitchToBoard={() => {
+                    changeAppRole('classroom');
+                    setViewMode('board');
+                  }}
+                />
+
+                {/* 학교 마크(로고) 첨부 및 칠판 연동 */}
+                <SchoolLogoCard
+                  schoolLogo={schoolLogo}
+                  onChangeLogo={handleUpdateSchoolLogo}
+                  fullTitle={currentDaySchedule?.fullTitle}
+                />
+
+                {/* 총 반 개수 설정 */}
+                <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                        <Grid className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                          <span>최대 학급 반 개수 설정</span>
+                        </h3>
+                        <p className="text-xs text-slate-500 font-medium">
+                          전자칠판 및 초기 설정에서 선택 가능한 최대 반 번호(예: 10반, 15반, 20반)를 설정합니다.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-200">
+                      현재 설정: <strong className="text-indigo-900">{maxClasses}반까지</strong>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {Array.from({ length: 15 }, (_, i) => i + 1).map((cnt) => {
+                      const isSelected = maxClasses === cnt;
+                      return (
+                        <button
+                          key={cnt}
+                          type="button"
+                          onClick={() => handleUpdateMaxClasses(cnt)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border ${
+                            isSelected
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-md ring-2 ring-indigo-500/30'
+                              : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                          }`}
+                        >
+                          {cnt}반까지
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 전자칠판 고급 다크 모드 텍스처 & 글자 가독성 설정 */}
+                <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-slate-900 text-yellow-300 flex items-center justify-center shadow-xs">
+                        <Palette className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                          <span>전자칠판 다크 모드 텍스처 & 글자 가독성 설정</span>
+                          <span className="text-xs bg-yellow-100 text-yellow-800 font-bold px-2 py-0.5 rounded-full border border-yellow-200">
+                            기본 다크 모드 적용
+                          </span>
+                        </h3>
+                        <p className="text-xs text-slate-500 font-medium">
+                          고급스러운 다크 모드 칠판 질감과 원거리에서도 선명한 고대비 볼드 폰트가 적용됩니다.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
+                      현재 질감: <strong className="text-slate-900">{THEME_CONFIGS[boardTheme].name}</strong>
+                    </div>
+                  </div>
+
+                  {/* 3 Themes Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                    {(['obsidian', 'emerald', 'midnight'] as BoardTheme[]).map((tKey) => {
+                      const cfg = THEME_CONFIGS[tKey];
+                      const isSelected = boardTheme === tKey;
+                      return (
+                        <button
+                          key={tKey}
+                          type="button"
+                          onClick={() => handleUpdateBoardTheme(tKey)}
+                          className={`text-left p-3.5 rounded-xl border-2 transition cursor-pointer flex flex-col justify-between space-y-2.5 ${
+                            isSelected
+                              ? 'border-yellow-400 bg-slate-950 text-white shadow-md ring-2 ring-yellow-400/30'
+                              : 'border-slate-200 hover:border-slate-400 bg-slate-50/80 text-slate-800'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black flex items-center gap-1.5">
+                              {tKey === 'obsidian' && '🌌'}
+                              {tKey === 'emerald' && '🌲'}
+                              {tKey === 'midnight' && '🌑'}
+                              <span className={isSelected ? 'text-yellow-300' : 'text-slate-900'}>
+                                {cfg.name}
+                              </span>
+                            </span>
+                            {isSelected && (
+                              <span className="text-[10px] bg-yellow-400 text-slate-950 font-black px-1.5 py-0.5 rounded-md">
+                                적용 중
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Mini Texture Preview swatch */}
+                          <div
+                            className={`h-10 rounded-lg p-2 flex items-center justify-between border ${
+                              tKey === 'obsidian'
+                                ? 'bg-gradient-to-b from-[#111925] via-[#0c121c] to-[#070b12] border-slate-700'
+                                : tKey === 'emerald'
+                                ? 'bg-gradient-to-b from-[#0e251b] via-[#091a13] to-[#050f0b] border-emerald-800'
+                                : 'bg-gradient-to-b from-[#0e182c] via-[#091020] to-[#050a14] border-indigo-800'
+                            }`}
+                          >
+                            <span className="text-[11px] font-black text-white">가독성 테스트</span>
+                            <span className="text-[11px] font-black text-yellow-300 font-mono">08:50 ~ 09:40</span>
+                          </div>
+
+                          <p className={`text-[11px] leading-relaxed ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
+                            {cfg.desc}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 시험 종료 전 경고 알림 & 음향 설정 */}
+                <AlertSettingsCard
+                  settings={alertSettings}
+                  onChangeSettings={handleUpdateAlertSettings}
+                />
+
+                <NoticeBanner
+                  notice={currentDaySchedule?.notice || FIXED_NOTICE}
+                  bottomNotice={currentDaySchedule?.bottomNotice || DEFAULT_BOTTOM_NOTICE}
+                  onEditTopNotice={handleUpdateAllTopNotices}
+                  onEditBottomNotice={handleUpdateAllBottomNotices}
+                />
+
+                <div className="print:hidden pt-4">
+                  <CodeOutputViewer
+                    scheduleData={scheduleData}
+                    onCopyCode={handleCopyCode}
+                    copied={copied}
+                  />
+                </div>
+              </div>
+            )}
           </>
         )}
 
