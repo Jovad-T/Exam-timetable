@@ -1114,7 +1114,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
   // 사용자 요청: "날짜마다 내가 첨부한 부분이 사이즈가 달라지는데? 이건 고정해야 되지 않아?"
   // BASE_HEIGHT를 930으로 고정하여 날짜별 교시 수나 내용에 상관없이 칠판 및 첨부 영역 사이즈가 항상 일정하게 유지되도록 함
-  const BASE_HEIGHT = 930;
+  const BASE_HEIGHT = 980;
 
   // Safety margins:
   // 사용자 요청: "감지 해상도 부분은 안 보이게 해주고 마우스가 가면 나타나게 해줄래? 그 아래 부분이 윗부분까지 채워줘."
@@ -1136,12 +1136,12 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
     // [기본값] 첨부 사진 비율 고정: 칠판 가로세로 비율(1380x920 이상)을 화면 크기에 관계없이 항상 일정하게 유지
     // 안전 계수(0.94)를 적용하여 전체화면에서 하단 튀어나감 없이 깔끔하게 한 화면에 쏙 들어오도록 보장
     dynamicBaseWidth = BASE_WIDTH;
-    autoCalculatedScale = Math.min(targetVerticalScale, targetHorizontalScale) * 0.94;
+    autoCalculatedScale = Math.min(targetVerticalScale, targetHorizontalScale) * 0.99;
   } else {
     // [선택 모드] 가로 전체 확장: 와이드 화면 가로를 꽉 채우도록 베이스 너비 확장
     const idealBaseWidth = availableWidth / targetVerticalScale;
     dynamicBaseWidth = Math.round(Math.max(1380, idealBaseWidth));
-    autoCalculatedScale = targetVerticalScale * 0.94;
+    autoCalculatedScale = targetVerticalScale * 0.99;
   }
 
   const effectiveScale = scaleMode === 'auto' ? autoCalculatedScale : customScale;
@@ -1632,11 +1632,11 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                               )}
                             </div>
 
-                            {/* Exam Time & Duration - 굵은 폰트로 선명하게 표시 */}
-                            <div className="col-span-4 sm:col-span-4 text-center text-slate-950 font-black text-base sm:text-lg md:text-xl font-mono px-1 whitespace-nowrap">
+                            {/* Exam Time & Duration */}
+                            <div className="col-span-3 sm:col-span-3 text-center text-slate-950 font-black text-sm sm:text-base md:text-lg font-mono px-0.5 whitespace-nowrap">
                               {sub.time}
                               {sub.duration ? (
-                                <span className="text-slate-700 font-black text-xs sm:text-sm md:text-base ml-1">
+                                <span className="text-slate-700 font-black text-xs sm:text-sm ml-0.5">
                                   ({sub.duration}분)
                                 </span>
                               ) : (
@@ -1644,7 +1644,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                               )}
                             </div>
 
-                            {/* Target Class / Room (클릭하여 수동 수정 가능) */}
+                            {/* Target Class / Room */}
                             <button
                               type="button"
                               onClick={() => {
@@ -1661,7 +1661,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                                   initialValue: sub.targetClass || '행정학급',
                                 });
                               }}
-                              className={`col-span-2 sm:col-span-2 text-center font-black py-1.5 px-2 rounded-xl border text-xs sm:text-sm md:text-base truncate cursor-pointer transition flex items-center justify-center gap-1 shadow-2xs ${
+                              className={`col-span-3 sm:col-span-3 text-center font-black py-1.5 px-2 rounded-xl border text-xs sm:text-sm md:text-base cursor-pointer transition flex items-center justify-center gap-1 shadow-2xs ${
                                 isThisClassSubject
                                   ? 'text-emerald-900 bg-emerald-100/90 border-emerald-400 hover:bg-emerald-200'
                                   : 'text-indigo-900 bg-indigo-50 border-indigo-300 hover:bg-indigo-100'
@@ -2810,7 +2810,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   if (isFullscreen) {
     return (
       <div
-        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center justify-center overflow-auto select-none p-0 m-0 transition-colors duration-500`}
+        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center justify-start overflow-auto select-none pt-20 pb-12 px-0 m-0 transition-colors duration-500`}
         onMouseMove={(e) => {
           // 화면 최상단 55px 이내로 마우스가 올라오면 해상도 및 컨트롤러 노출
           if (e.clientY <= 55) {
