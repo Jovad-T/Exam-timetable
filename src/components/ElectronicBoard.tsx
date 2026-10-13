@@ -1134,14 +1134,14 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
   if (fullscreenAspectMode === 'photo') {
     // [기본값] 첨부 사진 비율 고정: 칠판 가로세로 비율(1380x980 이상)을 화면 크기에 관계없이 항상 일정하게 유지
-    // 안전 계수(0.96)를 적용하여 전체화면에서 상하 3% 축소 적용
+    // 안전 계수(0.91)를 적용하여 전체화면에서 상하 5% 추가 축소 적용
     dynamicBaseWidth = BASE_WIDTH;
-    autoCalculatedScale = Math.min(targetVerticalScale, targetHorizontalScale) * 0.96;
+    autoCalculatedScale = Math.min(targetVerticalScale, targetHorizontalScale) * 0.91;
   } else {
     // [선택 모드] 가로 전체 확장: 와이드 화면 가로를 꽉 채우도록 베이스 너비 확장
     const idealBaseWidth = availableWidth / targetVerticalScale;
     dynamicBaseWidth = Math.round(Math.max(1380, idealBaseWidth));
-    autoCalculatedScale = targetVerticalScale * 0.96;
+    autoCalculatedScale = targetVerticalScale * 0.91;
   }
 
   const effectiveScale = scaleMode === 'auto' ? autoCalculatedScale : customScale;
