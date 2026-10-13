@@ -176,11 +176,6 @@ export function subscribeSchoolSchedule(
   onScheduleUpdate: (data: ScheduleData, cloudSchoolName?: string) => void,
   onSchoolProfileUpdate?: (name: string, logoUrl?: string) => void
 ): () => void {
-  if (!schoolSlug) return () => {};
-  if (typeof window !== 'undefined' && localStorage.getItem('firestore_quota_exceeded') === 'true') {
-    return () => {};
-  }
-
   const schoolPath = `schools/${schoolSlug}`;
   const schoolRef = doc(db, 'schools', schoolSlug);
   const unsubSchool = onSnapshot(
@@ -195,9 +190,7 @@ export function subscribeSchoolSchedule(
     },
     (err) => {
       console.warn('Real-time school profile listener warning:', err);
-      try {
-        handleFirestoreError(err, OperationType.GET, schoolPath);
-      } catch {}
+      // We don't block here, just log or handle specific errors
     }
   );
 
@@ -221,9 +214,6 @@ export function subscribeSchoolSchedule(
     },
     (err) => {
       console.warn('Real-time schedule listener warning:', err);
-      try {
-        handleFirestoreError(err, OperationType.GET, schedulePath);
-      } catch {}
     }
   );
 
