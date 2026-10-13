@@ -17,8 +17,8 @@ function createWindow() {
     }
   });
 
-  // Load the official Vercel production deployment URL directly with classroom selector hash
-  mainWindow.loadURL('https://exam-timetable-drab.vercel.app/#school:sajik-girls-high:classroom');
+  // Load local built index.html so localStorage and settings persist permanently across app restarts
+  mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
 
   // Handle app exit request from renderer if needed
   ipcMain.on('app-exit', () => {

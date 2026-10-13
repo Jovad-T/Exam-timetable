@@ -739,7 +739,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       });
 
       const startAlertEnabled = alertSettings?.startAlertEnabled ?? true;
-      if (startAlertTarget && startAlertEnabled && isSoundEnabled) {
+      if (startAlertTarget && startAlertEnabled && isSoundEnabled && !startAlertTarget.subjectNames.includes('자습')) {
         const startAlertKey = `start-${startAlertTarget.periodName}-${startAlertTarget.startTime}`;
         if (lastPlayedStartAlertKeyRef.current !== startAlertKey) {
           audioAlert.playAlertSound(alertSettings?.soundType || 'chime', alertSettings?.volume || 0.7);
@@ -753,7 +753,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           if (alertSettings?.ttsEnabled ?? true) {
             const startMsg =
               alertSettings?.startTtsMessage ||
-              `곧 ${startAlertTarget.periodName} ${startAlertTarget.subjectNames} 시험이 시작됩니다. 학생들은 입실을 완료하고 자리에 착석해 주시기 바랍니다.`;
+              `곧 ${startAlertTarget.periodName} ${startAlertTarget.subjectNames} 시험이 시작됩니다.\n학생들은 입실을 완료하고 자리에 착석해 주시기 바랍니다.`;
             setTimeout(() => {
               audioAlert.speakTTS(startMsg, {
                 volume: alertSettings?.volume || 0.9,
@@ -786,12 +786,12 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
         // Check if exam just started (within first 15 seconds)
         const startCenterKey = `center-start-${active.periodName}-${active.startTime}`;
-        if (effectiveNowSec - active.startSec <= 15 && lastCenterNotificationKeyRef.current !== startCenterKey) {
+        if (effectiveNowSec - active.startSec <= 15 && lastCenterNotificationKeyRef.current !== startCenterKey && !active.subjectNames.includes('자습')) {
           lastCenterNotificationKeyRef.current = startCenterKey;
           setActiveCenterNotification({
             type: 'start',
             title: `[${active.periodName}] 시험 시작`,
-            message: `${active.subjectNames} 시험이 시작되었습니다. 학생들은 시험에 집중해 주시기 바랍니다.`,
+            message: `${active.subjectNames} 시험이 시작되었습니다.\n학생들은 시험에 집중해 주시기 바랍니다.`,
             periodName: active.periodName,
             subjectNames: active.subjectNames,
           });
@@ -806,7 +806,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             if (alertSettings?.ttsEnabled ?? true) {
               const msg =
                 alertSettings?.ttsMessage ||
-                `시험 종료 ${alertMinutes}분 전입니다. 학생들은 답안지 OMR 카드를 점검하고 마킹 실수가 없는지 확인해 주시기 바랍니다.`;
+                `시험 종료 ${alertMinutes}분 전입니다.\n학생들은 답안지 OMR 카드를 점검하고 마킹 실수가 없는지 확인해 주시기 바랍니다.`;
               setTimeout(() => {
                 audioAlert.speakTTS(msg, {
                   volume: alertSettings?.volume || 0.9,
@@ -1097,7 +1097,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             </p>
           </div>
 
-          <div className="bg-black/60 border border-white/10 rounded-2xl p-4 text-slate-200 text-sm sm:text-base font-bold leading-relaxed">
+          <div className="bg-black/60 border border-white/10 rounded-2xl p-4 text-slate-200 text-sm sm:text-base font-bold leading-relaxed whitespace-pre-line">
             {activeCenterNotification.message}
           </div>
 
@@ -1114,7 +1114,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
   // 사용자 요청: "날짜마다 내가 첨부한 부분이 사이즈가 달라지는데? 이건 고정해야 되지 않아?"
   // BASE_HEIGHT를 930으로 고정하여 날짜별 교시 수나 내용에 상관없이 칠판 및 첨부 영역 사이즈가 항상 일정하게 유지되도록 함
-  const BASE_HEIGHT = 980;
+  const BASE_HEIGHT = 880;
 
   // Safety margins:
   // 사용자 요청: "감지 해상도 부분은 안 보이게 해주고 마우스가 가면 나타나게 해줄래? 그 아래 부분이 윗부분까지 채워줘."
@@ -1133,8 +1133,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   let dynamicBaseWidth: number;
 
   if (fullscreenAspectMode === 'photo') {
-    // [기본값] 첨부 사진 비율 고정: 칠판 가로세로 비율(1380x920 이상)을 화면 크기에 관계없이 항상 일정하게 유지
-    // 안전 계수(0.94)를 적용하여 전체화면에서 하단 튀어나감 없이 깔끔하게 한 화면에 쏙 들어오도록 보장
+    // [기본값] 첨부 사진 비율 고정: 칠판 가로세로 비율(1380x980 이상)을 화면 크기에 관계없이 항상 일정하게 유지
+    // 안전 계수(0.99)를 적용하여 전체화면에서 화면에 딱 맞게 꽉 차도록 보장
     dynamicBaseWidth = BASE_WIDTH;
     autoCalculatedScale = Math.min(targetVerticalScale, targetHorizontalScale) * 0.99;
   } else {
@@ -2841,7 +2841,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   if (isFullscreen) {
     return (
       <div
-        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center justify-start overflow-auto select-none pt-20 pb-12 px-0 m-0 transition-colors duration-500`}
+        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center justify-center overflow-auto select-none pt-2 pb-2 px-0 m-0 transition-colors duration-500`}
         onMouseMove={(e) => {
           // 화면 최상단 55px 이내로 마우스가 올라오면 해상도 및 컨트롤러 노출
           if (e.clientY <= 55) {

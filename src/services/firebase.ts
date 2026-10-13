@@ -51,6 +51,11 @@ export interface FirestoreErrorInfo {
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): void {
   const errMsg = error instanceof Error ? error.message : String(error);
   if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota') || errMsg.includes('PERMISSION_DENIED')) {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('firestore_quota_exceeded', 'true');
+      } catch {}
+    }
     return;
   }
   const errInfo: FirestoreErrorInfo = {
@@ -101,6 +106,9 @@ export async function saveSchoolScheduleToCloud(
   logoUrl?: string | null
 ): Promise<void> {
   if (!schoolSlug) return;
+  if (typeof window !== 'undefined' && localStorage.getItem('firestore_quota_exceeded') === 'true') {
+    return;
+  }
   const now = new Date().toISOString();
 
   try {
@@ -169,7 +177,9 @@ export function subscribeSchoolSchedule(
   onSchoolProfileUpdate?: (name: string, logoUrl?: string) => void
 ): () => void {
   if (!schoolSlug) return () => {};
-  return () => {};
+  if (typeof window !== 'undefined' && localStorage.getItem('firestore_quota_exceeded') === 'true') {
+    return () => {};
+  }
 
   const schoolPath = `schools/${schoolSlug}`;
   const schoolRef = doc(db, 'schools', schoolSlug);

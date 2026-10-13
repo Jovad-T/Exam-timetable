@@ -108,7 +108,7 @@ export default function App() {
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
   const [isSettingsExpanded, setIsSettingsExpanded] = useState<boolean>(false);
 
-  // App Deployment Mode Role ('selector' | 'classroom' | 'admin') with unique URL hash addresses
+  // App Deployment Mode Role ('selector' | 'classroom' | 'admin') strictly tied to URL hash
   const [appRole, setAppRole] = useState<'selector' | 'classroom' | 'admin'>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -121,8 +121,6 @@ export default function App() {
         if (hash === 'selector' || hash === 'classroom' || hash === 'admin') {
           return hash;
         }
-        const saved = localStorage.getItem('app_deployment_role');
-        if (saved === 'classroom' || saved === 'admin' || saved === 'selector') return saved;
       } catch {}
     }
     return 'selector';
@@ -137,11 +135,6 @@ export default function App() {
           window.location.hash = `school:${slug}:${role}`;
         } else {
           window.location.hash = role;
-        }
-        if (role === 'selector') {
-          localStorage.removeItem('app_deployment_role');
-        } else {
-          localStorage.setItem('app_deployment_role', role);
         }
       } catch {}
     }
@@ -286,7 +279,7 @@ export default function App() {
     } catch {}
 
     // When in admin role, push updates to Cloud Firestore with debouncing (3s), skipping if offline/quota exceeded
-    if (appRole === 'admin' && cloudSyncStatus !== 'offline') {
+    if (appRole === 'admin' && cloudSyncStatus !== 'offline' && typeof window !== 'undefined' && localStorage.getItem('firestore_quota_exceeded') !== 'true') {
       const timer = setTimeout(() => {
         setCloudSyncStatus('syncing');
         saveSchoolScheduleToCloud(schoolSlug, scheduleData, schoolName, schoolLogo)
@@ -295,7 +288,7 @@ export default function App() {
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, [scheduleData, schoolSlug, schoolName, schoolLogo, appRole, cloudSyncStatus]);
+  }, [scheduleData, schoolSlug, schoolName, schoolLogo, appRole]);
 
   // Auto fullscreen on entering classroom electronic board mode
   React.useEffect(() => {
