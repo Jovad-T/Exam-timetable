@@ -87,7 +87,20 @@ export default function App() {
     return defaultScheduleData;
   });
 
-  const [activeTab, setActiveTab] = useState<string>('day-1012'); // default to 10/12
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    try {
+      const now = new Date();
+      const m = now.getMonth() + 1;
+      const d = now.getDate();
+      const todayStr1 = `${String(m).padStart(2, '0')}/${String(d).padStart(2, '0')}`;
+      const todayStr2 = `${m}/${d}`;
+      const found = scheduleData.find((day) => day.date === todayStr1 || day.date === todayStr2 || day.date?.includes(todayStr1));
+      if (found) {
+        return found.id || found.date;
+      }
+    } catch {}
+    return scheduleData[0]?.id || 'day-1012';
+  });
   const [selectedGrade, setSelectedGrade] = useState<string>('2학년');
   const [copied, setCopied] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'board' | 'developer'>('board'); // "board" = Electronic Chalkboard, "developer" = Code/Grid
