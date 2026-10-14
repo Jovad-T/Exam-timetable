@@ -207,10 +207,12 @@ export default function App() {
     const unsubscribe = subscribeSchoolSchedule(
       schoolSlug,
       (newScheduleData, cloudName) => {
+        // [강제 동기화] 클라우드에서 받은 최신 데이터로 로컬 상태 및 저장소 무조건 갱신
         setScheduleData(newScheduleData);
         try {
           localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(newScheduleData));
         } catch {}
+        
         if (cloudName) {
           setSchoolName(cloudName);
           try {

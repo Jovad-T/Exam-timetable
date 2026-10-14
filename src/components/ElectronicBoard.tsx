@@ -745,8 +745,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           audioAlert.playAlertSound(alertSettings?.soundType || 'chime', alertSettings?.volume || 0.7);
           setActiveCenterNotification({
             type: 'warning',
-            title: `[시험 시작 10분 전] 곧 ${startAlertTarget.periodName} (${startAlertTarget.subjectNames}) 시험이 시작됩니다!`,
-            message: `입실 및 착석을 완료해주세요.`,
+            title: `[시험 시작 10분 전]`,
+            message: `곧 ${startAlertTarget.periodName} (${startAlertTarget.subjectNames}) 시험이 시작됩니다!\n입실 및 착석을 완료해주세요.`,
             periodName: startAlertTarget.periodName,
             subjectNames: startAlertTarget.subjectNames,
           });
@@ -818,7 +818,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             setActiveCenterNotification({
               type: 'ending_soon',
               title: `[${active.periodName}] 시험 종료 ${alertMinutes}분 전`,
-              message: `OMR 답안지 마킹 실수가 없는지 최종 점검하시기 바랍니다.`,
+              message: `OMR 답안지 마킹 실수가 없는지\n최종 점검하시기 바랍니다.`,
               periodName: active.periodName,
               subjectNames: active.subjectNames,
             });
@@ -2268,26 +2268,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                   )}
                 </div>
 
-                {/* 실시간 시험 남은 시간 & 진행률 긴 Progress Bar (사용자 요청) */}
-                <div className="bg-slate-950/90 rounded-2xl p-3.5 sm:p-4 border-2 border-slate-700/80 shadow-lg space-y-2">
-                  <div className="flex items-center justify-between text-xs sm:text-sm font-bold text-slate-300">
-                    <span className="flex items-center gap-1.5 text-yellow-300 font-black">
-                      <Clock className="w-4 h-4 text-amber-400 animate-spin" />
-                      <span>{currentExam.periodName} ({currentExam.startTime} ~ {currentExam.endTime}) 진행 상황</span>
-                    </span>
-                    <span className="font-mono font-black text-emerald-400">
-                      남은 시간: {currentExam.remainingFormatted} ({Math.round((currentExam.elapsedSeconds / (currentExam.totalSeconds || 1)) * 100)}% 경과)
-                    </span>
-                  </div>
-                  <div className="w-full h-5 sm:h-6 bg-slate-900 rounded-full overflow-hidden p-0.5 border-2 border-slate-700 shadow-inner relative">
-                    <div 
-                      className="h-full bg-gradient-to-r from-emerald-500 via-yellow-400 to-rose-500 rounded-full transition-all duration-1000 shadow-md relative"
-                      style={{ width: `${Math.min(100, Math.max(0, (currentExam.elapsedSeconds / (currentExam.totalSeconds || 1)) * 100))}%` }}
-                    >
-                      <div className="absolute inset-0 bg-white/20 animate-pulse rounded-full" />
-                    </div>
-                  </div>
-                </div>
+                {/* 실시간 시험 진행 상태 표시 (사용자 요청: Progress Bar 및 상태박스 모두 제거) */}
 
                 {/* 1. 과목명 (Extra Large High-Visibility Headline) */}
                 <div className="bg-gradient-to-b from-slate-900 via-[#0c121d] to-slate-950 rounded-3xl p-5 sm:p-7 border-4 border-yellow-400 shadow-[0_10px_35px_rgba(0,0,0,0.95)] text-center relative overflow-hidden group">
@@ -2296,11 +2277,6 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                       ? `${primarySubject.name}(${primarySubject.subjectCode})`
                       : primarySubject.name}
                   </h3>
-                  {primarySubject.subjectCode && (
-                    <div className="mt-2 text-xs sm:text-sm font-black text-emerald-400">
-                      과목 코드: {primarySubject.subjectCode}
-                    </div>
-                  )}
                 </div>
 
                 {/* 2. 입실 시간, 시험시간, 시험 장소, 남은 시간 (4 Core Blocks) */}
