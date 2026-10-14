@@ -198,9 +198,9 @@ export default function App() {
           const parts = hash.split(':');
           const slug = parts[1] || 'korea-high';
           const role = parts[2];
-          setSchoolSlug(slug);
+          if (slug !== schoolSlug) setSchoolSlug(slug);
           if (role === 'classroom' || role === 'admin' || role === 'selector') {
-            setAppRole(role);
+            if (role !== appRole) setAppRole(role);
             try {
               localStorage.setItem('current_app_role', role);
             } catch {}
@@ -208,7 +208,7 @@ export default function App() {
           try {
             localStorage.setItem('current_school_slug', slug);
             const sName = localStorage.getItem(`school_name_${slug}`);
-            if (sName) setSchoolName(sName);
+            if (sName && sName !== schoolName) setSchoolName(sName);
           } catch {}
         } else if (hash === 'selector' || hash === 'classroom' || hash === 'admin') {
           if (hash !== appRole) {
@@ -224,7 +224,7 @@ export default function App() {
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [appRole]);
+  }, [appRole, schoolSlug, schoolName]);
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -353,7 +353,7 @@ export default function App() {
         } else {
           localStorage.setItem(`schedule_data_${processedSlug}`, JSON.stringify(scheduleData));
         }
-        window.location.hash = `school:${processedSlug}:${currentRole}`;
+        // window.location.hash = `school:${processedSlug}:${currentRole}`;
       } catch {}
     }
   };
