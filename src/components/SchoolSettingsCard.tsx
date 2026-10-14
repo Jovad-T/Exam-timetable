@@ -116,7 +116,10 @@ export const SchoolSettingsCard: React.FC<SchoolSettingsCardProps> = ({
   };
 
   const handleSave = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     const finalName = nameInput.trim() || '한국고등학교';
     let finalSlug = cleanSlug(slugInput, true);
     if (!finalSlug) {

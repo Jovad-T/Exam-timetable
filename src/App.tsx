@@ -188,22 +188,30 @@ export default function App() {
   // Sync hash changes and ensure hash is present
   React.useEffect(() => {
     const handleHashChange = () => {
-      const hash = decodeURIComponent(window.location.hash.replace('#', ''));
-      if (hash.startsWith('school:')) {
-        const parts = hash.split(':');
-        const slug = parts[1] || 'korea-high';
-        const role = (parts[2] as any) || 'selector';
-        setSchoolSlug(slug);
-        setAppRole(role);
-        try {
-          localStorage.setItem('current_school_slug', slug);
-          const sName = localStorage.getItem(`school_name_${slug}`);
-          if (sName) setSchoolName(sName);
-        } catch {}
-      } else if (hash === 'selector' || hash === 'classroom' || hash === 'admin') {
-        if (hash !== appRole) {
-          setAppRole(hash);
+      try {
+        const rawHash = window.location.hash.replace(/^#/, '');
+        if (!rawHash) return;
+        const hash = decodeURIComponent(rawHash);
+        if (hash.startsWith('school:')) {
+          const parts = hash.split(':');
+          const slug = parts[1] || 'korea-high';
+          const role = parts[2];
+          setSchoolSlug(slug);
+          if (role === 'classroom' || role === 'admin' || role === 'selector') {
+            setAppRole(role);
+          }
+          try {
+            localStorage.setItem('current_school_slug', slug);
+            const sName = localStorage.getItem(`school_name_${slug}`);
+            if (sName) setSchoolName(sName);
+          } catch {}
+        } else if (hash === 'selector' || hash === 'classroom' || hash === 'admin') {
+          if (hash !== appRole) {
+            setAppRole(hash);
+          }
         }
+      } catch (err) {
+        console.warn('hashchange error:', err);
       }
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -314,7 +322,11 @@ export default function App() {
     }
 
     setSchoolName(cleanName);
+    const prevSlug = schoolSlug;
     setSchoolSlug(processedSlug);
+
+    const currentRole = appRole === 'classroom' ? 'classroom' : 'admin';
+    setAppRole(currentRole);
 
     // Save to Cloud Firestore
     setCloudSyncStatus('syncing');
@@ -327,13 +339,13 @@ export default function App() {
         localStorage.setItem('current_school_slug', processedSlug);
         localStorage.setItem(`school_name_${processedSlug}`, cleanName);
         // Persist schedule data for this school slug as well
-        const currentScheduleStr = localStorage.getItem(`schedule_data_${schoolSlug}`);
+        const currentScheduleStr = localStorage.getItem(`schedule_data_${prevSlug}`);
         if (currentScheduleStr) {
           localStorage.setItem(`schedule_data_${processedSlug}`, currentScheduleStr);
         } else {
           localStorage.setItem(`schedule_data_${processedSlug}`, JSON.stringify(scheduleData));
         }
-        window.location.hash = `school:${processedSlug}:${appRole}`;
+        window.location.hash = `school:${processedSlug}:${currentRole}`;
       } catch {}
     }
   };
