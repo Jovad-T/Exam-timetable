@@ -3060,7 +3060,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
         {/* Scaled Blackboard Container - 윗부분까지 꽉 차도록 my-auto 대신 상단부터 자연스럽게 배치 */}
         <div
-          className="relative shrink-0 flex items-start justify-center pt-[-6px]"
+          className="relative shrink-0 flex items-start justify-center pt-0 mt-[-40px]"
           style={{
             width: `${scaledWidth}px`,
             height: `${scaledHeight}px`,
