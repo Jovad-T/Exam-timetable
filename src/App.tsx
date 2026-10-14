@@ -201,7 +201,12 @@ export default function App() {
           } catch {}
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.error('Failed to fetch initial data from cloud:', err);
+      })
+      .finally(() => {
+        setCloudSyncStatus('synced');
+      });
 
     // 2. Real-time onSnapshot listener: updates made in admin immediately reflect across all classroom displays
     const unsubscribe = subscribeSchoolSchedule(
