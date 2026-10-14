@@ -19,6 +19,7 @@ import { SchoolSettingsCard } from './components/SchoolSettingsCard';
 import { ShareSchoolModal } from './components/ShareSchoolModal';
 import { Sparkles, Calendar, BookOpen, Monitor, Code, RefreshCw, CheckCircle2, Palette, Hash, Grid, Cloud, Trash2, Sliders } from 'lucide-react';
 import { cleanSlug, generateSchoolSlug } from './utils/slugUtils';
+import { getTodayActiveTabId, findTodayScheduleDay, isTodayScheduleDay } from './utils/dateUtils';
 import {
   saveSchoolScheduleToCloud,
   subscribeSchoolSchedule,
@@ -77,7 +78,7 @@ export default function App() {
     }
   };
 
-  const [scheduleData, setScheduleData] = useState<ScheduleData>(() => {
+  const initialSchedule = (() => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem(`schedule_data_${schoolSlug}`);
@@ -85,24 +86,20 @@ export default function App() {
       } catch {}
     }
     return defaultScheduleData;
+  })();
+
+  const [scheduleData, setScheduleData] = useState<ScheduleData>(initialSchedule);
+
+  // Automatically initialize activeTab to today's date (prioritizes today: 10/14, 10/15, etc.)
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    return getTodayActiveTabId(initialSchedule);
   });
 
-  const [activeTab, setActiveTab] = useState<string>('');
-
-  // Automatically set active tab to today's date on load
+  // Automatically set active tab to today's date on load and when scheduleData updates
   React.useEffect(() => {
     try {
-      const now = new Date();
-      const m = now.getMonth() + 1;
-      const d = now.getDate();
-      const todayStr1 = `${String(m).padStart(2, '0')}/${String(d).padStart(2, '0')}`;
-      const todayStr2 = `${m}/${d}`;
-      const found = scheduleData.find((day) => day.date === todayStr1 || day.date === todayStr2 || day.date?.includes(todayStr1));
-      if (found) {
-        setActiveTab(found.id || found.date);
-      } else {
-        setActiveTab(scheduleData[0]?.id || 'day-1012');
-      }
+      const todayTab = getTodayActiveTabId(scheduleData);
+      setActiveTab(todayTab);
     } catch {}
   }, [scheduleData]);
   const [selectedGrade, setSelectedGrade] = useState<string>('2학년');
@@ -153,7 +150,7 @@ export default function App() {
     }
   };
 
-  // App Deployment Mode Role ('selector' | 'classroom' | 'admin') strictly tied to URL hash
+  // App Deployment Mode Role ('selector' | 'classroom' | 'admin') strictly tied to URL hash & localStorage
   const [appRole, setAppRole] = useState<'selector' | 'classroom' | 'admin'>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -166,6 +163,10 @@ export default function App() {
         if (hash === 'selector' || hash === 'classroom' || hash === 'admin') {
           return hash;
         }
+        const savedRole = localStorage.getItem('current_app_role') as any;
+        if (savedRole === 'classroom' || savedRole === 'admin') {
+          return savedRole;
+        }
       } catch {}
     }
     return 'selector';
@@ -176,6 +177,7 @@ export default function App() {
     setSchoolSlug(slug);
     if (typeof window !== 'undefined') {
       try {
+        localStorage.setItem('current_app_role', role);
         if (slug && slug !== 'default') {
           window.location.hash = `school:${slug}:${role}`;
         } else {
@@ -199,6 +201,9 @@ export default function App() {
           setSchoolSlug(slug);
           if (role === 'classroom' || role === 'admin' || role === 'selector') {
             setAppRole(role);
+            try {
+              localStorage.setItem('current_app_role', role);
+            } catch {}
           }
           try {
             localStorage.setItem('current_school_slug', slug);
@@ -208,6 +213,9 @@ export default function App() {
         } else if (hash === 'selector' || hash === 'classroom' || hash === 'admin') {
           if (hash !== appRole) {
             setAppRole(hash);
+            try {
+              localStorage.setItem('current_app_role', hash);
+            } catch {}
           }
         }
       } catch (err) {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Calendar, Plus, Layers, Filter } from 'lucide-react';
 import { ScheduleData } from '../types/schedule';
+import { isTodayScheduleDay } from '../utils/dateUtils';
 
 interface DateTabsProps {
   scheduleData: ScheduleData;
@@ -48,6 +49,7 @@ export const DateTabs: React.FC<DateTabsProps> = ({
 
             {scheduleData.map((day) => {
               const isSelected = activeTab === day.id;
+              const isToday = isTodayScheduleDay(day);
               const totalSubjects = day.schedule.reduce(
                 (acc, p) => acc + p.subjects.length,
                 0
@@ -60,15 +62,25 @@ export const DateTabs: React.FC<DateTabsProps> = ({
                   className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
                     isSelected
                       ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
+                      : isToday
+                      ? 'bg-amber-50 text-amber-900 border-2 border-amber-400 hover:bg-amber-100'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200/60'
                   }`}
+                  title={isToday ? '오늘 시험 시간표' : undefined}
                 >
-                  <Calendar className={`w-3.5 h-3.5 ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`} />
+                  <Calendar className={`w-3.5 h-3.5 ${isSelected ? 'text-indigo-200' : isToday ? 'text-amber-600' : 'text-slate-400'}`} />
                   <span className="text-sm font-black">{day.date}</span>
+                  {isToday && (
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-black ${isSelected ? 'bg-yellow-400 text-slate-950' : 'bg-amber-500 text-white'}`}>
+                      오늘
+                    </span>
+                  )}
                   <span
                     className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold ${
                       isSelected
                         ? 'bg-indigo-700 text-indigo-100'
+                        : isToday
+                        ? 'bg-amber-200/70 text-amber-900'
                         : 'bg-slate-200 text-slate-600'
                     }`}
                   >

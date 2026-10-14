@@ -31,6 +31,7 @@ import { ChalkCanvas } from './ChalkCanvas';
 import { audioAlert } from '../utils/audioAlert';
 import { SubjectItem } from '../types/schedule';
 import { DEFAULT_ANNOUNCEMENT_TEMPLATES } from './AlertSettingsCard';
+import { getKoreaDate, isTodayScheduleDay } from '../utils/dateUtils';
 
 export const DAILY_ENCOURAGEMENT_QUOTES = [
   "오늘 흘린 땀방울은 내일의 찬란한 꿈을 이루는 가장 확실한 증거입니다. 힘내세요!",
@@ -696,23 +697,14 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   // Live clock and real-time progress update (compares current time vs exam finish time second by second)
   useEffect(() => {
     const updateTimeAndProgress = () => {
-      const now = new Date();
-      const hours = String(now.getHours()).padStart(2, '0');
-      const mins = String(now.getMinutes()).padStart(2, '0');
-      const secs = String(now.getSeconds()).padStart(2, '0');
-      setCurrentTime(`${hours}:${mins}:${secs}`);
-
-      const days = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
-      const year = now.getFullYear();
-      const month = now.getMonth() + 1;
-      const date = now.getDate();
-      const dayName = days[now.getDay()];
-      setCurrentFullDate(`${year}년 ${month}월 ${date}일 ${dayName}`);
+      const korea = getKoreaDate();
+      setCurrentTime(korea.formattedClock);
+      setCurrentFullDate(korea.formattedFullDate);
 
       const parsed = parsePeriods();
       if (parsed.length === 0) return;
 
-      let effectiveNowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+      let effectiveNowSec = korea.hours * 3600 + korea.minutes * 60 + korea.seconds;
 
       // Apply test simulation mode if enabled
       if (simMode === 'break') {
@@ -2923,17 +2915,26 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                   <span className="text-[10px] text-slate-400 font-bold px-1 hidden md:inline">시험일:</span>
                   {allDays.map((d) => {
                     const isSelected = daySchedule.id === d.id || daySchedule.date === d.date;
+                    const isToday = isTodayScheduleDay(d);
                     return (
                       <button
                         key={d.id || d.date}
                         onClick={() => onSelectDay(d.id || d.date)}
-                        className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
                           isSelected
                             ? 'bg-indigo-600 text-white shadow-xs'
+                            : isToday
+                            ? 'bg-amber-950/80 text-yellow-300 border border-yellow-500/50 hover:bg-amber-900'
                             : 'text-slate-300 hover:text-white hover:bg-slate-800'
                         }`}
+                        title={isToday ? '오늘 시험 시간표' : undefined}
                       >
-                        {d.date}
+                        <span>{d.date}</span>
+                        {isToday && (
+                          <span className="text-[9px] bg-yellow-400 text-slate-950 font-black px-1 rounded-xs">
+                            오늘
+                          </span>
+                        )}
                       </button>
                     );
                   })}
