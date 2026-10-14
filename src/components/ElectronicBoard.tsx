@@ -1124,7 +1124,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   const sideReservedSpace = isFullscreen ? 0 : 0;
 
   const availableWidth = Math.max(360, windowSize.width - sideReservedSpace);
-  const availableHeight = Math.max(300, windowSize.height - (isFullscreen ? 16 : 0));
+  const availableHeight = Math.max(300, windowSize.height - (isFullscreen ? 48 : 0));
 
   const targetVerticalScale = availableHeight / BASE_HEIGHT;
   const targetHorizontalScale = availableWidth / BASE_WIDTH;
@@ -1146,15 +1146,15 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       autoCalculatedScale = targetHorizontalScale;
     }
     
-    // 약간의 여유를 위해 98%만 사용 (완벽한 밀착 방지)
-    autoCalculatedScale *= 0.98;
+    // 약간의 여유를 위해 94%만 사용 (완벽한 밀착 방지)
+    autoCalculatedScale *= 0.94;
     
     dynamicBaseWidth = BASE_WIDTH;
   } else {
     // [선택 모드] 가로 전체 확장: 와이드 화면 가로를 꽉 채우도록 베이스 너비 확장
     const idealBaseWidth = availableWidth / targetVerticalScale;
     dynamicBaseWidth = Math.round(Math.max(1380, idealBaseWidth));
-    autoCalculatedScale = targetVerticalScale * 0.98;
+    autoCalculatedScale = targetVerticalScale * 0.94;
   }
 
   const effectiveScale = scaleMode === 'auto' ? autoCalculatedScale : customScale;
