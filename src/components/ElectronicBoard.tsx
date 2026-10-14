@@ -1124,7 +1124,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   const sideReservedSpace = isFullscreen ? 0 : 0;
 
   const availableWidth = Math.max(360, windowSize.width - sideReservedSpace);
-  const availableHeight = Math.max(300, windowSize.height - (isFullscreen ? 100 : 0));
+  const availableHeight = Math.max(300, windowSize.height + 20);
 
   const targetVerticalScale = availableHeight / BASE_HEIGHT;
   const targetHorizontalScale = availableWidth / BASE_WIDTH;
@@ -1147,14 +1147,14 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
     }
     
     // 약간의 여유를 위해 90%만 사용 (완벽한 밀착 방지)
-    autoCalculatedScale *= 0.88;
+    autoCalculatedScale *= 1.0;
     
     dynamicBaseWidth = BASE_WIDTH;
   } else {
     // [선택 모드] 가로 전체 확장: 와이드 화면 가로를 꽉 채우도록 베이스 너비 확장
     const idealBaseWidth = availableWidth / targetVerticalScale;
     dynamicBaseWidth = Math.round(Math.max(1380, idealBaseWidth));
-    autoCalculatedScale = targetVerticalScale * 0.88;
+    autoCalculatedScale = targetVerticalScale * 1.0;
   }
 
   const effectiveScale = scaleMode === 'auto' ? autoCalculatedScale : customScale;
@@ -3065,22 +3065,6 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               <Minimize2 className="w-3 h-3" />
               <span>창 모드</span>
             </button>
-          </div>
-        </div>
-
-        {/* 상단 마우스 접근 힌트 (평소 은은하게 보이다가 마우스가 가면 컨트롤러로 전환) */}
-        <div
-          onMouseEnter={() => setIsHoveringTop(true)}
-          className={`fixed top-0 left-1/2 -translate-x-1/2 z-40 transition-all duration-300 cursor-pointer pointer-events-auto ${
-            isHoveringTop
-              ? 'opacity-0 pointer-events-none -translate-y-2'
-              : 'opacity-30 hover:opacity-100 translate-y-0'
-          }`}
-          title="마우스를 화면 상단으로 올리면 감지 해상도 및 화면 설정 메뉴가 나타납니다"
-        >
-          <div className="bg-slate-900/90 hover:bg-slate-800 text-slate-300 px-3 py-0.5 rounded-b-md border-b border-x border-slate-700/80 text-[10px] flex items-center gap-1 shadow-sm">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span className="font-mono">해상도 & 설정 (마우스 오버)</span>
           </div>
         </div>
 
