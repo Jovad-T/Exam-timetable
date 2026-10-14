@@ -1146,15 +1146,15 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       autoCalculatedScale = targetHorizontalScale;
     }
     
-    // 약간의 여유를 위해 94%만 사용 (완벽한 밀착 방지)
-    autoCalculatedScale *= 0.94;
+    // 약간의 여유를 위해 90%만 사용 (완벽한 밀착 방지)
+    autoCalculatedScale *= 0.90;
     
     dynamicBaseWidth = BASE_WIDTH;
   } else {
     // [선택 모드] 가로 전체 확장: 와이드 화면 가로를 꽉 채우도록 베이스 너비 확장
     const idealBaseWidth = availableWidth / targetVerticalScale;
     dynamicBaseWidth = Math.round(Math.max(1380, idealBaseWidth));
-    autoCalculatedScale = targetVerticalScale * 0.94;
+    autoCalculatedScale = targetVerticalScale * 0.90;
   }
 
   const effectiveScale = scaleMode === 'auto' ? autoCalculatedScale : customScale;
