@@ -42,10 +42,27 @@ export default function App() {
     return 'korea-high';
   });
 
-  const [schoolName, setSchoolName] = useState<string>('한국고등학교');
+  const [schoolName, setSchoolName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(`school_name_${schoolSlug}`);
+        if (saved) return saved;
+      } catch {}
+    }
+    return '한국고등학교';
+  });
 
   // School logo emblem state (관리자 모드에서 첨부된 학교 마크)
-  const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
+  const [schoolLogo, setSchoolLogo] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem('school_emblem_logo');
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
 
   const handleUpdateSchoolLogo = (logo: string | null) => {
     setSchoolLogo(logo);
@@ -60,7 +77,15 @@ export default function App() {
     }
   };
 
-  const [scheduleData, setScheduleData] = useState<ScheduleData>(defaultScheduleData);
+  const [scheduleData, setScheduleData] = useState<ScheduleData>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(`schedule_data_${schoolSlug}`);
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return defaultScheduleData;
+  });
 
   const [activeTab, setActiveTab] = useState<string>('');
 
