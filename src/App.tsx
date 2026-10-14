@@ -370,8 +370,10 @@ export default function App() {
     }
     // 관리자 모드인 경우 Firebase로 동기화
     if (appRole === 'admin' && schoolSlug) {
+      // scheduleData가 없는 경우 기본값 사용
+      const dataToSave = scheduleData || defaultScheduleData;
       // alertSettings를 포함하여 스케줄 데이터를 다시 저장
-      saveSchoolScheduleToCloud(schoolSlug, { ...scheduleData, alertSettings: newSettings }, schoolName, schoolLogo);
+      saveSchoolScheduleToCloud(schoolSlug, { ...dataToSave, alertSettings: newSettings }, schoolName, schoolLogo);
     }
   };
 
