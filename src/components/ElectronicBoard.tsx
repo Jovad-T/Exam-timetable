@@ -1119,9 +1119,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   // Safety margins:
   // 사용자 요청: "감지 해상도 부분은 안 보이게 해주고 마우스가 가면 나타나게 해줄래? 그 아래 부분이 윗부분까지 채워줘."
   // 해상도 바를 마우스 오버 시에만 나타나는 플로팅 오버레이로 전환하고, 상단 여백을 대폭 줄여 칠판이 화면 상단까지 꽉 차게 확장
-  const topReservedSpace = isFullscreen ? 7 : 0;
-  const bottomReservedSpace = isFullscreen ? 7 : 0;
-  const sideReservedSpace = isFullscreen ? 14 : 0;
+  const topReservedSpace = isFullscreen ? 4 : 0;
+  const bottomReservedSpace = isFullscreen ? 4 : 0;
+  const sideReservedSpace = isFullscreen ? 8 : 0;
 
   const availableWidth = Math.max(360, windowSize.width - sideReservedSpace);
   const availableHeight = Math.max(300, windowSize.height - (topReservedSpace + bottomReservedSpace));
@@ -2298,7 +2298,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
                 {/* 1. 과목명 (Extra Large High-Visibility Headline) */}
                 <div className="bg-gradient-to-b from-slate-900 via-[#0c121d] to-slate-950 rounded-3xl p-5 sm:p-7 border-4 border-yellow-400 shadow-[0_10px_35px_rgba(0,0,0,0.95)] text-center relative overflow-hidden group">
-                  <h3 className="text-4xl sm:text-6xl md:text-7xl font-black text-yellow-300 tracking-tight drop-shadow-[0_4px_12px_rgba(0,0,0,0.95)] leading-tight">
+                  <h3 className="text-[clamp(1.5rem,4vw,4rem)] font-black text-yellow-300 tracking-tight drop-shadow-[0_4px_12px_rgba(0,0,0,0.95)] leading-tight">
                     {primarySubject.subjectCode && !primarySubject.name.includes('(')
                       ? `${primarySubject.name}(${primarySubject.subjectCode})`
                       : primarySubject.name}
