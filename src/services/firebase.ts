@@ -103,7 +103,8 @@ export async function saveSchoolScheduleToCloud(
   schoolSlug: string,
   scheduleData: ScheduleData,
   schoolName: string,
-  logoUrl?: string | null
+  logoUrl?: string | null,
+  alertSettings?: any
 ): Promise<void> {
   if (!schoolSlug) return;
   if (typeof window !== 'undefined' && localStorage.getItem('firestore_quota_exceeded') === 'true') {
@@ -139,16 +140,16 @@ export async function saveSchoolScheduleToCloud(
     const schedulePath = `schools/${schoolSlug}/schedules/current`;
     const scheduleRef = doc(db, 'schools', schoolSlug, 'schedules', 'current');
     try {
-      await setDoc(
-        scheduleRef,
-        {
-          schoolSlug,
-          schoolName: schoolName || '한국고등학교',
-          scheduleJson: JSON.stringify(scheduleData),
-          updatedAt: now,
-        },
-        { merge: true }
-      );
+      const schedulePayload: any = {
+        schoolSlug,
+        schoolName: schoolName || '한국고등학교',
+        scheduleJson: JSON.stringify(scheduleData),
+        updatedAt: now,
+      };
+      if (alertSettings !== undefined) {
+        schedulePayload.alertSettings = alertSettings;
+      }
+      await setDoc(scheduleRef, schedulePayload, { merge: true });
     } catch (err: any) {
       const errMsg = err?.message || String(err);
       if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota')) {
@@ -228,8 +229,8 @@ export function subscribeSchoolSchedule(
  */
 export async function fetchSchoolScheduleFromCloud(
   schoolSlug: string
-): Promise<{ scheduleData: ScheduleData | null; schoolName: string | null; logoUrl: string | null }> {
-  if (!schoolSlug) return { scheduleData: null, schoolName: null, logoUrl: null };
+): Promise<{ scheduleData: ScheduleData | null; schoolName: string | null; logoUrl: string | null; alertSettings: any | null }> {
+  if (!schoolSlug) return { scheduleData: null, schoolName: null, logoUrl: null, alertSettings: null };
 
   try {
     const scheduleRef = doc(db, 'schools', schoolSlug, 'schedules', 'current');
@@ -241,6 +242,7 @@ export async function fetchSchoolScheduleFromCloud(
     let scheduleData: ScheduleData | null = null;
     let schoolName: string | null = null;
     let logoUrl: string | null = null;
+    let alertSettings: any | null = null;
 
     if (schoolSnap.exists()) {
       const data = schoolSnap.data();
@@ -256,14 +258,17 @@ export async function fetchSchoolScheduleFromCloud(
       if (data && data.schoolName && !schoolName) {
         schoolName = data.schoolName;
       }
+      if (data && data.alertSettings) {
+        alertSettings = data.alertSettings;
+      }
     }
 
-    return { scheduleData, schoolName, logoUrl };
+    return { scheduleData, schoolName, logoUrl, alertSettings };
   } catch (err) {
     console.warn('Error fetching initial cloud schedule:', err);
     try {
       handleFirestoreError(err, OperationType.GET, `schools/${schoolSlug}`);
     } catch {}
-    return { scheduleData: null, schoolName: null, logoUrl: null };
+    return { scheduleData: null, schoolName: null, logoUrl: null, alertSettings: null };
   }
 }

@@ -112,6 +112,47 @@ export default function App() {
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
   const [isSettingsExpanded, setIsSettingsExpanded] = useState<boolean>(false);
 
+  // Exam end warning alert & sound settings (소리 켜기/끄기, 5분전/10분전 셋팅, TTS 음성 방송)
+  const [alertSettings, setAlertSettings] = useState<ExamAlertSettings>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('exam_alert_settings');
+        if (saved) return JSON.parse(saved);
+      } catch {
+        // fallback
+      }
+    }
+    return {
+      enabled: true,
+      soundEnabled: true,
+      alertMinutes: 10,
+      soundType: 'chime',
+      volume: 0.7,
+      ttsEnabled: true,
+      ttsMessage:
+        '시험 종료 10분 전입니다. 학생들은 답안지 OMR 카드를 점검하고 마킹 실수가 없는지 확인해 주시기 바랍니다.',
+      ttsVoiceSpeed: 1.0,
+      startAlertEnabled: true,
+      startTtsMessage: '곧 시험이 시작됩니다. 학생들은 입실을 완료하고 자리에 착석해 주시기 바랍니다.',
+    };
+  });
+
+  const handleUpdateAlertSettings = (newSettings: ExamAlertSettings) => {
+    setAlertSettings(newSettings);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('exam_alert_settings', JSON.stringify(newSettings));
+      } catch {
+        // ignore
+      }
+    }
+    // 관리자 모드인 경우 Firebase로 동기화
+    if (appRole === 'admin' && schoolSlug) {
+      const dataToSave = scheduleData || defaultScheduleData;
+      saveSchoolScheduleToCloud(schoolSlug, dataToSave, schoolName, schoolLogo, newSettings);
+    }
+  };
+
   // App Deployment Mode Role ('selector' | 'classroom' | 'admin') strictly tied to URL hash
   const [appRole, setAppRole] = useState<'selector' | 'classroom' | 'admin'>(() => {
     if (typeof window !== 'undefined') {
@@ -185,7 +226,7 @@ export default function App() {
 
     // 1. Initial fetch from Firestore
     fetchSchoolScheduleFromCloud(schoolSlug)
-      .then(({ scheduleData: cloudData, schoolName: cloudName, logoUrl }) => {
+      .then(({ scheduleData: cloudData, schoolName: cloudName, logoUrl, alertSettings: cloudAlertSettings }) => {
         if (cloudData) {
           setScheduleData(cloudData);
           try {
@@ -202,6 +243,12 @@ export default function App() {
           setSchoolLogo(logoUrl);
           try {
             localStorage.setItem('school_logo', logoUrl);
+          } catch {}
+        }
+        if (cloudAlertSettings) {
+          setAlertSettings(cloudAlertSettings);
+          try {
+            localStorage.setItem('exam_alert_settings', JSON.stringify(cloudAlertSettings));
           } catch {}
         }
       })
@@ -271,7 +318,7 @@ export default function App() {
 
     // Save to Cloud Firestore
     setCloudSyncStatus('syncing');
-    saveSchoolScheduleToCloud(processedSlug, scheduleData, cleanName, schoolLogo)
+    saveSchoolScheduleToCloud(processedSlug, scheduleData, cleanName, schoolLogo, alertSettings)
       .then(() => setCloudSyncStatus('synced'))
       .catch(() => setCloudSyncStatus('offline'));
 
@@ -302,13 +349,13 @@ export default function App() {
     if (appRole === 'admin' && cloudSyncStatus !== 'offline' && typeof window !== 'undefined' && localStorage.getItem('firestore_quota_exceeded') !== 'true') {
       const timer = setTimeout(() => {
         setCloudSyncStatus('syncing');
-        saveSchoolScheduleToCloud(schoolSlug, scheduleData, schoolName, schoolLogo)
+        saveSchoolScheduleToCloud(schoolSlug, scheduleData, schoolName, schoolLogo, alertSettings)
           .then(() => setCloudSyncStatus('synced'))
           .catch(() => setCloudSyncStatus('offline'));
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, [scheduleData, schoolSlug, schoolName, schoolLogo, appRole]);
+  }, [scheduleData, schoolSlug, schoolName, schoolLogo, appRole, alertSettings]);
 
   // Auto fullscreen on entering classroom electronic board mode
   React.useEffect(() => {
@@ -359,48 +406,6 @@ export default function App() {
     }
   };
 
-  // Exam end warning alert & sound settings (소리 켜기/끄기, 5분전/10분전 셋팅, TTS 음성 방송)
-  const [alertSettings, setAlertSettings] = useState<ExamAlertSettings>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('exam_alert_settings');
-        if (saved) return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return {
-      enabled: true,
-      soundEnabled: true,
-      alertMinutes: 10,
-      soundType: 'chime',
-      volume: 0.7,
-      ttsEnabled: true,
-      ttsMessage:
-        '시험 종료 10분 전입니다. 학생들은 답안지 OMR 카드를 점검하고 마킹 실수가 없는지 확인해 주시기 바랍니다.',
-      ttsVoiceSpeed: 1.0,
-      startAlertEnabled: true,
-      startTtsMessage: '곧 시험이 시작됩니다. 학생들은 입실을 완료하고 자리에 착석해 주시기 바랍니다.',
-    };
-  });
-
-  const handleUpdateAlertSettings = (newSettings: ExamAlertSettings) => {
-    setAlertSettings(newSettings);
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('exam_alert_settings', JSON.stringify(newSettings));
-      } catch {
-        // ignore
-      }
-    }
-    // 관리자 모드인 경우 Firebase로 동기화
-    if (appRole === 'admin' && schoolSlug) {
-      // scheduleData가 없는 경우 기본값 사용
-      const dataToSave = scheduleData || defaultScheduleData;
-      // alertSettings를 포함하여 스케줄 데이터를 다시 저장
-      saveSchoolScheduleToCloud(schoolSlug, { ...dataToSave, alertSettings: newSettings }, schoolName, schoolLogo);
-    }
-  };
 
   // Electronic Blackboard Texture Theme State (사용자 요청: 고급 다크 모드 텍스처)
   const [boardTheme, setBoardTheme] = useState<BoardTheme>(() => {
