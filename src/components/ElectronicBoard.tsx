@@ -1124,7 +1124,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   const sideReservedSpace = isFullscreen ? 0 : 0;
 
   const availableWidth = Math.max(360, windowSize.width - sideReservedSpace);
-  const availableHeight = Math.max(300, windowSize.height - (isFullscreen ? 80 : 0));
+  const availableHeight = Math.max(300, windowSize.height - (isFullscreen ? 100 : 0));
 
   const targetVerticalScale = availableHeight / BASE_HEIGHT;
   const targetHorizontalScale = availableWidth / BASE_WIDTH;
@@ -1147,14 +1147,14 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
     }
     
     // 약간의 여유를 위해 90%만 사용 (완벽한 밀착 방지)
-    autoCalculatedScale *= 0.90;
+    autoCalculatedScale *= 0.88;
     
     dynamicBaseWidth = BASE_WIDTH;
   } else {
     // [선택 모드] 가로 전체 확장: 와이드 화면 가로를 꽉 채우도록 베이스 너비 확장
     const idealBaseWidth = availableWidth / targetVerticalScale;
     dynamicBaseWidth = Math.round(Math.max(1380, idealBaseWidth));
-    autoCalculatedScale = targetVerticalScale * 0.90;
+    autoCalculatedScale = targetVerticalScale * 0.88;
   }
 
   const effectiveScale = scaleMode === 'auto' ? autoCalculatedScale : customScale;
@@ -3086,7 +3086,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
         {/* Scaled Blackboard Container - 윗부분까지 꽉 차도록 my-auto 대신 상단부터 자연스럽게 배치 */}
         <div
-          className="relative shrink-0 flex items-start justify-center pt-0 mt-[-40px]"
+          className="relative shrink-0 flex items-start justify-center pt-0 mt-[-80px]"
           style={{
             width: `${scaledWidth}px`,
             height: `${scaledHeight}px`,
