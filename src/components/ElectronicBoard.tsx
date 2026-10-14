@@ -2001,8 +2001,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               </button>
             </div>
 
-            {/* Period Picker Chips for 2nd screen */}
-            <div className="flex items-center gap-1 bg-slate-950/80 px-2.5 py-1 rounded-xl border border-slate-700">
+            {/* Period Picker Chips & Sound Toggle for 2nd screen */}
+            <div className="flex items-center gap-2 bg-slate-950/80 px-2.5 py-1 rounded-xl border border-slate-700">
               <span className="text-[11px] font-black text-slate-400 mr-1">표시 교시:</span>
               {daySchedule.schedule.map((p, idx) => {
                 const isSelected = focusedPeriodIdx === idx;
@@ -2025,6 +2025,32 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                   </button>
                 );
               })}
+              <div className="h-4 w-px bg-slate-700 mx-1" />
+              <button
+                type="button"
+                onClick={() => {
+                  const newSound = !isSoundEnabled;
+                  if (onChangeAlertSettings && alertSettings) {
+                    onChangeAlertSettings({ ...alertSettings, soundEnabled: newSound });
+                  }
+                  if (newSound) {
+                    audioAlert.playAlertSound(alertSettings?.soundType || 'chime', alertSettings?.volume || 0.7);
+                  }
+                }}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-black transition cursor-pointer ${
+                  isSoundEnabled
+                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/40'
+                    : 'bg-slate-800 text-slate-400 border border-slate-700'
+                }`}
+                title={`시험 종료 알림음: ${isSoundEnabled ? '켜짐' : '꺼짐'}`}
+              >
+                {isSoundEnabled ? (
+                  <Volume2 className="w-3 h-3 text-emerald-400" />
+                ) : (
+                  <VolumeX className="w-3 h-3 text-slate-400" />
+                )}
+                <span>{isSoundEnabled ? '소리 ON' : '소리 OFF'}</span>
+              </button>
             </div>
           </div>
 

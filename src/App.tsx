@@ -62,7 +62,10 @@ export default function App() {
 
   const [scheduleData, setScheduleData] = useState<ScheduleData>(defaultScheduleData);
 
-  const [activeTab, setActiveTab] = useState<string>(() => {
+  const [activeTab, setActiveTab] = useState<string>('');
+
+  // Automatically set active tab to today's date on load
+  React.useEffect(() => {
     try {
       const now = new Date();
       const m = now.getMonth() + 1;
@@ -71,11 +74,12 @@ export default function App() {
       const todayStr2 = `${m}/${d}`;
       const found = scheduleData.find((day) => day.date === todayStr1 || day.date === todayStr2 || day.date?.includes(todayStr1));
       if (found) {
-        return found.id || found.date;
+        setActiveTab(found.id || found.date);
+      } else {
+        setActiveTab(scheduleData[0]?.id || 'day-1012');
       }
     } catch {}
-    return scheduleData[0]?.id || 'day-1012';
-  });
+  }, [scheduleData]);
   const [selectedGrade, setSelectedGrade] = useState<string>('2학년');
   const [copied, setCopied] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'board' | 'developer'>('board'); // "board" = Electronic Chalkboard, "developer" = Code/Grid
@@ -354,6 +358,11 @@ export default function App() {
       } catch {
         // ignore
       }
+    }
+    // 관리자 모드인 경우 Firebase로 동기화
+    if (appRole === 'admin' && schoolSlug) {
+      // alertSettings를 포함하여 스케줄 데이터를 다시 저장
+      saveSchoolScheduleToCloud(schoolSlug, { ...scheduleData, alertSettings: newSettings }, schoolName, schoolLogo);
     }
   };
 
