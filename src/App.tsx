@@ -27,6 +27,20 @@ import {
 } from './services/firebase';
 
 export default function App() {
+  // Helper for safe JSON parsing from localStorage
+  const safeParse = <T,>(key: string, defaultValue: T): T => {
+    if (typeof window === 'undefined') return defaultValue;
+    try {
+      const saved = localStorage.getItem(key);
+      if (!saved) return defaultValue;
+      return JSON.parse(saved) as T;
+    } catch (e) {
+      console.error(`Error parsing localStorage key "${key}":`, e);
+      try { localStorage.removeItem(key); } catch {}
+      return defaultValue;
+    }
+  };
+
   // School Slug & Name state
   const [schoolSlug, setSchoolSlug] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -78,16 +92,7 @@ export default function App() {
     }
   };
 
-  const initialSchedule = (() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem(`schedule_data_${schoolSlug}`);
-        if (saved) return JSON.parse(saved);
-      } catch {}
-    }
-    return defaultScheduleData;
-  })();
-
+  const initialSchedule: ScheduleData = safeParse<ScheduleData>(`schedule_data_${schoolSlug}`, defaultScheduleData);
   const [scheduleData, setScheduleData] = useState<ScheduleData>(initialSchedule);
 
   // Automatically initialize activeTab to today's date (prioritizes today: 10/14, 10/15, etc.)
@@ -111,15 +116,7 @@ export default function App() {
 
   // Exam end warning alert & sound settings (소리 켜기/끄기, 5분전/10분전 셋팅, TTS 음성 방송)
   const [alertSettings, setAlertSettings] = useState<ExamAlertSettings>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('exam_alert_settings');
-        if (saved) return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return {
+    return safeParse<ExamAlertSettings>('exam_alert_settings', {
       enabled: true,
       soundEnabled: true,
       alertMinutes: 10,
@@ -131,7 +128,7 @@ export default function App() {
       ttsVoiceSpeed: 1.0,
       startAlertEnabled: true,
       startTtsMessage: '곧 시험이 시작됩니다. 학생들은 입실을 완료하고 자리에 착석해 주시기 바랍니다.',
-    };
+    });
   });
 
   const handleUpdateAlertSettings = (newSettings: ExamAlertSettings) => {
@@ -322,13 +319,14 @@ export default function App() {
   }, [schoolSlug]);
 
   // Update school name and slug from Admin mode or modal
-  const handleUpdateSchoolInfo = (newName: string, newSlug: string) => {
+  const handleUpdateSchoolInfo = async (newName: string, newSlug: string) => {
     const cleanName = newName.trim() || '한국고등학교';
     let processedSlug = cleanSlug(newSlug, true);
     if (!processedSlug) {
       processedSlug = generateSchoolSlug(cleanName);
     }
 
+    // 1. Update State synchronously for immediate UI feedback
     setSchoolName(cleanName);
     const prevSlug = schoolSlug;
     setSchoolSlug(processedSlug);
@@ -336,26 +334,30 @@ export default function App() {
     const currentRole = appRole === 'classroom' ? 'classroom' : 'admin';
     setAppRole(currentRole);
 
-    // Save to Cloud Firestore
-    setCloudSyncStatus('syncing');
-    saveSchoolScheduleToCloud(processedSlug, scheduleData, cleanName, schoolLogo, alertSettings)
-      .then(() => setCloudSyncStatus('synced'))
-      .catch(() => setCloudSyncStatus('offline'));
+    // 2. Perform side effects (Storage/Cloud) asynchronously
+    setTimeout(() => {
+      // Save to Cloud Firestore
+      setCloudSyncStatus('syncing');
+      saveSchoolScheduleToCloud(processedSlug, scheduleData, cleanName, schoolLogo, alertSettings)
+        .then(() => setCloudSyncStatus('synced'))
+        .catch(() => setCloudSyncStatus('offline'));
 
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('current_school_slug', processedSlug);
-        localStorage.setItem(`school_name_${processedSlug}`, cleanName);
-        // Persist schedule data for this school slug as well
-        const currentScheduleStr = localStorage.getItem(`schedule_data_${prevSlug}`);
-        if (currentScheduleStr) {
-          localStorage.setItem(`schedule_data_${processedSlug}`, currentScheduleStr);
-        } else {
-          localStorage.setItem(`schedule_data_${processedSlug}`, JSON.stringify(scheduleData));
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('current_school_slug', processedSlug);
+          localStorage.setItem(`school_name_${processedSlug}`, cleanName);
+          // Persist schedule data for this school slug as well
+          const currentScheduleStr = localStorage.getItem(`schedule_data_${prevSlug}`);
+          if (currentScheduleStr) {
+            localStorage.setItem(`schedule_data_${processedSlug}`, currentScheduleStr);
+          } else {
+            localStorage.setItem(`schedule_data_${processedSlug}`, JSON.stringify(scheduleData));
+          }
+        } catch (e) {
+          console.error("Storage update error", e);
         }
-        // window.location.hash = `school:${processedSlug}:${currentRole}`;
-      } catch {}
-    }
+      }
+    }, 0);
   };
 
   // Auto-persist scheduleData under current school slug to localStorage & Firebase
