@@ -173,7 +173,7 @@ export async function saveSchoolScheduleToCloud(
  */
 export function subscribeSchoolSchedule(
   schoolSlug: string,
-  onScheduleUpdate: (data: ScheduleData, cloudSchoolName?: string) => void,
+  onScheduleUpdate: (data: ScheduleData, cloudSchoolName?: string, alertSettings?: any) => void,
   onSchoolProfileUpdate?: (name: string, logoUrl?: string) => void
 ): () => void {
   const schoolPath = `schools/${schoolSlug}`;
@@ -205,7 +205,7 @@ export function subscribeSchoolSchedule(
         if (data && data.scheduleJson) {
           try {
             const parsed = JSON.parse(data.scheduleJson);
-            onScheduleUpdate(parsed, data.schoolName);
+            onScheduleUpdate(parsed, data.schoolName, data.alertSettings);
           } catch (e) {
             console.error('Error parsing cloud schedule JSON:', e);
           }

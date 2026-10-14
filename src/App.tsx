@@ -190,7 +190,7 @@ export default function App() {
     // 2. Real-time onSnapshot listener: updates made in admin immediately reflect across all classroom displays
     const unsubscribe = subscribeSchoolSchedule(
       schoolSlug,
-      (newScheduleData, cloudName) => {
+      (newScheduleData, cloudName, cloudAlertSettings) => {
         // [강제 동기화] 클라우드에서 받은 최신 데이터로 로컬 상태 및 저장소 무조건 갱신
         setScheduleData(newScheduleData);
         try {
@@ -203,6 +203,15 @@ export default function App() {
             localStorage.setItem(`school_name_${schoolSlug}`, cloudName);
           } catch {}
         }
+        
+        // 클라우드 설정 반영
+        if (cloudAlertSettings) {
+          setAlertSettings(cloudAlertSettings);
+          try {
+            localStorage.setItem('exam_alert_settings', JSON.stringify(cloudAlertSettings));
+          } catch {}
+        }
+        
         setCloudSyncStatus('synced');
       },
       (name, logo) => {
