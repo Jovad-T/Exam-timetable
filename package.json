@@ -21,13 +21,13 @@
     },
     "win": {
       "target": "dir",
-      "icon": "public/app-icon.svg"
+      "icon": "public/app-icon.ico"
     },
     "files": [
       "dist/**/*",
       "electron-main.js",
       "electron-preload.js",
-      "public/app-icon.svg",
+      "public/app-icon.ico",
       "package.json"
     ]
   },
