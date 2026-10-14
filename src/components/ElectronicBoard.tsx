@@ -1124,7 +1124,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   const sideReservedSpace = isFullscreen ? 0 : 0;
 
   const availableWidth = Math.max(360, windowSize.width - sideReservedSpace);
-  const availableHeight = Math.max(300, windowSize.height - (isFullscreen ? 48 : 0));
+  const availableHeight = Math.max(300, windowSize.height - (isFullscreen ? 80 : 0));
 
   const targetVerticalScale = availableHeight / BASE_HEIGHT;
   const targetHorizontalScale = availableWidth / BASE_WIDTH;
@@ -3060,7 +3060,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
         {/* Scaled Blackboard Container - 윗부분까지 꽉 차도록 my-auto 대신 상단부터 자연스럽게 배치 */}
         <div
-          className="relative shrink-0 flex items-start justify-center pt-0"
+          className="relative shrink-0 flex items-start justify-center pt-[-6px]"
           style={{
             width: `${scaledWidth}px`,
             height: `${scaledHeight}px`,
