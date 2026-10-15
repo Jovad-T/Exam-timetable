@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { DayExamSchedule, SubjectItem } from '../types/schedule';
 import { DaySettingsModal } from './DaySettingsModal';
+import { cleanNoticeText } from '../data/scheduleData';
 
 interface TimetableGridProps {
   daySchedules: DayExamSchedule[];
@@ -273,7 +274,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
             <div className="bg-amber-50/90 border-b border-amber-200 px-6 py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs font-bold text-amber-900">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>[상단 고정 유의사항] {day.notice}</span>
+                <span>[상단 고정 유의사항] {cleanNoticeText(day.notice)}</span>
                 <button
                   type="button"
                   onClick={() => setEditingDayState({ dayIdx, day })}

@@ -6,7 +6,7 @@ import { GoogleGenAI } from '@google/genai';
 export const GeminiSettingsCard: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
-  const [model, setModel] = useState('gemini-2.5-flash');
+  const [model, setModel] = useState('gemini-3.8-flash');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -43,9 +43,9 @@ export const GeminiSettingsCard: React.FC = () => {
 
     try {
       const client = new GoogleGenAI({ apiKey: keyToTest });
-      // Quick test using gemini-2.5-flash
+      // Quick test using gemini-3.8-flash
       const response = await client.models.generateContent({
-        model: model || 'gemini-2.5-flash',
+        model: model || 'gemini-3.8-flash',
         contents: 'Ping test. Reply with OK.',
       });
 
@@ -152,11 +152,11 @@ export const GeminiSettingsCard: React.FC = () => {
             }}
             className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash (권장 - 최신 초고속 & 최고 정확도)</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro (복잡한 표/심층 추론)</option>
-            <option value="gemini-2.0-flash">Gemini 2.0 Flash (안정적 고속)</option>
-            <option value="gemini-1.5-flash">Gemini 1.5 Flash (레거시 호환)</option>
-            <option value="gemini-3.8-flash">Gemini 3.8 Flash (AI Studio Preview)</option>
+            <option value="gemini-3.8-flash">Gemini 3.8 Flash (최신)</option>
+            <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+            <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
           </select>
         </div>
 

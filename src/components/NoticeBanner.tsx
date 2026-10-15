@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AlertTriangle, ShieldAlert, Edit3, CheckCircle2, Megaphone, Check, X, Sparkles } from 'lucide-react';
+import { cleanNoticeText } from '../data/scheduleData';
 
 interface NoticeBannerProps {
   notice: string;
@@ -14,11 +15,12 @@ export const NoticeBanner: React.FC<NoticeBannerProps> = ({
   onEditTopNotice,
   onEditBottomNotice,
 }) => {
+  const displayNotice = cleanNoticeText(notice);
   const [isEditingBottom, setIsEditingBottom] = useState(false);
   const [tempBottom, setTempBottom] = useState(bottomNotice);
 
   const [isEditingTop, setIsEditingTop] = useState(false);
-  const [tempTop, setTempTop] = useState(notice);
+  const [tempTop, setTempTop] = useState(displayNotice);
 
   const presets = [
     '※ 시험 시작 10분 전까지 입실을 완료하여 주시기 바랍니다 ※',
@@ -78,7 +80,7 @@ export const NoticeBanner: React.FC<NoticeBannerProps> = ({
               ) : (
                 <div className="flex items-center gap-2 mt-0.5">
                   <p className="text-amber-950 font-bold text-base md:text-lg tracking-tight">
-                    {notice}
+                    {displayNotice}
                   </p>
                   {onEditTopNotice && (
                     <button

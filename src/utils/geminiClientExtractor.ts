@@ -1,8 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { ScheduleData, DayExamSchedule } from '../types/schedule';
-
-const FIXED_NOTICE = '최선을 다하기! 부정행위 금지! 책상 서랍 비우기! 수정테이프 불가!';
-const DEFAULT_BOTTOM_NOTICE = '※ 시험 시작 10분 전까지 입실을 완료하여 주시기 바랍니다 ※';
+import { cleanNoticeText, FIXED_NOTICE, DEFAULT_BOTTOM_NOTICE } from '../data/scheduleData';
 
 export interface ExtractParams {
   apiKey: string;
@@ -28,15 +26,15 @@ export async function extractScheduleWithClientGemini(params: ExtractParams): Pr
 
   // Map requested model to reliable Google GenAI production models
   const reqModel = (modelChoice || '').toLowerCase();
-  let geminiModel = 'gemini-2.5-flash';
+  let geminiModel = 'gemini-3.8-flash';
   if (reqModel.includes('pro')) {
-    geminiModel = 'gemini-2.5-pro';
+    geminiModel = 'gemini-1.5-pro';
   } else if (reqModel.includes('2.0')) {
     geminiModel = 'gemini-2.0-flash';
   } else if (reqModel.includes('1.5')) {
     geminiModel = 'gemini-1.5-flash';
-  } else if (reqModel.includes('2.5')) {
-    geminiModel = 'gemini-2.5-flash';
+  } else {
+    geminiModel = 'gemini-3.8-flash';
   }
 
   const systemInstruction = `
@@ -55,7 +53,10 @@ export async function extractScheduleWithClientGemini(params: ExtractParams): Pr
    - '1교시 자습', '자습', '조례' 등 시험이 아닌 자습 시간이나 특별 활동 시간대도 누락하지 말고, 해당 교시의 과목 목록(subjects)에 포함하십시오.
 5. 모든 교시(1교시, 2교시, 3교시 등) 누락 없는 추출 단계:
    - 1교시, 2교시뿐만 아니라 3교시 및 그 이후의 모든 교시 데이터까지 누락 없이 철저히 분석하여 schedule 배열에 포함하십시오.
-6. 최종 출력:
+6. 유의사항(notice) 주의:
+   - 문서 하단 또는 상단에 나열된 장문의 학교 시험 수칙이나 번호 매겨진 일반 규정(예: "1. 다양한 과목 선택으로...", "2. 고사실 배정 확인...", 결시 서류 등)은 notice 필드에 절대 넣지 마십시오.
+   - notice는 "최선을 다하기! 부정행위 금지! 책상 서랍 비우기! 수정테이프 불가!"와 같이 전자칠판 상단에 들어갈 짧은 한 줄 격려/주의 문구만 넣거나 기본값을 유지하십시오.
+7. 최종 출력:
    - 지정된 JSON 스키마에 부합하는 유효한 JSON 배열만 출력하십시오.
 `;
 
@@ -146,7 +147,7 @@ export async function extractScheduleWithClientGemini(params: ExtractParams): Pr
     id: item.id || `day-parsed-${Date.now()}-${idx}`,
     date: item.date || `10/${12 + idx}`,
     fullTitle: item.fullTitle || `2026학년도 2학기 1차 고사 시간표(${item.date || `10/${12 + idx}`})`,
-    notice: item.notice || FIXED_NOTICE,
+    notice: cleanNoticeText(item.notice),
     bottomNotice: item.bottomNotice || DEFAULT_BOTTOM_NOTICE,
     schedule: item.schedule || [],
   }));

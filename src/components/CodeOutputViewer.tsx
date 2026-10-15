@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Code, Copy, Check, Download, FileCode, FileSpreadsheet, Terminal, Eye } from 'lucide-react';
 import { ScheduleData } from '../types/schedule';
+import { cleanNoticeText } from '../data/scheduleData';
 
 interface CodeOutputViewerProps {
   scheduleData: ScheduleData;
@@ -19,7 +20,7 @@ export const CodeOutputViewer: React.FC<CodeOutputViewerProps> = ({
   const generateTsCode = () => {
     const cleanData = scheduleData.map((day) => ({
       date: day.date,
-      notice: day.notice,
+      notice: cleanNoticeText(day.notice),
       schedule: day.schedule.map((p) => ({
         period: p.period,
         subjects: p.subjects.map((s) => ({
@@ -38,7 +39,7 @@ export const scheduleData = ${JSON.stringify(cleanData, null, 2)};`;
   const generateJsonCode = () => {
     const cleanData = scheduleData.map((day) => ({
       date: day.date,
-      notice: day.notice,
+      notice: cleanNoticeText(day.notice),
       schedule: day.schedule.map((p) => ({
         period: p.period,
         subjects: p.subjects.map((s) => ({
@@ -56,7 +57,7 @@ export const scheduleData = ${JSON.stringify(cleanData, null, 2)};`;
     let md = `# 고등학교 시험 시간표\n\n`;
     scheduleData.forEach((day) => {
       md += `## 📅 ${day.date}\n`;
-      md += `> **유의사항:** ${day.notice}\n\n`;
+      md += `> **유의사항:** ${cleanNoticeText(day.notice)}\n\n`;
       md += `| 교시 | 시험시간 | 과목명 | 대상 반 | 시험시간(분) |\n`;
       md += `| :--- | :--- | :--- | :--- | :--- |\n`;
       day.schedule.forEach((period) => {

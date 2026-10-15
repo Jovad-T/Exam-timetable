@@ -32,6 +32,7 @@ import { audioAlert } from '../utils/audioAlert';
 import { SubjectItem } from '../types/schedule';
 import { DEFAULT_ANNOUNCEMENT_TEMPLATES } from './AlertSettingsCard';
 import { getKoreaDate, isTodayScheduleDay } from '../utils/dateUtils';
+import { cleanNoticeText } from '../data/scheduleData';
 
 export const DAILY_ENCOURAGEMENT_QUOTES = [
   "오늘 흘린 땀방울은 내일의 찬란한 꿈을 이루는 가장 확실한 증거입니다. 힘내세요!",
@@ -1197,46 +1198,53 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
         {/* Top Banner Header */}
         <div
-          className={`relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b-2 ${currentTheme.headerBorder}`}
+          className={`relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-3 pb-3 border-b-2 ${currentTheme.headerBorder}`}
         >
           {/* School Emblem & Title */}
           <div className="flex items-center gap-3 min-w-0 flex-1 flex-wrap">
-            {/* School Emblem */}
-            {schoolLogo ? (
-              <div
-                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/95 border-2 border-yellow-400 p-1 flex items-center justify-center shadow-lg shrink-0 overflow-hidden"
-                title="학교 마크 (관리자 모드에서 첨부됨)"
-              >
-                <img
-                  src={schoolLogo}
-                  alt="학교 마크"
-                  className="w-full h-full object-contain rounded-full"
-                />
-              </div>
-            ) : (
-              <div
-                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-red-700 border-2 border-yellow-400 flex items-center justify-center shadow-lg shrink-0"
-                title="기본 高 마크"
-              >
-                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-yellow-300/80 flex items-center justify-center text-yellow-300 font-extrabold text-xs tracking-tighter">
-                  高
+            {/* Emblem and School Title locked together on the same line */}
+            <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+              {/* School Emblem */}
+              {schoolLogo ? (
+                <div
+                  className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/95 border-2 border-yellow-400 p-1 flex items-center justify-center shadow-lg shrink-0 overflow-hidden"
+                  title="학교 마크 (관리자 모드에서 첨부됨)"
+                >
+                  <img
+                    src={schoolLogo}
+                    alt="학교 마크"
+                    className="w-full h-full object-contain rounded-full"
+                  />
                 </div>
-              </div>
-            )}
-
-            {/* Title with Date and Clock attached next to it */}
-            <div className="flex items-center gap-2 flex-wrap min-w-0">
-              {schoolName && !daySchedule.fullTitle?.includes(schoolName) && (
-                <span className="text-yellow-300 font-black text-sm sm:text-lg md:text-2xl">{schoolName}</span>
+              ) : (
+                <div
+                  className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-red-700 border-2 border-yellow-400 flex items-center justify-center shadow-lg shrink-0"
+                  title="기본 高 마크"
+                >
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-yellow-300/80 flex items-center justify-center text-yellow-300 font-extrabold text-xs tracking-tighter">
+                    高
+                  </div>
+                </div>
               )}
-              <span className="text-sm sm:text-lg md:text-2xl font-black text-white tracking-tight drop-shadow-xs">
-                {(daySchedule.fullTitle || `2026학년도 2학기 1차 고사 시간표(${daySchedule.date})`).replace(/\s*\([^)]*\)/g, '').trim()}
-              </span>
-              <span className="text-xs sm:text-sm md:text-base font-black text-yellow-300 bg-yellow-400/20 px-3 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs">
+
+              {/* Title right next to emblem */}
+              <div className="flex items-center gap-2 min-w-0">
+                {schoolName && !daySchedule.fullTitle?.includes(schoolName) && (
+                  <span className="text-yellow-300 font-black text-sm sm:text-lg md:text-2xl whitespace-nowrap">{schoolName}</span>
+                )}
+                <span className="text-sm sm:text-lg md:text-2xl font-black text-white tracking-tight drop-shadow-xs whitespace-nowrap">
+                  {(daySchedule.fullTitle || `2026학년도 2학기 1차 고사 시간표(${daySchedule.date})`).replace(/\s*\([^)]*\)/g, '').replace(/[()]$/g, '').trim()}
+                </span>
+              </div>
+            </div>
+
+            {/* Badges: Date, Clock and Sound Alert Button */}
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <span className="text-xs sm:text-sm md:text-base font-black text-yellow-300 bg-yellow-400/20 px-3 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs whitespace-nowrap">
                 <Calendar className="w-4 h-4 text-yellow-300 shrink-0" />
                 <span>{currentFullDate}</span>
               </span>
-              <span className="text-xs sm:text-sm md:text-base font-black text-emerald-300 bg-emerald-950/70 px-3 py-1 rounded-xl border border-emerald-500/50 flex items-center gap-1.5 shadow-xs font-mono">
+              <span className="text-xs sm:text-sm md:text-base font-black text-emerald-300 bg-emerald-950/70 px-3 py-1 rounded-xl border border-emerald-500/50 flex items-center gap-1.5 shadow-xs font-mono whitespace-nowrap">
                 <Clock className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
                 <span>{currentTime}</span>
               </span>
@@ -1251,7 +1259,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                       soundEnabled: !alertSettings.soundEnabled,
                     });
                   }}
-                  className={`px-2.5 py-1 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-1 shadow-xs border ${
+                  className={`px-2.5 py-1 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-1 shadow-xs border whitespace-nowrap ${
                     alertSettings.soundEnabled
                       ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400'
                       : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-600'
@@ -1276,10 +1284,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
           {/* Right Top Notice Banner */}
           <div
-            className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-3.5 py-2 flex items-center gap-2 text-xs sm:text-sm md:text-base font-black text-yellow-300 shadow-md shrink-0 whitespace-nowrap overflow-x-auto scrollbar-none`}
+            className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-3.5 py-2 flex items-center gap-2 text-xs sm:text-sm md:text-base font-black text-yellow-300 shadow-md shrink-0 whitespace-normal break-words max-w-full`}
           >
-            <span className="text-yellow-200 font-black whitespace-nowrap drop-shadow-xs">
-              {daySchedule.notice || '최선을 다하기! 부정행위 금지! 책상 서랍 비우기! 수정테이프 불가!'}
+            <span className="text-yellow-200 font-black break-words drop-shadow-xs">
+              {cleanNoticeText(daySchedule.notice)}
             </span>
             <span
               className="inline-block w-3 h-4 bg-white/90 rotate-12 rounded-xs ml-1 shadow-xs shrink-0"
@@ -1894,46 +1902,49 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             className={`relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-3.5 border-b-2 ${currentTheme.headerBorder}`}
           >
             {/* School Emblem & Title */}
-            <div className="flex items-center gap-3 shrink-0">
-              {schoolLogo ? (
-                <div
-                  className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white/95 border-2 border-yellow-400 p-1 flex items-center justify-center shadow-lg shrink-0 overflow-hidden"
-                  title="학교 마크"
-                >
-                  <img
-                    src={schoolLogo}
-                    alt="학교 마크"
-                    className="w-full h-full object-contain rounded-full"
-                  />
-                </div>
-              ) : (
-                <div
-                  className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-red-700 border-2 border-yellow-400 flex items-center justify-center shadow-lg shrink-0"
-                >
-                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-yellow-300/80 flex items-center justify-center text-yellow-300 font-extrabold text-xs sm:text-sm tracking-tighter">
-                    高
+            <div className="flex items-center gap-3 shrink-0 flex-wrap">
+              <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+                {schoolLogo ? (
+                  <div
+                    className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white/95 border-2 border-yellow-400 p-1 flex items-center justify-center shadow-lg shrink-0 overflow-hidden"
+                    title="학교 마크"
+                  >
+                    <img
+                      src={schoolLogo}
+                      alt="학교 마크"
+                      className="w-full h-full object-contain rounded-full"
+                    />
                   </div>
-                </div>
-              )}
-
-              <h2 className="text-lg sm:text-2xl md:text-3xl font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] flex items-center gap-2.5 flex-wrap">
-                {schoolName && !daySchedule.fullTitle?.includes(schoolName) && (
-                  <span className="text-yellow-300 font-black">{schoolName}</span>
+                ) : (
+                  <div
+                    className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-red-700 border-2 border-yellow-400 flex items-center justify-center shadow-lg shrink-0"
+                  >
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-yellow-300/80 flex items-center justify-center text-yellow-300 font-extrabold text-xs sm:text-sm tracking-tighter">
+                      高
+                    </div>
+                  </div>
                 )}
-                <span>{(daySchedule.fullTitle || `2026학년도 2학기 1차 고사 시간표(${daySchedule.date})`).replace(/\s*\([^)]*\)/g, '').trim()}</span>
-                <span className="text-xs sm:text-sm md:text-base font-extrabold text-yellow-300 bg-yellow-400/20 px-3 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs">
-                  <Calendar className="w-4 h-4 text-yellow-300" />
-                  <span>{currentFullDate}</span>
-                </span>
-              </h2>
+
+                <h2 className="text-lg sm:text-2xl md:text-3xl font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] flex items-center gap-2 whitespace-nowrap">
+                  {schoolName && !daySchedule.fullTitle?.includes(schoolName) && (
+                    <span className="text-yellow-300 font-black">{schoolName}</span>
+                  )}
+                  <span>{(daySchedule.fullTitle || `2026학년도 2학기 1차 고사 시간표(${daySchedule.date})`).replace(/\s*\([^)]*\)/g, '').replace(/[()]$/g, '').trim()}</span>
+                </h2>
+              </div>
+
+              <span className="text-xs sm:text-sm md:text-base font-extrabold text-yellow-300 bg-yellow-400/20 px-3 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs whitespace-nowrap">
+                <Calendar className="w-4 h-4 text-yellow-300" />
+                <span>{currentFullDate}</span>
+              </span>
             </div>
 
             {/* Right Top Notice Banner */}
             <div
-              className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-4 py-2 flex items-center gap-2 text-xs sm:text-sm md:text-base font-black text-yellow-300 shadow-md shrink-0 whitespace-nowrap overflow-x-auto scrollbar-none`}
+              className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-4 py-2 flex items-center gap-2 text-xs sm:text-sm md:text-base font-black text-yellow-300 shadow-md shrink-0 whitespace-normal break-words max-w-full`}
             >
-              <span className="text-yellow-200 font-black whitespace-nowrap drop-shadow-xs">
-                {daySchedule.notice || '최선을 다하기! 부정행위 금지! 책상 서랍 비우기! 수정테이프 불가!'}
+              <span className="text-yellow-200 font-black break-words drop-shadow-xs">
+                {cleanNoticeText(daySchedule.notice)}
               </span>
               <span className="inline-block w-3.5 h-5 bg-white/90 rotate-12 rounded-xs ml-1 shadow-xs shrink-0" />
             </div>

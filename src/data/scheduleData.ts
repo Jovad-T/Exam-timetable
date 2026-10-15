@@ -3,6 +3,33 @@ import { ScheduleData } from '../types/schedule';
 export const FIXED_NOTICE = "최선을 다하기! 부정행위 금지! 책상 서랍 비우기! 수정테이프 불가!";
 export const DEFAULT_BOTTOM_NOTICE = "※ 시험 시작 10분 전까지 입실을 완료하여 주시기 바랍니다 ※";
 
+export function isUnwantedBulkyNotice(text?: string): boolean {
+  if (!text) return false;
+  return (
+    text.includes('다양한 과목 선택') ||
+    text.includes('일률적으로 할 수 없음') ||
+    text.includes('체험학습 불가') ||
+    text.includes('자습 시작 직후 방송 지시') ||
+    (text.length > 50 && /1\.\s*다양한/.test(text)) ||
+    (text.length > 70 && /1\..*2\./.test(text))
+  );
+}
+
+export function cleanNoticeText(notice?: string): string {
+  if (!notice || isUnwantedBulkyNotice(notice)) {
+    return FIXED_NOTICE;
+  }
+  return notice;
+}
+
+export function cleanScheduleData(data: ScheduleData): ScheduleData {
+  if (!Array.isArray(data)) return data;
+  return data.map((day) => ({
+    ...day,
+    notice: cleanNoticeText(day.notice),
+  }));
+}
+
 export const defaultScheduleData: ScheduleData = [
   {
     id: "day-1012",

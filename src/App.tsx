@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { defaultScheduleData, FIXED_NOTICE, DEFAULT_BOTTOM_NOTICE } from './data/scheduleData';
+import { defaultScheduleData, FIXED_NOTICE, DEFAULT_BOTTOM_NOTICE, cleanScheduleData, cleanNoticeText, isUnwantedBulkyNotice } from './data/scheduleData';
 import { ScheduleData, DayExamSchedule, SubjectItem, ExamAlertSettings } from './types/schedule';
 import { Header } from './components/Header';
 import { NoticeBanner } from './components/NoticeBanner';
@@ -93,9 +93,27 @@ export default function App() {
     }
   };
 
-  const parsedSchedule = safeParse<ScheduleData>(`schedule_data_${schoolSlug}`, defaultScheduleData);
+  const rawParsedSchedule = safeParse<ScheduleData>(`schedule_data_${schoolSlug}`, defaultScheduleData);
+  const parsedSchedule = cleanScheduleData(rawParsedSchedule);
   const initialSchedule: ScheduleData = Array.isArray(parsedSchedule) && parsedSchedule.length > 0 ? parsedSchedule : defaultScheduleData;
   const [scheduleData, setScheduleData] = useState<ScheduleData>(initialSchedule);
+
+  // Auto-clean any unwanted bulky notice on load and sync clean version
+  React.useEffect(() => {
+    setScheduleData((prev) => {
+      const cleaned = cleanScheduleData(prev);
+      if (JSON.stringify(cleaned) !== JSON.stringify(prev)) {
+        try {
+          localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cleaned));
+        } catch {}
+        if (schoolSlug) {
+          saveSchoolScheduleToCloud(schoolSlug, cleaned, schoolName, schoolLogo, alertSettings).catch(() => {});
+        }
+        return cleaned;
+      }
+      return prev;
+    });
+  }, [schoolSlug]);
 
   // Automatically initialize activeTab to today's date (prioritizes today: 10/14, 10/15, etc.)
   const [activeTab, setActiveTab] = useState<string>(() => {
@@ -193,10 +211,20 @@ export default function App() {
     fetchSchoolScheduleFromCloud(schoolSlug)
       .then(({ scheduleData: cloudData, schoolName: cloudName, logoUrl, alertSettings: cloudAlertSettings }) => {
         if (cloudData && Array.isArray(cloudData) && cloudData.length > 0) {
-          setScheduleData(cloudData);
+          const cleanedCloudData = cleanScheduleData(cloudData);
+          setScheduleData(cleanedCloudData);
           try {
-            localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cloudData));
+            localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cleanedCloudData));
           } catch {}
+          if (JSON.stringify(cleanedCloudData) !== JSON.stringify(cloudData)) {
+            saveSchoolScheduleToCloud(
+              schoolSlug,
+              cleanedCloudData,
+              cloudName || schoolName,
+              logoUrl || schoolLogo,
+              cloudAlertSettings || alertSettings
+            ).catch(() => {});
+          }
         }
         if (cloudName) {
           setSchoolName(cloudName);
@@ -230,10 +258,20 @@ export default function App() {
       (newScheduleData, cloudName, cloudAlertSettings) => {
         // [강제 동기화] 클라우드에서 받은 최신 데이터로 로컬 상태 및 저장소 무조건 갱신
         if (newScheduleData && Array.isArray(newScheduleData) && newScheduleData.length > 0) {
-          setScheduleData(newScheduleData);
+          const cleaned = cleanScheduleData(newScheduleData);
+          setScheduleData(cleaned);
           try {
-            localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(newScheduleData));
+            localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cleaned));
           } catch {}
+          if (JSON.stringify(cleaned) !== JSON.stringify(newScheduleData)) {
+            saveSchoolScheduleToCloud(
+              schoolSlug,
+              cleaned,
+              cloudName || schoolName,
+              schoolLogo,
+              cloudAlertSettings || alertSettings
+            ).catch(() => {});
+          }
         }
         
         if (cloudName) {
@@ -514,9 +552,10 @@ export default function App() {
 
   // AI Extract callback
   const handleExtractSuccess = (extractedData: ScheduleData) => {
-    setScheduleData(extractedData);
-    if (extractedData.length > 0) {
-      setActiveTab(extractedData[0].id || extractedData[0].date);
+    const cleaned = cleanScheduleData(extractedData);
+    setScheduleData(cleaned);
+    if (cleaned.length > 0) {
+      setActiveTab(cleaned[0].id || cleaned[0].date);
     }
   };
 
@@ -573,10 +612,11 @@ export default function App() {
 
   // Update top notice for current day
   const handleUpdateTopNotice = (newNotice: string) => {
+    const cleaned = cleanNoticeText(newNotice);
     setScheduleData((prev) =>
       prev.map((d) =>
         d.id === currentDaySchedule.id || d.date === currentDaySchedule.date
-          ? { ...d, notice: newNotice }
+          ? { ...d, notice: cleaned }
           : d
       )
     );
@@ -584,8 +624,9 @@ export default function App() {
 
   // Update all top notices
   const handleUpdateAllTopNotices = (newNotice: string) => {
+    const cleaned = cleanNoticeText(newNotice);
     setScheduleData((prev) =>
-      prev.map((d) => ({ ...d, notice: newNotice }))
+      prev.map((d) => ({ ...d, notice: cleaned }))
     );
   };
 

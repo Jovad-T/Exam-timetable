@@ -26,7 +26,7 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
   const [fileName, setFileName] = useState<string>('');
   
   // AI Model & Thinking options
-  const [modelChoice, setModelChoice] = useState<string>(() => getGeminiModel() || 'gemini-2.5-flash');
+  const [modelChoice, setModelChoice] = useState<string>(() => getGeminiModel() || 'gemini-3.8-flash');
   const [thinkingLevel, setThinkingLevel] = useState<string>('balanced');
   const [customApiKey, setCustomApiKey] = useState<string>(() => getGeminiApiKey() || '');
   const [customGroqApiKey, setCustomGroqApiKey] = useState<string>(() => {
@@ -308,8 +308,8 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
                 }}
                 className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash (권장 - 최신 초고속 & 최고 정확도)</option>
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro (복잡한 표/다중 날짜 심층 추론)</option>
+                <option value="gemini-3.8-flash">Gemini 3.8 Flash (권장 - 최신 초고속 & 최고 정확도)</option>
+                <option value="gemini-1.5-pro">Gemini 1.5 Pro (복잡한 표/다중 날짜 심층 추론)</option>
                 <option value="gemini-2.0-flash">Gemini 2.0 Flash (안정적 고속)</option>
                 <option value="gemini-1.5-flash">Gemini 1.5 Flash (레거시 호환)</option>
                 <option value="groq-llama-3.3-70b">Groq Llama 3.3 70B (초고속 대형언어모델)</option>

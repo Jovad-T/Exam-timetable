@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, Edit3, Plus, Check, Sparkles, FileText, BellRing, Info } from 'lucide-react';
 import { DayExamSchedule } from '../types/schedule';
+import { cleanNoticeText } from '../data/scheduleData';
 
 interface DaySettingsModalProps {
   isOpen: boolean;
@@ -41,7 +42,7 @@ export const DaySettingsModal: React.FC<DaySettingsModalProps> = ({
           initialDay.bottomNotice || '※ 시험 시작 10분 전까지 입실을 완료하여 주시기 바랍니다 ※'
         );
         setTopNotice(
-          initialDay.notice || '최선을 다하기! 부정행위 금지! 책상 서랍 비우기! 수정테이프 불가!'
+          cleanNoticeText(initialDay.notice)
         );
       } else {
         // Default suggestions for new date

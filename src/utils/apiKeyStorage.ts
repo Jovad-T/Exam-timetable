@@ -99,6 +99,6 @@ export function saveGeminiModel(model: string): void {
  * Retrieves preferred Gemini Model with a safe default
  */
 export function getGeminiModel(): string {
-  if (typeof window === 'undefined') return 'gemini-2.5-flash';
-  return localStorage.getItem(MODEL_STORAGE_KEY) || 'gemini-2.5-flash';
+  if (typeof window === 'undefined') return 'gemini-3.8-flash';
+  return localStorage.getItem(MODEL_STORAGE_KEY) || 'gemini-3.8-flash';
 }
