@@ -184,44 +184,7 @@ export default function App() {
     }
   };
 
-  // Sync hash changes and ensure hash is present
-  React.useEffect(() => {
-    const handleHashChange = () => {
-      try {
-        const rawHash = window.location.hash.replace(/^#/, '');
-        if (!rawHash) return;
-        const hash = decodeURIComponent(rawHash);
-        if (hash.startsWith('school:')) {
-          const parts = hash.split(':');
-          const slug = parts[1] || 'korea-high';
-          const role = parts[2];
-          if (slug !== schoolSlug) setSchoolSlug(slug);
-          if (role === 'classroom' || role === 'admin' || role === 'selector') {
-            if (role !== appRole) setAppRole(role);
-            try {
-              localStorage.setItem('current_app_role', role);
-            } catch {}
-          }
-          try {
-            localStorage.setItem('current_school_slug', slug);
-            const sName = localStorage.getItem(`school_name_${slug}`);
-            if (sName && sName !== schoolName) setSchoolName(sName);
-          } catch {}
-        } else if (hash === 'selector' || hash === 'classroom' || hash === 'admin') {
-          if (hash !== appRole) {
-            setAppRole(hash);
-            try {
-              localStorage.setItem('current_app_role', hash);
-            } catch {}
-          }
-        }
-      } catch (err) {
-        console.warn('hashchange error:', err);
-      }
-    };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [appRole, schoolSlug, schoolName]);
+  // Hash sync removed completely to prevent app reloads/bouncing.
 
   // URL hash sync removed to prevent app reloads/bouncing.
 
@@ -931,6 +894,7 @@ export default function App() {
                   );
                 } catch {}
               }
+              changeAppRole('classroom', sSlug);
               setIsInitialClassSetupOpen(false);
             }}
           />
