@@ -47,7 +47,7 @@ export const DateTabs: React.FC<DateTabsProps> = ({
               </span>
             </button>
 
-            {scheduleData.map((day) => {
+            {(Array.isArray(scheduleData) ? scheduleData : []).map((day) => {
               const isSelected = activeTab === day.id;
               const isToday = isTodayScheduleDay(day);
               const totalSubjects = (Array.isArray(day?.schedule) ? day.schedule : []).reduce(
