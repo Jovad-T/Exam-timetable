@@ -725,7 +725,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       }
 
       // Check for 10 minutes before exam start time automated alert & TTS
-      const startAlertTarget = parsed.find((p) => {
+      const startAlertTarget = (Array.isArray(parsed) ? parsed : []).find((p) => {
         const timeToStart = p.startSec - effectiveNowSec;
         return timeToStart <= 600 && timeToStart > 570; // 10분 전 (600초 ~ 570초)
       });
@@ -768,7 +768,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       }
 
       // 1. Ongoing Exam Check: startSec <= effectiveNowSec < endSec
-      const active = parsed.find((p) => effectiveNowSec >= p.startSec && effectiveNowSec < p.endSec);
+      const active = (Array.isArray(parsed) ? parsed : []).find((p) => effectiveNowSec >= p.startSec && effectiveNowSec < p.endSec);
       if (active) {
         const total = active.endSec - active.startSec;
         const elapsed = effectiveNowSec - active.startSec;
@@ -842,7 +842,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       }
 
       // 2. Preparation/Entry Time Check: entrySec <= effectiveNowSec < startSec
-      const preparing = parsed.find((p) => effectiveNowSec >= p.entrySec && effectiveNowSec < p.startSec);
+      const preparing = (Array.isArray(parsed) ? parsed : []).find((p) => effectiveNowSec >= p.entrySec && effectiveNowSec < p.startSec);
       if (preparing) {
         const remaining = preparing.startSec - effectiveNowSec;
         const isStartingSoon = remaining <= 600 && remaining > 0;
@@ -896,7 +896,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       }
 
       // 4. Break Time Between Periods
-      const nextExam = parsed.find((p) => p.startSec > effectiveNowSec);
+      const nextExam = (Array.isArray(parsed) ? parsed : []).find((p) => p.startSec > effectiveNowSec);
       if (nextExam) {
         const remaining = nextExam.startSec - effectiveNowSec;
         const isStartingSoon = remaining <= 600 && remaining > 0;

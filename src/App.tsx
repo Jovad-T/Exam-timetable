@@ -431,8 +431,8 @@ export default function App() {
 
   // Selected single day object
   const currentDaySchedule: DayExamSchedule =
-    scheduleData.find((d) => d.id === activeTab || d.date === activeTab) ||
-    scheduleData[0] || {
+    (Array.isArray(scheduleData) ? scheduleData : []).find((d) => d.id === activeTab || d.date === activeTab) ||
+    (Array.isArray(scheduleData) ? scheduleData[0] : undefined) || {
       id: 'empty-day',
       date: '시간표 등록 대기',
       fullTitle: `${schoolName} 시험 시간표 (등록 대기중)`,
