@@ -211,9 +211,13 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
                 onChange={(e) => setModelChoice(e.target.value)}
                 className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
-                <option value="gemini-3.0-flash">Default (Gemini 3)</option>
-                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                <option value="gemini-3.8-flash">Default (Gemini 3.8 Flash)</option>
+                <option value="gemini-4-argon">Gemini 4 Argon</option>
+                <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+                <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
+                <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+                <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+                <option value="gemini-3-flash-preview">Gemini 3 Flash Preview</option>
                 <option value="groq-llama-3.3-70b">Groq Llama 3.3 70B (초고속 대형언어모델)</option>
                 <option value="groq-deepseek-r1">Groq DeepSeek R1 (심층 추론)</option>
               </select>
