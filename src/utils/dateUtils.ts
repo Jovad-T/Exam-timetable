@@ -169,7 +169,7 @@ export function findTodayScheduleDay(schedules: ScheduleData): DayExamSchedule |
   ];
 
   for (const { month, day } of candidates) {
-    const found = schedules.find((s) => matchesDayDate(s, month, day));
+    const found = Array.isArray(schedules) ? schedules.find((s) => matchesDayDate(s, month, day)) : undefined;
     if (found) return found;
   }
 

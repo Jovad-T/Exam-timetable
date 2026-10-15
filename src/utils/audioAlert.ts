@@ -194,8 +194,8 @@ class AudioAlertManager {
 
       const voices = window.speechSynthesis.getVoices();
       const koVoice =
-        voices.find((v) => v.lang === 'ko-KR' || v.lang === 'ko_KR') ||
-        voices.find((v) => v.lang.startsWith('ko'));
+        (Array.isArray(voices) ? voices.find((v) => v.lang === 'ko-KR' || v.lang === 'ko_KR') : undefined) ||
+        (Array.isArray(voices) ? voices.find((v) => v.lang.startsWith('ko')) : undefined);
       if (koVoice) {
         utterance.voice = koVoice;
       }

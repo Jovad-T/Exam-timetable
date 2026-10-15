@@ -452,7 +452,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             classNum: parsed.classNum || '3',
           };
         }
-      } catch {}
+      } catch (e) {
+        console.error('Error parsing attendance settings:', e);
+        try { localStorage.removeItem('class_attendance_settings'); } catch {}
+      }
     }
     return {
       grade: initialGrade,
