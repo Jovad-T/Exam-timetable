@@ -784,8 +784,8 @@ export default function App() {
   // Filtered schedules for developer view
   const displayedSchedules =
     activeTab === 'ALL'
-      ? scheduleData
-      : scheduleData.filter((d) => d.id === activeTab || d.date === activeTab);
+      ? (Array.isArray(scheduleData) ? scheduleData : [])
+      : (Array.isArray(scheduleData) ? scheduleData : []).filter((d) => d.id === activeTab || d.date === activeTab);
 
   // 1. Selector Mode (when no mode chosen yet)
   if (appRole === 'selector') {

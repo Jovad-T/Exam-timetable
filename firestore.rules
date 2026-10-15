@@ -17,11 +17,12 @@ service cloud.firestore {
 
     function isValidSchedule(data) {
       return data.keys().hasAll(['schoolSlug', 'scheduleJson', 'updatedAt'])
-        && data.keys().hasOnly(['schoolSlug', 'schoolName', 'scheduleJson', 'updatedAt'])
+        && data.keys().hasOnly(['schoolSlug', 'schoolName', 'scheduleJson', 'updatedAt', 'alertSettings'])
         && data.schoolSlug is string && data.schoolSlug.size() > 0 && data.schoolSlug.size() <= 100
         && data.scheduleJson is string && data.scheduleJson.size() > 0
         && data.updatedAt is string
-        && (!('schoolName' in data) || data.schoolName is string);
+        && (!('schoolName' in data) || data.schoolName is string)
+        && (!('alertSettings' in data) || data.alertSettings is map);
     }
 
     // Connection validation doc

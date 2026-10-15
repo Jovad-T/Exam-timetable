@@ -29,14 +29,15 @@ export function getKoreaDate(baseDate: Date = new Date()): {
       hour12: false,
     });
     const parts = kstFormatter.formatToParts(baseDate);
+    const getPart = (type: string) => Array.isArray(parts) ? parts.find((p: any) => p.type === type)?.value : undefined;
 
-    const year = Number(parts.find((p) => p.type === 'year')?.value) || baseDate.getFullYear();
-    const month = Number(parts.find((p) => p.type === 'month')?.value) || (baseDate.getMonth() + 1);
-    const day = Number(parts.find((p) => p.type === 'day')?.value) || baseDate.getDate();
-    const dayName = parts.find((p) => p.type === 'weekday')?.value || dayNames[baseDate.getDay()];
-    const hours = Number(parts.find((p) => p.type === 'hour')?.value) ?? baseDate.getHours();
-    const minutes = Number(parts.find((p) => p.type === 'minute')?.value) ?? baseDate.getMinutes();
-    const seconds = Number(parts.find((p) => p.type === 'second')?.value) ?? baseDate.getSeconds();
+    const year = Number(getPart('year')) || baseDate.getFullYear();
+    const month = Number(getPart('month')) || (baseDate.getMonth() + 1);
+    const day = Number(getPart('day')) || baseDate.getDate();
+    const dayName = getPart('weekday') || dayNames[baseDate.getDay()];
+    const hours = Number(getPart('hour')) ?? baseDate.getHours();
+    const minutes = Number(getPart('minute')) ?? baseDate.getMinutes();
+    const seconds = Number(getPart('second')) ?? baseDate.getSeconds();
 
     const hh = String(hours).padStart(2, '0');
     const mm = String(minutes).padStart(2, '0');
