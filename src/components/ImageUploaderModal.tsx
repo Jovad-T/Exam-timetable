@@ -1,7 +1,9 @@
-import React, { useState, useRef } from 'react';
-import { X, Upload, Sparkles, FileText, FileImage, AlertCircle, CheckCircle, RefreshCw, Cpu, Brain } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { X, Upload, Sparkles, FileText, FileImage, AlertCircle, CheckCircle, RefreshCw, Cpu, Brain, Key } from 'lucide-react';
 import { ScheduleData } from '../types/schedule';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf';
+import { getGeminiApiKey, saveGeminiApiKey, getGeminiModel, saveGeminiModel } from '../utils/apiKeyStorage';
+import { extractScheduleWithClientGemini } from '../utils/geminiClientExtractor';
 
 // Configure pdf.js worker from cdn
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -24,16 +26,30 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
   const [fileName, setFileName] = useState<string>('');
   
   // AI Model & Thinking options
-  const [modelChoice, setModelChoice] = useState<string>(() => localStorage.getItem('custom_gemini_model') || 'gemini-3.8-flash');
+  const [modelChoice, setModelChoice] = useState<string>(() => getGeminiModel() || 'gemini-2.5-flash');
   const [thinkingLevel, setThinkingLevel] = useState<string>('balanced');
-  const [customApiKey, setCustomApiKey] = useState<string>(() => localStorage.getItem('custom_gemini_key') || '');
-  const [customGroqApiKey, setCustomGroqApiKey] = useState<string>(() => localStorage.getItem('custom_groq_key') || '');
+  const [customApiKey, setCustomApiKey] = useState<string>(() => getGeminiApiKey() || '');
+  const [customGroqApiKey, setCustomGroqApiKey] = useState<string>(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('custom_groq_key') || '';
+    return '';
+  });
   const [showApiKeySettings, setShowApiKeySettings] = useState<boolean>(false);
 
   const [loading, setLoading] = useState<boolean>(false);
+  const [loadingStep, setLoadingStep] = useState<string>('준비 중...');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [fileSizeStr, setFileSizeStr] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    // Sync API key when opened
+    if (isOpen) {
+      const storedKey = getGeminiApiKey();
+      if (storedKey) setCustomApiKey(storedKey);
+      const storedModel = getGeminiModel();
+      if (storedModel) setModelChoice(storedModel);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -69,7 +85,6 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
         // 2. Safely attempt supplementary text extraction if possible (never blocking or showing errors if worker fails)
         try {
           const arrayBuffer = await file.arrayBuffer();
-          // Use safe worker fallback
           if (pdfjsLib && pdfjsLib.getDocument) {
             const loadingTask = pdfjsLib.getDocument({
               data: arrayBuffer,
@@ -88,8 +103,7 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
               setExtractedText(fullText);
             }
           }
-        } catch (pdfErr) {
-          // If browser blocks worker or PDF has no text layer, Gemini will read the PDF base64 directly with multimodal vision!
+        } catch {
           console.info('PDF local text extraction skipped; using direct multimodal AI vision parsing.');
         }
       } else {
@@ -128,15 +142,50 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
     }
 
     setLoading(true);
+    setLoadingStep('AI 시간표 분석 시작...');
     setErrorMsg(null);
 
+    const effectiveApiKey = (customApiKey || getGeminiApiKey() || '').trim();
+
     try {
+      // If user provided a Gemini key and chose a Gemini model, we can run direct client-side extraction first
+      // OR try server route with automatic fallback to client-side
+      const isGemini = !modelChoice.startsWith('groq-');
+
+      if (isGemini && effectiveApiKey) {
+        setLoadingStep('Gemini AI 직접 분석 중 (브라우저 직접 연결)...');
+        try {
+          const clientResult = await extractScheduleWithClientGemini({
+            apiKey: effectiveApiKey,
+            imageBase64: selectedFile,
+            mimeType: fileType === 'pdf' ? 'application/pdf' : (mimeType || 'image/jpeg'),
+            extractedText,
+            modelChoice,
+            thinkingLevel,
+          });
+
+          if (Array.isArray(clientResult) && clientResult.length > 0) {
+            onExtractSuccess(clientResult);
+            onClose();
+            return;
+          }
+        } catch (directErr: any) {
+          console.warn('Direct client Gemini attempt failed, trying backend route:', directErr);
+          // If direct client attempt failed due to invalid API key, throw user-friendly error
+          if (directErr.message?.includes('API_KEY_INVALID') || directErr.message?.includes('403')) {
+            throw new Error('Gemini API 키가 유효하지 않습니다. Google AI Studio에서 키를 다시 확인해주세요.');
+          }
+        }
+      }
+
+      // Otherwise try server endpoint
+      setLoadingStep('서버 AI 엔진에 요청 전송 중...');
       const payload: any = {
         modelChoice,
         thinkingLevel,
         imageBase64: selectedFile,
         mimeType: fileType === 'pdf' ? 'application/pdf' : (mimeType || 'image/jpeg'),
-        customApiKey,
+        customApiKey: effectiveApiKey,
         customGroqApiKey,
       };
 
@@ -152,10 +201,55 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
         body: JSON.stringify(payload),
       });
 
-      const resData = await response.json();
+      // SAFE JSON PARSING: Avoid "Unexpected token 'A', 'A server e'..." crashes
+      const responseText = await response.text();
+      let resData: any = null;
+      try {
+        resData = JSON.parse(responseText);
+      } catch {
+        // Server returned non-JSON (e.g. HTML 500 error page "A server error occurred...")
+        if (isGemini && effectiveApiKey) {
+          setLoadingStep('서버 응답 오류로 브라우저 직접 분석으로 재시도 중...');
+          const fallbackResult = await extractScheduleWithClientGemini({
+            apiKey: effectiveApiKey,
+            imageBase64: selectedFile,
+            mimeType: fileType === 'pdf' ? 'application/pdf' : (mimeType || 'image/jpeg'),
+            extractedText,
+            modelChoice,
+            thinkingLevel,
+          });
+          if (Array.isArray(fallbackResult) && fallbackResult.length > 0) {
+            onExtractSuccess(fallbackResult);
+            onClose();
+            return;
+          }
+        }
 
-      if (!response.ok || !resData.success) {
-        throw new Error(resData.error || '시간표 추출에 실패했습니다.');
+        throw new Error(
+          `서버 오류 (${response.status}): Vercel 또는 서버에서 처리에 실패했습니다. 관리자 설정(⚙️)에서 Gemini API 키를 저장하시면 브라우저에서 직접 안정적으로 분석할 수 있습니다.`
+        );
+      }
+
+      if (!response.ok || !resData?.success) {
+        // If server returned failure and we have an API key, try direct client fallback
+        if (isGemini && effectiveApiKey) {
+          setLoadingStep('브라우저 직접 분석으로 재시도 중...');
+          const fallbackResult = await extractScheduleWithClientGemini({
+            apiKey: effectiveApiKey,
+            imageBase64: selectedFile,
+            mimeType: fileType === 'pdf' ? 'application/pdf' : (mimeType || 'image/jpeg'),
+            extractedText,
+            modelChoice,
+            thinkingLevel,
+          });
+          if (Array.isArray(fallbackResult) && fallbackResult.length > 0) {
+            onExtractSuccess(fallbackResult);
+            onClose();
+            return;
+          }
+        }
+
+        throw new Error(resData?.error || '시간표 추출에 실패했습니다.');
       }
 
       if (Array.isArray(resData.data) && resData.data.length > 0) {
@@ -184,8 +278,8 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">PDF & 이미지 to Schedule AI 파싱 엔진</h3>
-              <p className="text-xs text-slate-400">PDF(pdf.js 추출) 및 이미지 ➔ 다중 모델 AI 분석</p>
+              <h3 className="text-base font-bold text-white">시험 시간표 AI 자동 분석기</h3>
+              <p className="text-xs text-slate-400">PDF 및 이미지 ➔ 교시별·과목별 정밀 시간표 데이터 자동 생성</p>
             </div>
           </div>
 
@@ -208,16 +302,16 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
               </label>
               <select
                 value={modelChoice}
-                onChange={(e) => setModelChoice(e.target.value)}
+                onChange={(e) => {
+                  setModelChoice(e.target.value);
+                  saveGeminiModel(e.target.value);
+                }}
                 className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
-                <option value="gemini-3.8-flash">Default (Gemini 3.8 Flash)</option>
-                <option value="gemini-4-argon">Gemini 4 Argon</option>
-                <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
-                <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
-                <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
-                <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
-                <option value="gemini-3-flash-preview">Gemini 3 Flash Preview</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash (권장 - 최신 초고속 & 최고 정확도)</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro (복잡한 표/다중 날짜 심층 추론)</option>
+                <option value="gemini-2.0-flash">Gemini 2.0 Flash (안정적 고속)</option>
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash (레거시 호환)</option>
                 <option value="groq-llama-3.3-70b">Groq Llama 3.3 70B (초고속 대형언어모델)</option>
                 <option value="groq-deepseek-r1">Groq DeepSeek R1 (심층 추론)</option>
               </select>
@@ -232,9 +326,9 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
                 onChange={(e) => setThinkingLevel(e.target.value)}
                 className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
-                <option value="fast">표준 (Fast / Standard)</option>
-                <option value="balanced">균형 (Balanced)</option>
-                <option value="deep">심층 추론 (Deep Thinking / Temp 0.0)</option>
+                <option value="balanced">균형 (Balanced - 기본)</option>
+                <option value="fast">고속 (Fast)</option>
+                <option value="deep">심층 추론 (Deep Thinking / 정밀도 우선)</option>
               </select>
             </div>
 
@@ -246,7 +340,7 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
                 className="w-full flex items-center justify-between text-xs font-extrabold text-indigo-700 hover:text-indigo-950 transition py-1 cursor-pointer"
               >
                 <span className="flex items-center gap-1.5">
-                  <span>🔑</span> 커스텀 API 키 설정 (Gemini / Groq 선택 입력)
+                  <Key className="w-3.5 h-3.5 text-indigo-600" /> 커스텀 API 키 설정 {customApiKey ? '(등록됨 ✓)' : '(선택)'}
                 </span>
                 <span className="text-slate-500 text-[11px] font-bold">
                   {showApiKeySettings ? '접기 ▲' : '열기 ▼'}
@@ -254,22 +348,38 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
               </button>
 
               {showApiKeySettings && (
-                <div className="mt-3 space-y-3 bg-white p-3 rounded-lg border border-slate-200 text-xs">
+                <div className="mt-3 space-y-3 bg-white p-3.5 rounded-lg border border-slate-200 text-xs">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Gemini API Key (선택)</label>
-                    <input
-                      type="password"
-                      value={customApiKey}
-                      onChange={(e) => {
-                        setCustomApiKey(e.target.value);
-                        localStorage.setItem('custom_gemini_key', e.target.value);
-                      }}
-                      placeholder="AIzaSy... (입력 시 서버 기본키 대신 사용)"
-                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
+                    <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                      <span>Gemini API Key</span>
+                      <span className="text-[10px] text-indigo-600 font-semibold">브라우저 직접 연결로 Vercel 오류 방지</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        value={customApiKey}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCustomApiKey(val);
+                          saveGeminiApiKey(val);
+                        }}
+                        placeholder="AIzaSy... (입력 시 브라우저에서 직접 분석 가능)"
+                        className="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          saveGeminiApiKey(customApiKey);
+                          alert('API 키가 안전하게 저장되었습니다!');
+                        }}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg text-xs transition cursor-pointer"
+                      >
+                        저장
+                      </button>
+                    </div>
                   </div>
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Groq API Key (Groq 선택 시 필수)</label>
+                    <label className="block font-bold text-slate-700 mb-1">Groq API Key (Groq 모델 선택 시)</label>
                     <input
                       type="password"
                       value={customGroqApiKey}
@@ -278,12 +388,9 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
                         localStorage.setItem('custom_groq_key', e.target.value);
                       }}
                       placeholder="gsk_... (Groq 모델 사용 시 입력)"
-                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
-                  <p className="text-[10px] text-slate-500">
-                    입력하신 키는 브라우저 로컬 저장소(localStorage)에만 안전하게 보관되며 외부로 유출되지 않습니다.
-                  </p>
                 </div>
               )}
             </div>
@@ -301,134 +408,102 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
             }`}
           >
             <input
-              type="file"
               ref={fileInputRef}
-              onChange={handleFileChange}
-              accept="image/*,application/pdf"
+              type="file"
+              accept="image/*,.pdf"
               className="hidden"
+              onChange={handleFileChange}
             />
 
             {selectedFile ? (
-              <div className="space-y-3 w-full">
-                {fileType === 'pdf' ? (
-                  <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-xs mx-auto flex items-center gap-3.5 max-w-md">
-                    <div className="w-11 h-11 rounded-xl bg-rose-500/10 border border-rose-200 text-rose-600 flex items-center justify-center font-black text-sm shrink-0">
-                      PDF
-                    </div>
-                    <div className="text-left truncate flex-1">
-                      <p className="text-xs font-bold text-slate-900 truncate">{fileName}</p>
-                      <p className="text-[11px] text-emerald-600 font-bold flex items-center gap-1 mt-0.5">
-                        <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                        <span>
-                          {extractedText
-                            ? `표 텍스트 감지 (${extractedText.length}자) + Gemini 비전 분석 준비됨`
-                            : `Gemini 멀티모달 시각/표 구조 AI 분석 준비됨 (${fileSizeStr || 'PDF'})`}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="max-h-56 overflow-hidden rounded-xl border border-slate-200 shadow-xs mx-auto flex items-center justify-center bg-slate-900/5">
-                    <img
-                      src={selectedFile}
-                      alt="Uploaded Schedule"
-                      className="max-h-56 object-contain rounded-xl"
-                    />
-                  </div>
-                )}
-                <div className="flex items-center justify-center gap-2 text-xs font-bold text-indigo-700 bg-indigo-100 px-3 py-1.5 rounded-lg max-w-xs mx-auto">
-                  {fileType === 'pdf' ? <FileText className="w-4 h-4 shrink-0" /> : <FileImage className="w-4 h-4 shrink-0" />}
-                  <span className="truncate">{fileName || '선택된 시험 시간표 파일'}</span>
-                </div>
-                <p className="text-xs text-slate-500">클릭하면 다른 파일로 교체합니다.</p>
-              </div>
-            ) : (
-              <div className="space-y-3 py-4">
-                <div className="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto shadow-xs">
-                  <Upload className="w-7 h-7" />
+              <div className="space-y-2">
+                <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto">
+                  {fileType === 'pdf' ? (
+                    <FileText className="w-6 h-6" />
+                  ) : (
+                    <FileImage className="w-6 h-6" />
+                  )}
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-slate-800">
-                    시험 시간표 PDF 또는 이미지를 이곳에 드래그하거나 클릭하여 선택하세요
+                  <p className="text-xs font-bold text-slate-800">{fileName}</p>
+                  <p className="text-[11px] text-slate-500">{fileSizeStr}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedFile(null);
+                    setExtractedText('');
+                    setFileName('');
+                  }}
+                  className="text-xs font-bold text-rose-600 hover:underline pt-1"
+                >
+                  다른 파일 선택하기
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2 py-4">
+                <div className="w-12 h-12 bg-slate-200 text-slate-500 rounded-full flex items-center justify-center mx-auto">
+                  <Upload className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-800">
+                    시험 시간표 이미지 또는 PDF 파일을 끌어다 놓거나 클릭하여 선택하세요
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    지원 포맷: PDF (Gemini 비전 및 표 구조 직접 분석), PNG, JPG, WEBP
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    PNG, JPG, WEBP 또는 PDF 문서 지원
                   </p>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Error Banner with helpful API Key guidance */}
+          {/* Error Message */}
           {errorMsg && (
-            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 flex flex-col gap-2 text-xs text-rose-900 font-medium animate-fadeIn">
-              <div className="flex items-start gap-2.5">
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                <span className="font-bold leading-relaxed">{errorMsg}</span>
+            <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3.5 rounded-xl text-xs flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1 space-y-1">
+                <p className="font-bold">분석 실패</p>
+                <p className="text-rose-700 leading-relaxed whitespace-pre-line">{errorMsg}</p>
+                {!customApiKey && (
+                  <p className="text-[11px] text-indigo-700 font-semibold pt-1">
+                    💡 팁: '커스텀 API 키 설정'을 열어 Gemini API 키를 등록하면 Vercel 서버 에러 없이 브라우저에서 직접 바로 분석할 수 있습니다.
+                  </p>
+                )}
               </div>
-              {errorMsg.includes('GEMINI_API_KEY') && (
-                <div className="p-3 bg-white/90 border border-rose-200 rounded-xl text-[11px] text-slate-700 leading-relaxed space-y-1">
-                  <div className="font-extrabold text-rose-950 flex items-center gap-1.5">
-                    <span>🔑 API 키 등록 안내:</span>
-                  </div>
-                  <div>
-                    • <strong>Vercel 배포 시:</strong> Vercel 프로젝트 대시보드 ➔ <strong>[Settings]</strong> ➔ <strong>[Environment Variables]</strong>에서 Key: <code className="bg-rose-100 px-1 py-0.5 rounded font-mono font-bold text-rose-950">GEMINI_API_KEY</code> 를 등록해 주세요.
-                  </div>
-                  <div>
-                    • <strong>로컬 개발 시:</strong> 프로젝트 루트의 <code className="bg-slate-100 px-1 py-0.5 rounded font-mono font-bold">.env</code> 파일에 <code className="bg-slate-100 px-1 py-0.5 rounded font-mono font-bold">GEMINI_API_KEY=your_key</code> 를 입력하시면 됩니다.
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
-          {/* Guidelines */}
-          <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 text-xs text-slate-600 space-y-1.5">
-            <p className="font-bold text-slate-800 flex items-center gap-1">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> PDF to Schedule 파싱 특징:
-            </p>
-            <ul className="list-disc list-inside space-y-0.5 text-slate-600 pl-1">
-              <li>PDF 문서 내부의 텍스트와 표 구조를 pdf.js로 안전하게 추출</li>
-              <li>Gemini 또는 Groq(Llama 3.3, DeepSeek R1) 선택 및 사고 수준 설정</li>
-              <li>일자별, 교시별, 과목별, 시험시간(분) 자동 구조화 JSON 변환</li>
-            </ul>
+          {/* Action Buttons */}
+          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={handleAnalyze}
+              disabled={loading || !selectedFile}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold px-5 py-2 rounded-lg transition shadow-md cursor-pointer"
+            >
+              {loading ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>{loadingStep}</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>AI 시간표 자동 분석 실행</span>
+                </>
+              )}
+            </button>
           </div>
-
         </div>
-
-        {/* Modal Footer */}
-        <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex items-center justify-between">
-          <button
-            onClick={onClose}
-            disabled={loading}
-            className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 transition cursor-pointer"
-          >
-            취소
-          </button>
-
-          <button
-            onClick={handleAnalyze}
-            disabled={loading || (!selectedFile && !extractedText)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-extrabold text-white transition shadow-sm cursor-pointer ${
-              loading || (!selectedFile && !extractedText)
-                ? 'bg-slate-300 cursor-not-allowed'
-                : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95'
-            }`}
-          >
-            {loading ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                <span>AI 문서 파싱 및 구조화 중...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                <span>AI 시간표 데이터 추출 시작</span>
-              </>
-            )}
-          </button>
-        </div>
-
       </div>
     </div>
   );

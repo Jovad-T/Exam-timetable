@@ -93,7 +93,8 @@ export default function App() {
     }
   };
 
-  const initialSchedule: ScheduleData = safeParse<ScheduleData>(`schedule_data_${schoolSlug}`, defaultScheduleData);
+  const parsedSchedule = safeParse<ScheduleData>(`schedule_data_${schoolSlug}`, defaultScheduleData);
+  const initialSchedule: ScheduleData = Array.isArray(parsedSchedule) && parsedSchedule.length > 0 ? parsedSchedule : defaultScheduleData;
   const [scheduleData, setScheduleData] = useState<ScheduleData>(initialSchedule);
 
   // Automatically initialize activeTab to today's date (prioritizes today: 10/14, 10/15, etc.)
@@ -191,7 +192,7 @@ export default function App() {
     // 1. Initial fetch from Firestore
     fetchSchoolScheduleFromCloud(schoolSlug)
       .then(({ scheduleData: cloudData, schoolName: cloudName, logoUrl, alertSettings: cloudAlertSettings }) => {
-        if (cloudData) {
+        if (cloudData && Array.isArray(cloudData) && cloudData.length > 0) {
           setScheduleData(cloudData);
           try {
             localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cloudData));
@@ -228,10 +229,12 @@ export default function App() {
       schoolSlug,
       (newScheduleData, cloudName, cloudAlertSettings) => {
         // [강제 동기화] 클라우드에서 받은 최신 데이터로 로컬 상태 및 저장소 무조건 갱신
-        setScheduleData(newScheduleData);
-        try {
-          localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(newScheduleData));
-        } catch {}
+        if (newScheduleData && Array.isArray(newScheduleData) && newScheduleData.length > 0) {
+          setScheduleData(newScheduleData);
+          try {
+            localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(newScheduleData));
+          } catch {}
+        }
         
         if (cloudName) {
           setSchoolName(cloudName);

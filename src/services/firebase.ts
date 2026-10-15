@@ -253,7 +253,12 @@ export async function fetchSchoolScheduleFromCloud(
     if (scheduleSnap.exists()) {
       const data = scheduleSnap.data();
       if (data && data.scheduleJson) {
-        scheduleData = JSON.parse(data.scheduleJson);
+        try {
+          scheduleData = JSON.parse(data.scheduleJson);
+        } catch (jsonErr) {
+          console.error(`Invalid JSON in Firestore schedule for school "${schoolSlug}":`, jsonErr);
+          scheduleData = null;
+        }
       }
       if (data && data.schoolName && !schoolName) {
         schoolName = data.schoolName;

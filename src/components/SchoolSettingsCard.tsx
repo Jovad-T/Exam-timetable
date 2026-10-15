@@ -35,6 +35,7 @@ interface SchoolSettingsCardProps {
 }
 
 const PRESET_SCHOOLS = [
+  { name: '사직여자고등학교', slug: 'sajik-girls-high' },
   { name: '한국고등학교', slug: 'korea-high' },
   { name: '서울고등학교', slug: 'seoul-high' },
   { name: '경기고등학교', slug: 'gyeonggi-high' },

@@ -135,10 +135,42 @@ app.post('/api/extract-schedule', async (req, res) => {
       parsedData = Array.isArray(parsedObj) ? parsedObj : (parsedObj.schedule || parsedObj.data || Object.values(parsedObj).find(v => Array.isArray(v)) || []);
       if (!Array.isArray(parsedData)) parsedData = [parsedData];
     } else {
-      const geminiKey = customApiKey || process.env.GEMINI_API_KEY;
-      const clientAI = geminiKey ? new GoogleGenAI({ apiKey: geminiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } }) : ai;
+      let resolvedKey = (customApiKey || '').trim();
+      if (resolvedKey.startsWith('enc_')) {
+        try {
+          const b64 = resolvedKey.slice(4);
+          const ciphered = decodeURIComponent(Buffer.from(b64, 'base64').toString('utf-8'));
+          const SALT = 'AI_EXAM_SCHEDULE_SECURE_2026';
+          let res = '';
+          for (let i = 0; i < ciphered.length; i++) {
+            res += String.fromCharCode(ciphered.charCodeAt(i) ^ SALT.charCodeAt(i % SALT.length));
+          }
+          resolvedKey = res;
+        } catch {}
+      } else if (resolvedKey.startsWith('b64_')) {
+        try {
+          resolvedKey = Buffer.from(resolvedKey.slice(4), 'base64').toString('utf-8');
+        } catch {}
+      }
 
-      const geminiModel = effectiveModel.includes('pro') ? 'gemini-3.1-pro-preview' : 'gemini-3.8-flash';
+      const geminiKey = resolvedKey || process.env.GEMINI_API_KEY;
+      if (!geminiKey) {
+        return res.status(400).json({ success: false, error: 'Gemini API 키가 설정되지 않았습니다. 관리자 설정에서 API 키를 등록해주세요.' });
+      }
+
+      const clientAI = new GoogleGenAI({ apiKey: geminiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
+
+      const reqM = (effectiveModel || '').toLowerCase();
+      let geminiModel = 'gemini-2.5-flash';
+      if (reqM.includes('pro')) {
+        geminiModel = 'gemini-2.5-pro';
+      } else if (reqM.includes('2.0')) {
+        geminiModel = 'gemini-2.0-flash';
+      } else if (reqM.includes('1.5')) {
+        geminiModel = 'gemini-1.5-flash';
+      } else if (reqM.includes('3.8')) {
+        geminiModel = 'gemini-2.5-flash'; // map to public stable model or 2.5-flash
+      }
       const parts: any[] = [];
       if (extractedText) {
         parts.push({ text: promptText });

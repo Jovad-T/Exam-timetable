@@ -3,47 +3,89 @@ import { GoogleGenAI, Type } from '@google/genai';
 const FIXED_NOTICE = '최선을 다하기! 부정행위 금지! 책상 서랍 비우기! 수정테이프 불가!';
 const DEFAULT_BOTTOM_NOTICE = '※ 시험 시작 10분 전까지 입실을 완료하여 주시기 바랍니다 ※';
 
+// Helper to decrypt client-sent encrypted API key if present
+function resolveApiKey(rawKey?: string): string {
+  if (!rawKey) return '';
+  const key = rawKey.trim();
+  if (key.startsWith('enc_')) {
+    try {
+      const b64 = key.slice(4);
+      const ciphered = decodeURIComponent(atob(b64));
+      const SALT = 'AI_EXAM_SCHEDULE_SECURE_2026';
+      let result = '';
+      for (let i = 0; i < ciphered.length; i++) {
+        result += String.fromCharCode(ciphered.charCodeAt(i) ^ SALT.charCodeAt(i % SALT.length));
+      }
+      return result;
+    } catch {
+      return key;
+    }
+  }
+  if (key.startsWith('b64_')) {
+    try {
+      return atob(key.slice(4));
+    } catch {
+      return key;
+    }
+  }
+  return key;
+}
+
 // Vercel Serverless Function Handler for POST /api/extract-schedule
 export default async function handler(req: any, res: any) {
-  // Set CORS headers
+  // Set CORS and JSON Content-Type headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed. POST is required.' });
-  }
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({
-      success: false,
-      error: 'Vercel 환경 변수에 GEMINI_API_KEY가 설정되어 있지 않습니다. Vercel 프로젝트 [Settings] -> [Environment Variables]에서 GEMINI_API_KEY를 등록해주세요.',
-    });
+    return res.status(405).json({ success: false, error: 'Method Not Allowed. POST is required.' });
   }
 
   try {
-    const { imageBase64, mimeType, extractedText, modelChoice, thinkingLevel } = req.body || {};
+    const { imageBase64, mimeType, extractedText, modelChoice, thinkingLevel, customApiKey } = req.body || {};
+
+    // 1. Resolve API Key: custom key from client OR server environment variable
+    const clientKey = resolveApiKey(customApiKey);
+    const apiKey = clientKey || process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'Gemini API 키가 설정되어 있지 않습니다. 관리자 설정(⚙️)에서 Gemini API 키를 저장하시거나, Vercel [Settings] -> [Environment Variables]에 GEMINI_API_KEY를 등록해주세요.',
+      });
+    }
 
     if (!imageBase64 && !extractedText) {
-      return res.status(400).json({ error: '이미지 또는 PDF 텍스트 데이터가 필요합니다.' });
+      return res.status(400).json({ success: false, error: '이미지 또는 PDF 텍스트 데이터가 필요합니다.' });
     }
 
     const ai = new GoogleGenAI({
       apiKey,
       httpOptions: {
         headers: {
-          'User-Agent': 'aistudio-build-vercel',
+          'User-Agent': 'aistudio-build-schedule-extractor',
         },
       },
     });
 
-    const effectiveModel = modelChoice || 'gemini-3.8-flash';
-    const geminiModel = effectiveModel.includes('pro') ? 'gemini-3.1-pro-preview' : 'gemini-3.8-flash';
+    // 2. Map model to valid public Gemini models for reliability on Vercel
+    const reqModel = (modelChoice || '').toLowerCase();
+    let geminiModel = 'gemini-2.5-flash';
+    if (reqModel.includes('pro')) {
+      geminiModel = 'gemini-2.5-pro';
+    } else if (reqModel.includes('2.0')) {
+      geminiModel = 'gemini-2.0-flash';
+    } else if (reqModel.includes('1.5')) {
+      geminiModel = 'gemini-1.5-flash';
+    } else if (reqModel.includes('2.5')) {
+      geminiModel = 'gemini-2.5-flash';
+    }
 
     const systemInstruction = `
 당신은 고등학교 시험 시간표 PDF 및 이미지를 분석하여 프론트엔드 애플리케이션에서 사용할 수 있는 구조화된 JSON 데이터로 변환하는 최고 전문가입니다.
@@ -136,7 +178,10 @@ export default async function handler(req: any, res: any) {
       },
     });
 
-    let parsedData = JSON.parse(response.text || '[]');
+    let rawText = response.text || '[]';
+    // Clean code blocks if present
+    rawText = rawText.replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
+    let parsedData = JSON.parse(rawText);
 
     parsedData = parsedData.map((item: any, idx: number) => ({
       id: item.id || `day-parsed-${Date.now()}-${idx}`,
@@ -149,10 +194,10 @@ export default async function handler(req: any, res: any) {
 
     return res.status(200).json({ success: true, data: parsedData });
   } catch (error: any) {
-    console.error('Extraction Error on Vercel:', error);
+    console.error('Extraction Error on Vercel API:', error);
     return res.status(500).json({
       success: false,
-      error: error.message || '시간표 문서 분석 중 오류가 발생했습니다.',
+      error: error.message || '시간표 문서 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
     });
   }
 }
