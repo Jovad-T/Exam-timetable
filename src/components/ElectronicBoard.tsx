@@ -1112,12 +1112,11 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   // BASE_HEIGHT를 930으로 고정하여 날짜별 교시 수나 내용에 상관없이 칠판 및 첨부 영역 사이즈가 항상 일정하게 유지되도록 함
   const BASE_HEIGHT = 880;
 
-  // Safety margins:
-  // 사용자 요청: "감지 해상도 부분은 안 보이게 해주고 마우스가 가면 나타나게 해줄래? 그 아래 부분이 윗부분까지 채워줘."
-  // 해상도 바를 마우스 오버 시에만 나타나는 플로팅 오버레이로 전환하고, 상단 여백을 대폭 줄여 칠판이 화면 상단까지 꽉 차게 확장
-  const topReservedSpace = isFullscreen ? 4 : 0;
-  const bottomReservedSpace = isFullscreen ? 4 : 0;
-  const sideReservedSpace = isFullscreen ? 8 : 0;
+  // Fullscreen Safe Margins:
+  // 상단 여백을 충분히 확보하여 전자칠판 상단 프레임 및 제목이 화면 위로 잘리거나 튀어나가지 않도록 설정
+  const topReservedSpace = isFullscreen ? 64 : 0;
+  const bottomReservedSpace = isFullscreen ? 36 : 0;
+  const sideReservedSpace = isFullscreen ? 40 : 0;
 
   const availableWidth = Math.max(360, windowSize.width - sideReservedSpace);
   const availableHeight = Math.max(300, windowSize.height - (topReservedSpace + bottomReservedSpace));
@@ -1142,15 +1141,15 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       autoCalculatedScale = targetHorizontalScale;
     }
     
-    // 약간의 여유를 위해 90%만 사용 (완벽한 밀착 방지)
-    autoCalculatedScale *= 0.96;
+    // 상하좌우 안전 여백을 위한 스케일 배율 적용
+    autoCalculatedScale *= 0.94;
     
     dynamicBaseWidth = BASE_WIDTH;
   } else {
     // [선택 모드] 가로 전체 확장: 와이드 화면 가로를 꽉 채우도록 베이스 너비 확장
     const idealBaseWidth = availableWidth / targetVerticalScale;
     dynamicBaseWidth = Math.round(Math.max(1380, idealBaseWidth));
-    autoCalculatedScale = targetVerticalScale * 0.96;
+    autoCalculatedScale = targetVerticalScale * 0.94;
   }
 
   const effectiveScale = scaleMode === 'auto' ? autoCalculatedScale : customScale;
@@ -2862,7 +2861,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   if (isFullscreen) {
     return (
       <div
-        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center justify-center overflow-auto select-none pt-[3%] pb-[3%] px-0 m-0 transition-colors duration-500`}
+        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center overflow-auto select-none pt-7 pb-6 px-4 transition-colors duration-500`}
         onMouseMove={(e) => {
           // 화면 최상단 55px 이내로 마우스가 올라오면 해상도 및 컨트롤러 노출
           if (e.clientY <= 55) {
@@ -3083,9 +3082,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           </div>
         </div>
 
-        {/* Scaled Blackboard Container - 윗부분까지 꽉 차도록 my-auto 대신 상단부터 자연스럽게 배치 */}
+        {/* Scaled Blackboard Container - 상단 여백을 안정적으로 확보하고 자연스럽게 정렬 */}
         <div
-          className="relative shrink-0 flex items-start justify-center pt-0 mt-[-80px]"
+          className="relative shrink-0 flex items-center justify-center my-auto"
           style={{
             width: `${scaledWidth}px`,
             height: `${scaledHeight}px`,
