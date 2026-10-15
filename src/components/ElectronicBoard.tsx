@@ -702,7 +702,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       setCurrentFullDate(korea.formattedFullDate);
 
       const parsed = parsePeriods();
-      if (parsed.length === 0) return;
+      if (!parsed || parsed.length === 0) return;
 
       let effectiveNowSec = korea.hours * 3600 + korea.minutes * 60 + korea.seconds;
 
