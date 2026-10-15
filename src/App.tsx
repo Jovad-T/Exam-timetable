@@ -5,6 +5,7 @@ import { Header } from './components/Header';
 import { NoticeBanner } from './components/NoticeBanner';
 import { AlertSettingsCard } from './components/AlertSettingsCard';
 import { SchoolLogoCard } from './components/SchoolLogoCard';
+import { GeminiSettingsCard } from './components/GeminiSettingsCard';
 import { DateTabs } from './components/DateTabs';
 import { TimetableGrid } from './components/TimetableGrid';
 import { CodeOutputViewer } from './components/CodeOutputViewer';
@@ -1206,6 +1207,9 @@ export default function App() {
                   onChangeLogo={handleUpdateSchoolLogo}
                   fullTitle={currentDaySchedule?.fullTitle}
                 />
+
+                <GeminiSettingsCard />
+
 
                 {/* 총 반 개수 설정 */}
                 <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">

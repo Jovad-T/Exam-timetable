@@ -24,7 +24,7 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
   const [fileName, setFileName] = useState<string>('');
   
   // AI Model & Thinking options
-  const [modelChoice, setModelChoice] = useState<string>('gemini-3.8-flash');
+  const [modelChoice, setModelChoice] = useState<string>(() => localStorage.getItem('custom_gemini_model') || 'gemini-3.8-flash');
   const [thinkingLevel, setThinkingLevel] = useState<string>('balanced');
   const [customApiKey, setCustomApiKey] = useState<string>(() => localStorage.getItem('custom_gemini_key') || '');
   const [customGroqApiKey, setCustomGroqApiKey] = useState<string>(() => localStorage.getItem('custom_groq_key') || '');
@@ -211,8 +211,9 @@ export const ImageUploaderModal: React.FC<ImageUploaderModalProps> = ({
                 onChange={(e) => setModelChoice(e.target.value)}
                 className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
-                <option value="gemini-3.8-flash">Gemini 3.8 Flash (고성능 비전/텍스트)</option>
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro (고정밀 분석)</option>
+                <option value="gemini-3.0-flash">Default (Gemini 3)</option>
+                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
                 <option value="groq-llama-3.3-70b">Groq Llama 3.3 70B (초고속 대형언어모델)</option>
                 <option value="groq-deepseek-r1">Groq DeepSeek R1 (심층 추론)</option>
               </select>
