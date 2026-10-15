@@ -223,18 +223,7 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [appRole, schoolSlug, schoolName]);
 
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const timer = setTimeout(() => {
-        const currentHash = decodeURIComponent(window.location.hash);
-        const targetHash = schoolSlug && schoolSlug !== 'default' ? `#school:${schoolSlug}:${appRole}` : `#${appRole}`;
-        if (currentHash !== targetHash) {
-          window.location.hash = targetHash;
-        }
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [schoolSlug, appRole]);
+  // URL hash sync removed to prevent app reloads/bouncing.
 
   // Real-time synchronization across all classrooms in the school via Cloud Firestore
   React.useEffect(() => {
