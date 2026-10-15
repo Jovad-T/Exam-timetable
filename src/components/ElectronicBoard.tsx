@@ -1288,7 +1288,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
 
         {/* Blackboard Body: Left Attendance Panel & Right Schedule Table */}
-        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-5 my-4 items-stretch flex-1 min-h-[calc(100vh-40px)] max-h-[calc(100vh-40px)]">
+        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-5 my-4 items-stretch flex-1 h-[calc(100vh-80px)] overflow-hidden">
           {/* Left Panel: Class & Attendance Box */}
           <div className="lg:col-span-4 bg-white rounded-3xl p-4.5 text-slate-900 shadow-xl border-4 border-slate-200 flex flex-col justify-between h-full relative">
             {/* Top Red Header: 학년 / 반 드롭다운 */}
@@ -2047,7 +2047,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           </div>
 
           {/* Blackboard Body: Left Attendance Panel & Right Focused Exam Screen */}
-          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-5 my-3 items-stretch flex-1 min-h-[calc(100vh-40px)] max-h-[calc(100vh-40px)]">
+          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-5 my-3 items-stretch flex-1 h-[calc(100vh-80px)] overflow-hidden">
             {/* Left Panel: Class & Attendance Box */}
             <div className="lg:col-span-4 bg-white rounded-3xl p-4.5 text-slate-900 shadow-xl border-4 border-slate-200 flex flex-col justify-between h-full relative">
               {/* Top Red Header: 학년 / 반 드롭다운 */}

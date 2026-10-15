@@ -175,11 +175,6 @@ export default function App() {
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem('current_app_role', role);
-        if (slug && slug !== 'default') {
-          window.location.hash = `school:${slug}:${role}`;
-        } else {
-          window.location.hash = role;
-        }
       } catch {}
     }
   };
