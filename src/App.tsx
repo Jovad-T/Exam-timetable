@@ -419,10 +419,13 @@ export default function App() {
 
   // Statistics
   const totalDays = scheduleData.length;
-  const totalSubjects = scheduleData.reduce(
+  const totalSubjects = (Array.isArray(scheduleData) ? scheduleData : []).reduce(
     (accDay, day) =>
       accDay +
-      day.schedule.reduce((accPeriod, p) => accPeriod + p.subjects.length, 0),
+      (Array.isArray(day?.schedule) ? day.schedule : []).reduce(
+        (accPeriod, p) => accPeriod + (Array.isArray(p?.subjects) ? p.subjects.length : 0),
+        0
+      ),
     0
   );
 

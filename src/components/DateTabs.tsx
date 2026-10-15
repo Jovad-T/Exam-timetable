@@ -50,8 +50,8 @@ export const DateTabs: React.FC<DateTabsProps> = ({
             {scheduleData.map((day) => {
               const isSelected = activeTab === day.id;
               const isToday = isTodayScheduleDay(day);
-              const totalSubjects = day.schedule.reduce(
-                (acc, p) => acc + p.subjects.length,
+              const totalSubjects = (Array.isArray(day?.schedule) ? day.schedule : []).reduce(
+                (acc, p) => acc + (Array.isArray(p?.subjects) ? p.subjects.length : 0),
                 0
               );
 
