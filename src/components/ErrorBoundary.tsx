@@ -32,12 +32,25 @@ export class ErrorBoundary extends Component<Props, State> {
           <pre className="text-xs text-red-400 mb-6 max-w-lg overflow-auto bg-slate-900 p-4 rounded-lg">
             {this.state.error?.message}
           </pre>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold transition"
-          >
-            새로고침
-          </button>
+          <div className="flex gap-4">
+            <button
+              onClick={() => {
+                try {
+                  localStorage.clear();
+                  window.location.reload();
+                } catch {}
+              }}
+              className="px-6 py-3 bg-rose-600 hover:bg-rose-500 rounded-xl font-bold transition"
+            >
+              데이터 초기화
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold transition"
+            >
+              새로고침
+            </button>
+          </div>
         </div>
       );
     }
