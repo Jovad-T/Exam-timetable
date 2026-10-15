@@ -225,11 +225,14 @@ export default function App() {
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
-      const currentHash = decodeURIComponent(window.location.hash);
-      const targetHash = schoolSlug && schoolSlug !== 'default' ? `#school:${schoolSlug}:${appRole}` : `#${appRole}`;
-      if (currentHash !== targetHash) {
-        window.location.hash = targetHash;
-      }
+      const timer = setTimeout(() => {
+        const currentHash = decodeURIComponent(window.location.hash);
+        const targetHash = schoolSlug && schoolSlug !== 'default' ? `#school:${schoolSlug}:${appRole}` : `#${appRole}`;
+        if (currentHash !== targetHash) {
+          window.location.hash = targetHash;
+        }
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, [schoolSlug, appRole]);
 
