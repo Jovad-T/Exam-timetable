@@ -1772,10 +1772,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                                 : 'bg-white'
                             } ${isCurrentActivePeriod ? 'bg-amber-50/70' : ''}`}
                           >
-                            {/* Subject Name - 입실처럼 정돈된 칸(박스) 스타일 적용 */}
+                            {/* Subject Name - 입실처럼 정돈된 칸(박스)에 가운데 정렬 배치 */}
                             <div className="col-span-4 sm:col-span-4 pr-1.5 sm:pr-2">
                               <div
-                                className={`py-1.5 px-3 rounded-xl border-2 shadow-xs flex items-center justify-between gap-1.5 min-h-[52px] transition-all ${
+                                className={`py-1.5 px-3 rounded-xl border-2 shadow-xs flex items-center justify-center text-center gap-1.5 min-h-[52px] transition-all relative ${
                                   !filterMyClassOnly && isThisClassSubject
                                     ? 'bg-emerald-50 border-emerald-400 text-emerald-950 ring-2 ring-emerald-400/40'
                                     : isSelfStudy
@@ -1783,15 +1783,13 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                                     : 'bg-slate-50 border-slate-300 text-slate-950'
                                 }`}
                               >
-                                <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                  <span className="font-black text-slate-950 text-base sm:text-lg md:text-xl tracking-tight break-keep leading-tight">
-                                    {sub.subjectCode && !sub.name.includes('(')
-                                      ? `${sub.name}(${sub.subjectCode})`
-                                      : sub.name}
-                                  </span>
-                                </div>
+                                <span className="font-black text-slate-950 text-base sm:text-lg md:text-xl tracking-tight break-keep leading-tight text-center">
+                                  {sub.subjectCode && !sub.name.includes('(')
+                                    ? `${sub.name}(${sub.subjectCode})`
+                                    : sub.name}
+                                </span>
                                 {!filterMyClassOnly && isThisClassSubject && (
-                                  <span className="bg-emerald-600 text-white text-[11px] px-1.5 py-0.5 rounded-md font-black shrink-0 shadow-2xs">
+                                  <span className="bg-emerald-600 text-white text-[10px] sm:text-[11px] px-1.5 py-0.5 rounded-md font-black shrink-0 shadow-2xs absolute right-2">
                                     우리 반
                                   </span>
                                 )}
