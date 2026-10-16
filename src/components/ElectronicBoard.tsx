@@ -935,12 +935,16 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           remainingSeconds: remaining,
           remainingFormatted: formatRemaining(remaining),
           percent: parseFloat(pct.toFixed(1)),
-          isEndingSoon,
+          isEndingSoon: isEndingSoon && !active.subjectNames.includes('자습'),
           isStartingSoon: false,
           activePeriodIndex: active.pIdx,
           nextPeriodIndex: active.pIdx,
-          statusTitle: `[${active.periodName}] ${active.subjectNames} 시험 진행 중`,
-          statusSubtitle: `시험 종료(${active.endTime})까지 ${formatRemaining(remaining)} 남음`,
+          statusTitle: active.subjectNames.includes('자습')
+            ? `[${active.periodName}] ${active.subjectNames} 진행 중`
+            : `[${active.periodName}] ${active.subjectNames} 시험 진행 중`,
+          statusSubtitle: active.subjectNames.includes('자습')
+            ? `자습 종료(${active.endTime})까지 ${formatRemaining(remaining)} 남음`
+            : `시험 종료(${active.endTime})까지 ${formatRemaining(remaining)} 남음`,
         });
         return;
       }
@@ -949,7 +953,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       const preparing = (Array.isArray(parsed) ? parsed : []).find((p) => effectiveNowSec >= p.entrySec && effectiveNowSec < p.startSec);
       if (preparing) {
         const remaining = preparing.startSec - effectiveNowSec;
-        const isStartingSoon = remaining <= 600 && remaining > 0;
+        const isSelfStudy = preparing.subjectNames.includes('자습') && !preparing.subjectNames.split(',').some((s) => !s.includes('자습'));
+        const isStartingSoon = remaining <= 600 && remaining > 0 && !isSelfStudy;
         setCurrentExam({
           statusType: 'preparing',
           periodName: preparing.periodName,
@@ -966,8 +971,12 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           isStartingSoon,
           activePeriodIndex: preparing.pIdx,
           nextPeriodIndex: preparing.pIdx,
-          statusTitle: `[${preparing.periodName}] 입실 완료 및 시험 시작 대기`,
-          statusSubtitle: `시험 시작(${preparing.startTime})까지 ${formatRemaining(remaining)} 남음`,
+          statusTitle: isSelfStudy
+            ? `[${preparing.periodName}] 입실 완료 및 자습 시작 대기`
+            : `[${preparing.periodName}] 입실 완료 및 시험 시작 대기`,
+          statusSubtitle: isSelfStudy
+            ? `자습 시작(${preparing.startTime})까지 ${formatRemaining(remaining)} 남음`
+            : `시험 시작(${preparing.startTime})까지 ${formatRemaining(remaining)} 남음`,
         });
         return;
       }
@@ -976,7 +985,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       if (effectiveNowSec < parsed[0].startSec) {
         const first = parsed[0];
         const remaining = first.startSec - effectiveNowSec;
-        const isStartingSoon = remaining <= 600 && remaining > 0;
+        const isSelfStudy = first.subjectNames.includes('자습') && !first.subjectNames.split(',').some((s) => !s.includes('자습'));
+        const isStartingSoon = remaining <= 600 && remaining > 0 && !isSelfStudy;
         setCurrentExam({
           statusType: 'before_all',
           periodName: first.periodName,
@@ -993,8 +1003,12 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           isStartingSoon,
           activePeriodIndex: null,
           nextPeriodIndex: first.pIdx,
-          statusTitle: `오늘 시험 시작 전 (${first.startTime} 시작)`,
-          statusSubtitle: `1교시 시작까지 ${formatRemaining(remaining)} 남음`,
+          statusTitle: isSelfStudy
+            ? `오늘 자습 시작 전 (${first.startTime} 시작)`
+            : `오늘 시험 시작 전 (${first.startTime} 시작)`,
+          statusSubtitle: isSelfStudy
+            ? `1교시 시작까지 ${formatRemaining(remaining)} 남음`
+            : `1교시 시작까지 ${formatRemaining(remaining)} 남음`,
         });
         return;
       }
@@ -1003,7 +1017,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       const nextExam = (Array.isArray(parsed) ? parsed : []).find((p) => p.startSec > effectiveNowSec);
       if (nextExam) {
         const remaining = nextExam.startSec - effectiveNowSec;
-        const isStartingSoon = remaining <= 600 && remaining > 0;
+        const isSelfStudy = nextExam.subjectNames.includes('자습') && !nextExam.subjectNames.split(',').some((s) => !s.includes('자습'));
+        const isStartingSoon = remaining <= 600 && remaining > 0 && !isSelfStudy;
         setCurrentExam({
           statusType: 'break',
           periodName: nextExam.periodName,
@@ -1021,7 +1036,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           activePeriodIndex: null,
           nextPeriodIndex: nextExam.pIdx,
           statusTitle: `쉬는 시간 (다음: [${nextExam.periodName}] ${nextExam.subjectNames})`,
-          statusSubtitle: `다음 시험 시작(${nextExam.startTime})까지 ${formatRemaining(remaining)} 남음`,
+          statusSubtitle: isSelfStudy
+            ? `다음 자습 시작(${nextExam.startTime})까지 ${formatRemaining(remaining)} 남음`
+            : `다음 시험 시작(${nextExam.startTime})까지 ${formatRemaining(remaining)} 남음`,
         });
         return;
       }
@@ -1675,8 +1692,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 </div>
               </div>
 
-              {/* 시험 시작 10분 전 임박 배너 */}
-              {currentExam.isStartingSoon && (
+              {/* 시험 시작 10분 전 임박 배너 (과목명이 '자습'인 경우 시험 시작 배너 제외) */}
+              {currentExam.isStartingSoon && !currentExam.subjectNames.includes('자습') && (
                 <div className="bg-cyan-600 border-3 border-yellow-300 rounded-2xl p-3 sm:p-4 text-center text-white font-black shadow-lg flex items-center justify-center gap-3 animate-pulse">
                   <Bell className="w-7 h-7 text-yellow-300 shrink-0" />
                   <div className="flex flex-col items-center gap-1 leading-snug">
@@ -1755,22 +1772,34 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                                 : 'bg-white'
                             } ${isCurrentActivePeriod ? 'bg-amber-50/70' : ''}`}
                           >
-                            {/* Subject Name - 굵고 선명한 과목명 */}
-                            <div className="col-span-4 sm:col-span-4 font-black text-slate-950 text-base sm:text-lg md:text-xl pr-2 flex items-center gap-1.5 flex-wrap">
-                              <span>
-                                {sub.subjectCode && !sub.name.includes('(')
-                                  ? `${sub.name}(${sub.subjectCode})`
-                                  : sub.name}
-                              </span>
-                              {!filterMyClassOnly && isThisClassSubject && (
-                                <span className="bg-emerald-600 text-white text-[11px] px-1.5 py-0.5 rounded-md font-black shrink-0">
-                                  우리 반
-                                </span>
-                              )}
+                            {/* Subject Name - 입실처럼 정돈된 칸(박스) 스타일 적용 */}
+                            <div className="col-span-4 sm:col-span-4 pr-1.5 sm:pr-2">
+                              <div
+                                className={`py-1.5 px-3 rounded-xl border-2 shadow-xs flex items-center justify-between gap-1.5 min-h-[52px] transition-all ${
+                                  !filterMyClassOnly && isThisClassSubject
+                                    ? 'bg-emerald-50 border-emerald-400 text-emerald-950 ring-2 ring-emerald-400/40'
+                                    : isSelfStudy
+                                    ? 'bg-slate-100 border-slate-300 text-slate-700'
+                                    : 'bg-slate-50 border-slate-300 text-slate-950'
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                  <span className="font-black text-slate-950 text-base sm:text-lg md:text-xl tracking-tight break-keep leading-tight">
+                                    {sub.subjectCode && !sub.name.includes('(')
+                                      ? `${sub.name}(${sub.subjectCode})`
+                                      : sub.name}
+                                  </span>
+                                </div>
+                                {!filterMyClassOnly && isThisClassSubject && (
+                                  <span className="bg-emerald-600 text-white text-[11px] px-1.5 py-0.5 rounded-md font-black shrink-0 shadow-2xs">
+                                    우리 반
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
                             {/* Entry Time (입실) - 시인성 강화 (한 줄 아래로 줄바꿈) */}
-                            <div className="col-span-2 text-center text-indigo-950 font-black text-sm sm:text-base md:text-xl bg-indigo-50 border-2 border-indigo-300 py-1.5 px-2.5 rounded-xl shadow-xs flex flex-col items-center justify-center leading-tight">
+                            <div className="col-span-2 text-center text-indigo-950 font-black text-sm sm:text-base md:text-xl bg-indigo-50 border-2 border-indigo-300 py-1.5 px-2.5 rounded-xl shadow-xs flex flex-col items-center justify-center leading-tight min-h-[52px]">
                               {sub.entryTime ? (
                                 <>
                                   <span className="font-mono tracking-tight text-indigo-700 text-base sm:text-lg md:text-2xl font-black">{sub.entryTime.replace('입실', '').trim()}</span>
@@ -1782,15 +1811,17 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                             </div>
 
                             {/* Exam Time & Duration */}
-                            <div className="col-span-3 sm:col-span-3 text-center text-slate-950 font-black text-sm sm:text-base md:text-lg font-mono px-0.5 whitespace-nowrap">
-                              {sub.time}
-                              {sub.duration ? (
-                                <span className="text-slate-700 font-black text-xs sm:text-sm ml-0.5">
-                                  ({sub.duration}분)
-                                </span>
-                              ) : (
-                                ''
-                              )}
+                            <div className="col-span-3 sm:col-span-3 text-center text-slate-950 font-black text-sm sm:text-base md:text-lg font-mono px-0.5 whitespace-nowrap flex items-center justify-center min-h-[52px]">
+                              <div>
+                                <span>{sub.time}</span>
+                                {sub.duration ? (
+                                  <span className="text-slate-700 font-black text-xs sm:text-sm ml-0.5">
+                                    ({sub.duration}분)
+                                  </span>
+                                ) : (
+                                  ''
+                                )}
+                              </div>
                             </div>
 
                             {/* Target Class / Room */}
@@ -1810,7 +1841,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                                   initialValue: sub.targetClass || '행정학급',
                                 });
                               }}
-                              className={`col-span-3 sm:col-span-3 text-center font-black py-1.5 px-2 rounded-xl border text-xs sm:text-sm md:text-base cursor-pointer transition flex items-center justify-center gap-1 shadow-2xs ${
+                              className={`col-span-3 sm:col-span-3 text-center font-black py-1.5 px-2 rounded-xl border-2 text-xs sm:text-sm md:text-base cursor-pointer transition flex items-center justify-center gap-1 shadow-2xs min-h-[52px] ${
                                 isThisClassSubject
                                   ? 'text-emerald-900 bg-emerald-100/90 border-emerald-400 hover:bg-emerald-200'
                                   : 'text-indigo-900 bg-indigo-50 border-indigo-300 hover:bg-indigo-100'
@@ -2518,8 +2549,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                   </div>
                 )}
 
-                {/* 시험 시작 10분 전 임박 배너 (2줄 정렬: 시험 임박 안내 + 입실 및 착석 안내) */}
-                {currentExam.isStartingSoon && (
+                {/* 시험 시작 10분 전 임박 배너 (과목명이 '자습'인 경우 시험 시작 배너 제외) */}
+                {currentExam.isStartingSoon && !currentExam.subjectNames.includes('자습') && (
                   <div className="bg-cyan-600 border-4 border-yellow-300 rounded-2xl p-4 sm:p-5 text-center text-white font-black shadow-2xl flex items-center justify-center gap-3 sm:gap-4 animate-pulse">
                     <Bell className="w-8 h-8 text-yellow-300 shrink-0" />
                     <div className="flex flex-col items-center gap-1.5 leading-snug">
