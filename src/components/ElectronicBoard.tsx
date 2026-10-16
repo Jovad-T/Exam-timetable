@@ -26,6 +26,9 @@ import {
   Settings,
   BookOpen,
   Mic,
+  Sun,
+  SunMedium,
+  SunDim,
 } from 'lucide-react';
 import { ChalkCanvas } from './ChalkCanvas';
 import { audioAlert } from '../utils/audioAlert';
@@ -343,6 +346,103 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
         localStorage.setItem('electronic_board_theme', theme);
       } catch {}
     }
+  };
+
+  // Screen brightness control (아이들 눈부심 방지를 위한 화면 밝기 조절: 30% ~ 100%)
+  const [brightness, setBrightness] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('electronic_board_brightness');
+        if (saved) {
+          const num = Number(saved);
+          if (!isNaN(num) && num >= 30 && num <= 100) return num;
+        }
+      } catch {}
+    }
+    return 100;
+  });
+
+  const handleUpdateBrightness = (newVal: number) => {
+    const clamped = Math.min(100, Math.max(30, newVal));
+    setBrightness(clamped);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('electronic_board_brightness', String(clamped));
+      } catch {}
+    }
+  };
+
+  // Render Brightness Slider Control Component (전자칠판 화면 눈부심 방지 스크롤바)
+  const renderBrightnessController = (size: 'compact' | 'normal' | 'board' = 'normal') => {
+    const isDimmed = brightness < 100;
+    return (
+      <div
+        className={`flex items-center gap-1.5 sm:gap-2 rounded-xl shadow-xs shrink-0 select-none ${
+          size === 'board'
+            ? 'px-2.5 py-1 bg-black/60 border border-amber-400/40 backdrop-blur-xs'
+            : size === 'compact'
+            ? 'px-2 py-0.5 bg-slate-950/90 border border-slate-700/80'
+            : 'px-2.5 sm:px-3 py-1 sm:py-1.5 bg-slate-950/90 border border-slate-700/80'
+        }`}
+        title={`화면 밝기 조절 (현재 ${brightness}%) - 아이들 눈부심 방지 스크롤바`}
+      >
+        <button
+          type="button"
+          onClick={() => handleUpdateBrightness(brightness <= 60 ? 100 : 60)}
+          className="text-amber-400 hover:text-amber-300 transition cursor-pointer shrink-0 flex items-center justify-center p-0.5 rounded-md hover:bg-slate-800"
+          title={isDimmed ? `눈부심 방지 모드 적용 중 (${brightness}%) - 클릭 시 100% 복원` : '클릭 시 눈부심 방지 60% 모드로 전환'}
+        >
+          {brightness >= 80 ? (
+            <Sun className="w-3.5 h-3.5 text-amber-400" />
+          ) : brightness >= 50 ? (
+            <SunMedium className="w-3.5 h-3.5 text-amber-300" />
+          ) : (
+            <SunDim className="w-3.5 h-3.5 text-slate-400" />
+          )}
+        </button>
+
+        <span className={`text-[11px] font-bold shrink-0 ${size === 'board' ? 'text-amber-200' : 'text-slate-300'} hidden sm:inline`}>
+          밝기
+        </span>
+
+        <div className="flex items-center gap-1.5">
+          <input
+            type="range"
+            min="30"
+            max="100"
+            step="5"
+            value={brightness}
+            onChange={(e) => handleUpdateBrightness(Number(e.target.value))}
+            className="w-16 sm:w-20 md:w-24 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400 focus:outline-none"
+            title={`전자칠판 화면 밝기 조절: ${brightness}%`}
+          />
+          <span className="text-[11px] font-mono font-black text-amber-300 w-7 sm:w-8 text-right shrink-0">
+            {brightness}%
+          </span>
+        </div>
+
+        {/* Quick presets */}
+        {size !== 'compact' && (
+          <div className="hidden lg:flex items-center gap-1 pl-1 border-l border-slate-700/80 text-[10px]">
+            {[100, 80, 60].map((val) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => handleUpdateBrightness(val)}
+                className={`px-1.5 py-0.5 rounded font-black transition cursor-pointer ${
+                  brightness === val
+                    ? 'bg-amber-400 text-slate-950 font-bold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+                title={`밝기 ${val}%로 즉시 설정`}
+              >
+                {val === 100 ? '기본' : `${val}%`}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   // Fullscreen hover controls for resolution pill
@@ -1248,6 +1348,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 <span>{currentTime}</span>
               </span>
 
+              {/* 전자칠판 화면 밝기 조절 스크롤바 (아이들 눈부심 방지) */}
+              {renderBrightnessController('board')}
+
               {/* 알림 소리 ON/OFF 버튼 */}
               {alertSettings && onChangeAlertSettings && (
                 <button
@@ -1936,6 +2039,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 <Calendar className="w-4 h-4 text-yellow-300" />
                 <span>{currentFullDate}</span>
               </span>
+
+              {/* 전자칠판 화면 밝기 조절 스크롤바 (아이들 눈부심 방지) */}
+              {renderBrightnessController('board')}
             </div>
 
             {/* Right Top Notice Banner */}
@@ -2670,6 +2776,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             <span>{currentTheme.label}</span>
           </button>
 
+          {/* 전자칠판 화면 밝기 조절 스크롤바 (아이들 눈부심 방지) */}
+          {renderBrightnessController('normal')}
+
           <button
             onClick={toggleFullscreen}
             className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs font-black border border-slate-700 transition cursor-pointer"
@@ -2920,6 +3029,11 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               })}
             </div>
 
+            <span className="text-slate-600 hidden sm:inline">|</span>
+
+            {/* 전자칠판 화면 밝기 조절 스크롤바 (아이들 눈부심 방지) */}
+            {renderBrightnessController('compact')}
+
             {/* Fullscreen Date Switcher */}
             {allDays && allDays.length > 1 && onSelectDay && (
               <>
@@ -3099,6 +3213,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               position: 'absolute',
               top: 0,
               left: 0,
+              filter: brightness < 100 ? `brightness(${brightness}%)` : undefined,
+              transition: 'filter 0.2s ease',
             }}
             className="flex flex-col space-y-2 select-none"
           >
@@ -3198,7 +3314,14 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   return (
     <div ref={!isFullscreen ? boardContainerRef : undefined} className="max-w-[1380px] mx-auto w-full px-2 sm:px-4 space-y-3">
       {renderClockAndControls()}
-      {effectiveScreen === 'break_view' ? renderChalkboardContent() : renderFocusedExamScreen()}
+      <div
+        style={{
+          filter: brightness < 100 ? `brightness(${brightness}%)` : undefined,
+          transition: 'filter 0.2s ease',
+        }}
+      >
+        {effectiveScreen === 'break_view' ? renderChalkboardContent() : renderFocusedExamScreen()}
+      </div>
       {renderCenterNotificationModal()}
 
       {/* Target Class / Exam Room Edit Modal (window.prompt 완전 대체) */}
