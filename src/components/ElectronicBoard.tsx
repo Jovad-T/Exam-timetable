@@ -372,6 +372,29 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
     }
   };
 
+  // School emblem background display mode ('white' | 'transparent')
+  const [emblemBgMode, setEmblemBgMode] = useState<'white' | 'transparent'>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return (localStorage.getItem('school_emblem_bg_mode') as 'white' | 'transparent') || 'white';
+      } catch {
+        return 'white';
+      }
+    }
+    return 'white';
+  });
+
+  useEffect(() => {
+    const checkBgMode = () => {
+      try {
+        const mode = (localStorage.getItem('school_emblem_bg_mode') as 'white' | 'transparent') || 'white';
+        setEmblemBgMode(mode);
+      } catch {}
+    };
+    window.addEventListener('storage', checkBgMode);
+    return () => window.removeEventListener('storage', checkBgMode);
+  }, []);
+
   // Render Brightness Slider Control Component (전자칠판 화면 눈부심 방지 스크롤바)
   const renderBrightnessController = (size: 'compact' | 'normal' | 'board' = 'normal') => {
     const isDimmed = brightness < 100;
@@ -1323,7 +1346,11 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               {/* School Emblem */}
               {schoolLogo ? (
                 <div
-                  className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/95 border-2 border-yellow-400 p-1 flex items-center justify-center shadow-lg shrink-0 overflow-hidden"
+                  className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full border-2 border-yellow-400 p-1 flex items-center justify-center shadow-lg shrink-0 overflow-hidden transition-colors ${
+                    emblemBgMode === 'transparent'
+                      ? 'bg-slate-900/60 backdrop-blur-xs'
+                      : 'bg-white/95'
+                  }`}
                   title="학교 마크 (관리자 모드에서 첨부됨)"
                 >
                   <img
@@ -2037,7 +2064,11 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
                 {schoolLogo ? (
                   <div
-                    className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white/95 border-2 border-yellow-400 p-1 flex items-center justify-center shadow-lg shrink-0 overflow-hidden"
+                    className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full border-2 border-yellow-400 p-1 flex items-center justify-center shadow-lg shrink-0 overflow-hidden transition-colors ${
+                      emblemBgMode === 'transparent'
+                        ? 'bg-slate-900/60 backdrop-blur-xs'
+                        : 'bg-white/95'
+                    }`}
                     title="학교 마크"
                   >
                     <img

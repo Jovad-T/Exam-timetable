@@ -18,7 +18,7 @@ import { InitialClassSetupModal } from './components/InitialClassSetupModal';
 import { ScheduleUploadCard } from './components/ScheduleUploadCard';
 import { SchoolSettingsCard } from './components/SchoolSettingsCard';
 import { ShareSchoolModal } from './components/ShareSchoolModal';
-import { Sparkles, Calendar, BookOpen, Monitor, Code, RefreshCw, CheckCircle2, Palette, Hash, Grid, Cloud, Trash2, Sliders } from 'lucide-react';
+import { Sparkles, Calendar, BookOpen, Monitor, Code, RefreshCw, CheckCircle2, Palette, Hash, Grid, Cloud, Trash2, Sliders, Eye, EyeOff, Layers, Filter, Plus, Home } from 'lucide-react';
 import { cleanSlug, generateSchoolSlug } from './utils/slugUtils';
 import { getTodayActiveTabId, findTodayScheduleDay, isTodayScheduleDay } from './utils/dateUtils';
 import {
@@ -837,7 +837,24 @@ export default function App() {
     return (
       <>
         <AppModeSelector
-          onSelectClassroomMode={() => setIsInitialClassSetupOpen(true)}
+          onSelectClassroomMode={(examType) => {
+            if (examType === 'suneung') {
+              // Switch activeTab to Suneung / Mock exam day if available
+              const suneungDay = scheduleData.find((d) => d.id === 'day-suneung' || d.id === 'day-mock-12' || d.date.includes('11/'));
+              if (suneungDay && suneungDay.id) {
+                setActiveTab(suneungDay.id);
+              } else if (scheduleData.length > 0) {
+                setActiveTab(scheduleData[0].id || scheduleData[0].date);
+              }
+            } else {
+              // Regular exam day
+              const regDay = scheduleData.find((d) => d.id !== 'day-suneung' && d.id !== 'day-mock-12');
+              if (regDay && regDay.id) {
+                setActiveTab(regDay.id);
+              }
+            }
+            setIsInitialClassSetupOpen(true);
+          }}
           onSelectAdminMode={() => {
             changeAppRole('admin');
             setViewMode('developer');
@@ -986,93 +1003,181 @@ export default function App() {
             onOpenShareModal={() => setIsShareModalOpen(true)}
           />
 
-          {/* View Mode Switcher Subheader */}
-          <div className="bg-slate-800 border-b border-slate-700 text-white">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between">
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() => {
-                    changeAppRole('classroom');
-                    setViewMode('board');
-                  }}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer shadow-sm"
-                  title="교실 배포용 전자칠판 모드로 전환"
-                >
-                  <Monitor className="w-4 h-4" />
-                  <span>교실 전자칠판 모드</span>
-                </button>
+          {/* Unified 1-Line Navigation & Control Bar (스크롤 발생 없이 1줄로 완전 정리 & 미리보기 활성/비활성화 토글) */}
+          <div className="bg-slate-900 border-b border-slate-800 text-white sticky top-[65px] z-20 shadow-md">
+            <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-2">
+              <div className="flex items-center justify-between gap-2 overflow-x-hidden whitespace-nowrap">
+                
+                {/* Left: Mode Shortcuts & Date Tabs (스크롤 없이 1줄 콤팩트 표시) */}
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                  <button
+                    onClick={() => changeAppRole('selector')}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer border border-slate-700/80 shrink-0"
+                    title="모드 선택 화면으로 돌아가기"
+                  >
+                    <span>🏠</span>
+                    <span className="hidden md:inline">모드 선택</span>
+                  </button>
 
-                <button
-                  onClick={() => {
-                    changeAppRole('selector');
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-700 hover:bg-slate-600 text-slate-200 transition cursor-pointer"
-                  title="모드 선택 화면으로 돌아가기"
-                >
-                  <span>🏠 모드 선택</span>
-                </button>
+                  <button
+                    onClick={() => {
+                      changeAppRole('classroom');
+                      setViewMode('board');
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600/90 hover:bg-emerald-500 text-white transition cursor-pointer shadow-xs shrink-0"
+                    title="교실 배포용 전자칠판 전체 모드로 즉시 전환"
+                  >
+                    <Monitor className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">교실 모드</span>
+                  </button>
 
-                <div className="h-4 w-px bg-slate-700 mx-1"></div>
+                  <div className="h-4 w-px bg-slate-700 mx-0.5"></div>
 
-                <button
-                  onClick={() => setViewMode('board')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    viewMode === 'board'
-                      ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                      : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
-                  }`}
-                >
-                  <Monitor className="w-4 h-4" />
-                  <span>미리보기</span>
-                </button>
+                  {/* Date Tabs (1줄 정렬, 스크롤 없는 콤팩트 버튼) */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => setActiveTab('ALL')}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer shrink-0 ${
+                        activeTab === 'ALL'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700/60'
+                      }`}
+                      title="전체 시험 일정 보기"
+                    >
+                      <Layers className="w-3 h-3" />
+                      <span>전체</span>
+                    </button>
 
-                <button
-                  onClick={() => setViewMode('developer')}
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    viewMode === 'developer'
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
-                  }`}
-                >
-                  <Code className="w-4 h-4" />
-                  <span>관리자 편집 (시간표/코드)</span>
-                </button>
-              </div>
+                    {(Array.isArray(scheduleData) ? scheduleData : []).map((day) => {
+                      const isSelected = activeTab === day.id || activeTab === day.date;
+                      const isToday = isTodayScheduleDay(day);
 
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <button
-                  type="button"
-                  onClick={handleClearAllSchedule}
-                  className="text-xs text-rose-300 hover:text-white hover:bg-rose-500/25 border border-rose-400/30 px-2 sm:px-2.5 py-1 rounded-lg flex items-center gap-1 font-semibold transition cursor-pointer"
-                  title="등록된 시험 시간표(더미 데이터 포함)를 모두 비우고 빈 상태로 만듭니다"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                  <span>시간표 비우기</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleResetSample}
-                  className="text-xs text-slate-300 hover:text-white hover:bg-slate-700/60 border border-slate-600/50 px-2 sm:px-2.5 py-1 rounded-lg flex items-center gap-1 font-semibold transition cursor-pointer"
-                  title="체험용 기본 샘플 시간표로 다시 복원합니다"
-                >
-                  <RefreshCw className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>샘플 복원</span>
-                </button>
+                      return (
+                        <button
+                          key={day.id || day.date}
+                          onClick={() => setActiveTab(day.id || day.date)}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer shrink-0 ${
+                            isSelected
+                              ? 'bg-indigo-600 text-white shadow-xs'
+                              : isToday
+                              ? 'bg-amber-950/70 text-yellow-300 border border-yellow-500/50 hover:bg-amber-900/80'
+                              : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700/60'
+                          }`}
+                          title={isToday ? `${day.date} (오늘 시험)` : `${day.date} 시험 시간표`}
+                        >
+                          <Calendar className={`w-3 h-3 ${isSelected ? 'text-indigo-200' : isToday ? 'text-yellow-400' : 'text-slate-400'}`} />
+                          <span>{day.date}</span>
+                          {isToday && (
+                            <span className="text-[9px] bg-yellow-400 text-slate-950 px-1 rounded font-black">
+                              오늘
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+
+                    <button
+                      onClick={handleAddDay}
+                      className="flex items-center justify-center w-6 h-6 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/80 hover:text-white transition cursor-pointer shrink-0"
+                      title="새 시험 일자 추가"
+                    >
+                      <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right: Grade Filter + ⭐ 미리보기 토글(활성/비활성화) + Quick Actions */}
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                  {/* Grade Filter */}
+                  <div className="flex items-center gap-0.5 bg-slate-800/90 p-0.5 rounded-lg border border-slate-700/80 text-xs font-black shrink-0">
+                    <span className="text-[10px] text-slate-400 px-1.5 flex items-center gap-1 hidden lg:flex">
+                      <Filter className="w-3 h-3 text-indigo-400" />
+                      학년:
+                    </span>
+                    {['1학년', '2학년', '3학년'].map((grade) => {
+                      const isGradeActive = selectedGrade === grade;
+                      return (
+                        <button
+                          key={grade}
+                          onClick={() => setSelectedGrade(grade)}
+                          className={`px-2 py-0.5 rounded-md text-xs font-black transition cursor-pointer ${
+                            isGradeActive
+                              ? 'bg-indigo-600 text-white shadow-xs'
+                              : 'text-slate-300 hover:text-white hover:bg-slate-700'
+                          }`}
+                        >
+                          {grade}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="h-4 w-px bg-slate-700 mx-0.5"></div>
+
+                  {/* ⭐ 미리보기 버튼 (활성 / 비활성화를 시켜서 아래 시간표가 보이고 안 보이게 제어) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewMode((prev) => (prev === 'board' ? 'developer' : 'board'));
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-black transition cursor-pointer shrink-0 shadow-xs ${
+                      viewMode === 'board'
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 ring-2 ring-emerald-300/80 shadow-emerald-500/20'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700'
+                    }`}
+                    title={
+                      viewMode === 'board'
+                        ? '미리보기 활성화 중입니다. 클릭하면 비활성화되어 아래 시간표 편집 화면이 표시됩니다.'
+                        : '미리보기 비활성화 중입니다. 클릭하면 활성화되어 전자칠판 실제 화면 미리보기가 켜집니다.'
+                    }
+                  >
+                    {viewMode === 'board' ? (
+                      <>
+                        <Eye className="w-3.5 h-3.5 text-slate-950 stroke-[2.5]" />
+                        <span>미리보기</span>
+                        <span className="bg-slate-950 text-emerald-300 text-[10px] px-1.5 py-0.2 rounded-full font-black ml-0.5">
+                          활성
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff className="w-3.5 h-3.5 text-slate-400" />
+                        <span>미리보기</span>
+                        <span className="bg-slate-700 text-slate-300 text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-0.5">
+                          비활성
+                        </span>
+                      </>
+                    )}
+                  </button>
+
+                  <div className="h-4 w-px bg-slate-700 mx-0.5 hidden sm:block"></div>
+
+                  {/* Secondary Quick Actions */}
+                  <div className="flex items-center gap-1 hidden sm:flex shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleClearAllSchedule}
+                      className="text-xs text-rose-300 hover:text-white hover:bg-rose-500/20 border border-rose-400/30 px-2 py-1 rounded-lg flex items-center gap-1 font-semibold transition cursor-pointer"
+                      title="등록된 시험 시간표(더미 데이터 포함)를 모두 비우고 빈 상태로 만듭니다"
+                    >
+                      <Trash2 className="w-3 h-3 text-rose-400" />
+                      <span className="hidden xl:inline">시간표 비우기</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetSample}
+                      className="text-xs text-slate-300 hover:text-white hover:bg-slate-700/60 border border-slate-600/50 px-2 py-1 rounded-lg flex items-center gap-1 font-semibold transition cursor-pointer"
+                      title="체험용 기본 샘플 시간표로 다시 복원합니다"
+                    >
+                      <RefreshCw className="w-3 h-3 text-indigo-400" />
+                      <span className="hidden xl:inline">샘플 복원</span>
+                    </button>
+                  </div>
+                </div>
+
               </div>
             </div>
           </div>
-
-          {/* Date Tabs (For Admin View) */}
-          {viewMode === 'developer' && (
-            <DateTabs
-              scheduleData={scheduleData}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              selectedGrade={selectedGrade}
-              setSelectedGrade={setSelectedGrade}
-              onAddDay={handleAddDay}
-            />
-          )}
         </div>
       )}
 

@@ -24,7 +24,6 @@ export async function extractScheduleWithClientGemini(params: ExtractParams): Pr
 
   const client = new GoogleGenAI({ apiKey: apiKey.trim() });
 
-  // Map requested model to reliable Google GenAI production models
   const reqModel = (modelChoice || '').toLowerCase();
   let geminiModel = 'gemini-3.8-flash';
   if (reqModel.includes('pro')) {
@@ -38,34 +37,35 @@ export async function extractScheduleWithClientGemini(params: ExtractParams): Pr
   }
 
   const systemInstruction = `
-당신은 고등학교 시험 시간표 PDF 및 이미지를 분석하여 프론트엔드 애플리케이션에서 사용할 수 있는 구조화된 JSON 데이터로 변환하는 최고 전문가입니다.
+당신은 고등학교 및 대학수학능력시험 시간표 PDF와 이미지를 분석하여 프론트엔드 애플리케이션에서 사용할 수 있는 구조화된 JSON 데이터로 변환하는 최고 전문가입니다.
 
-[사고 과정 (Chain of Thought - CoT) 및 정밀 분석 지침]
-1. 문서 구조 및 다중 날짜(Multi-Day) 분석 단계:
-   - PDF 텍스트 또는 이미지에 여러 날짜(예: 10/12, 10/13, 10/14 등 복수의 날짜/요일)가 포함되어 있는 경우, 절대로 하나의 날짜로 병합하거나 누락하지 말고, 각 날짜별로 개별 DayExamSchedule 객체를 분리하여 배열(Array)에 모두 포함하십시오.
-   - 날짜(date), 교시(period), 입실시간(entryTime), 시험시간(time), 과목명(name), 과목코드(subjectCode), 시험시간(분)(duration), 대상반(targetClass)의 컬럼 및 행 구조를 철저히 파악하십시오.
-2. '입실 시간' / '입실' 열 자동 감지 및 entryTime 매핑 단계:
-   - PDF 내 테이블에서 '입실 시간', '입실', '입실완료' 등의 키워드가 포함된 열(Column)을 자동으로 감지하여, 추출된 JSON의 각 SubjectItem 객체에 'entryTime' 필드로 정확히 매핑하십시오.
-   - 만약 명시적인 입실 시간이 별도로 없다면, 시험 시작 시간 10분 전 시각(예: 09:30 시작이면 09:20)을 산출하여 'entryTime'에 기재하십시오.
-3. 과목코드(subjectCode) 분리 추출 단계:
-   - 과목명에 괄호로 과목코드(예: '경제수학(04)', '물질과 에너지(11)')가 포함되어 있는 경우, 괄호 안의 번호를 추출하여 'subjectCode' 필드에 별도로 기재하고, 'name'에는 괄호와 코드를 제외한 순수 과목명만 남기십시오.
-4. '자습', '조례', '종례' 등 비시험 시간대 누락 방지 단계:
-   - '1교시 자습', '자습', '조례' 등 시험이 아닌 자습 시간이나 특별 활동 시간대도 누락하지 말고, 해당 교시의 과목 목록(subjects)에 포함하십시오.
-5. 모든 교시(1교시, 2교시, 3교시 등) 누락 없는 추출 단계:
-   - 1교시, 2교시뿐만 아니라 3교시 및 그 이후의 모든 교시 데이터까지 누락 없이 철저히 분석하여 schedule 배열에 포함하십시오.
-6. 유의사항(notice) 주의:
-   - 문서 하단 또는 상단에 나열된 장문의 학교 시험 수칙이나 번호 매겨진 일반 규정(예: "1. 다양한 과목 선택으로...", "2. 고사실 배정 확인...", 결시 서류 등)은 notice 필드에 절대 넣지 마십시오.
-   - notice는 "최선을 다하기! 부정행위 금지! 책상 서랍 비우기! 수정테이프 불가!"와 같이 전자칠판 상단에 들어갈 짧은 한 줄 격려/주의 문구만 넣거나 기본값을 유지하십시오.
-7. 최종 출력:
-   - 지정된 JSON 스키마에 부합하는 유효한 JSON 배열만 출력하십시오.
+[교시별 상세 시간표 및 구조 분석 프롬프트 지침]
+1. 문서 구조 및 다중 날짜(Multi-Day) 정밀 분석:
+   - 업로드된 시간표 문서에 여러 날짜(예: 10/12, 10/13 등)가 포함되어 있는 경우 절대 누락하거나 합치지 말고, 각 날짜별로 개별 DayExamSchedule 객체로 분리하여 배열로 구성하십시오.
+   - 각 날짜별로 교시(period), 과목명(name), 과목코드(subjectCode), 입실시간(entryTime), 시험 시작/종료 시각(time), 소요 시간(분)(duration), 대상 반(targetClass)의 표 구조를 완벽히 독해하십시오.
+
+2. '교시별 상세 시간표' 학습 및 자동 추출 강화:
+   - 교시별(1교시, 2교시, 3교시, 점심시간 등) 상세 시간표의 시작 시각과 종료 시각을 정확히 포착하십시오.
+   - **시험 시작 시간**과 **종료 시간**을 "HH:MM ~ HH:MM" 형식(예: "09:20~10:20" 또는 "08:40 ~ 10:00")으로 'time' 필드에 정확히 기재하십시오.
+   - **소요 시간(분)**을 계산하여 'duration' 필드에 정수(예: 50, 60, 80, 100 등)로 반드시 입력하십시오. (예: 09:20~10:20은 60분)
+   - **입실 완료 시간**('entryTime')은 표에 명시된 입실 시간(예: "09:10", "08:10")을 추출하고, 명시된 시각이 없다면 시험 시작 10분 전 시각을 계산하여 기재하십시오.
+
+3. 과목명 및 과목코드 분리:
+   - 과목명에 괄호로 과목코드(예: '기하(03)', '경제수학(04)')가 포함된 경우 괄호 안의 번호를 'subjectCode'에 분리하고 'name'에는 순수 과목명만 남기십시오.
+
+4. 비시험 시간대(자습/조례/점심) 포함:
+   - '1교시 자습', '점심시간', '조례' 등 시험 외 시간대도 누락하지 말고 subjects 배열에 포함하십시오.
+
+5. 불필요한 공지 제거:
+   - 학교 공지사항이나 장문 수칙은 제외하고 전자칠판 상단 격려 문구 기본값을 유지하십시오.
 `;
 
   const isPdf = (mimeType && mimeType.includes('pdf')) || (imageBase64 && imageBase64.includes('application/pdf'));
   const promptText = extractedText
-    ? `다음은 PDF 문서에서 추출한 텍스트 데이터입니다:\n\n${extractedText}\n\n이 텍스트를 위 사고 과정(CoT) 지침에 따라 철저히 분석하여, PDF 내 '입실'/'입실 시간' 열을 자동 감지해 각 과목의 'entryTime'에 매핑하고, 3교시를 포함한 모든 교시를 누락 없이 지정된 JSON 구조로 변환해 주세요.`
+    ? `다음은 PDF 문서에서 추출한 텍스트 데이터입니다:\n\n${extractedText}\n\n이 텍스트와 교시별 상세 시간표 지침에 따라 각 과목의 시험 시작 시간, 종료 시간, 소요 시간(분), 입실 완료 시간을 정확히 자동 추출하여 지정된 JSON 구조로 변환해 주세요.`
     : isPdf
-    ? `이 고등학교 시험 시간표 PDF 문서를 시각적 표 구조와 함께 정밀 분석하여, 각 시험 일자별로 분리하고, 입실시간(entryTime), 과목코드, 자습/조례 및 3교시를 포함한 모든 교시 데이터를 누락 없이 date, notice, schedule(period, subjects) 구조의 JSON 배열로 추출해 주세요.`
-    : `이 고등학교 시험 시간표 이미지를 분석하여 각 시험 일자별로 분리하고, 입실시간(entryTime), 과목코드, 자습/조례 및 3교시를 포함한 모든 교시 데이터를 누락 없이 date, notice, schedule(period, subjects) 구조의 JSON 배열로 추출해 주세요.`;
+    ? `이 고등학교/수능 시험 시간표 PDF 문서를 시각적 표 구조와 함께 정밀 분석하여, 교시별 과목명, 시험 시작 시간, 종료 시간, 소요 시간(분), 입실 완료 시간을 완벽히 자동 추출하여 date, notice, schedule 구조의 JSON 배열로 생성해 주세요.`
+    : `이 고등학교/수능 시험 시간표 이미지를 정밀 분석하여, 교시별 과목명, 시험 시작 시간, 종료 시간, 소요 시간(분), 입실 완료 시간을 완벽히 자동 추출하여 date, notice, schedule 구조의 JSON 배열로 생성해 주세요.`;
 
   const parts: any[] = [];
   if (extractedText) {
@@ -95,7 +95,7 @@ export async function extractScheduleWithClientGemini(params: ExtractParams): Pr
         items: {
           type: Type.OBJECT,
           properties: {
-            date: { type: Type.STRING, description: '시험 날짜 (예: "10/13(목)")' },
+            date: { type: Type.STRING, description: '시험 날짜 (예: "10/13" 또는 "11/13")' },
             notice: { type: Type.STRING, description: '유의사항' },
             schedule: {
               type: Type.ARRAY,
@@ -112,9 +112,9 @@ export async function extractScheduleWithClientGemini(params: ExtractParams): Pr
                       properties: {
                         name: { type: Type.STRING, description: '과목명' },
                         subjectCode: { type: Type.STRING, description: '과목코드' },
-                        entryTime: { type: Type.STRING, description: '입실 시간' },
-                        time: { type: Type.STRING, description: '시험 시간' },
-                        duration: { type: Type.INTEGER, description: '시험 시간(분)' },
+                        entryTime: { type: Type.STRING, description: '입실 완료 시간 (예: "08:10")' },
+                        time: { type: Type.STRING, description: '시험 시작 및 종료 시간 (예: "08:40 ~ 10:00")' },
+                        duration: { type: Type.INTEGER, description: '소요 시간 분 (예: 80)' },
                         targetClass: { type: Type.STRING, description: '대상 반 또는 학년' },
                       },
                       required: ['name', 'subjectCode', 'entryTime', 'time', 'duration', 'targetClass'],
@@ -146,7 +146,7 @@ export async function extractScheduleWithClientGemini(params: ExtractParams): Pr
   const result: DayExamSchedule[] = parsed.map((item: any, idx: number) => ({
     id: item.id || `day-parsed-${Date.now()}-${idx}`,
     date: item.date || `10/${12 + idx}`,
-    fullTitle: item.fullTitle || `2026학년도 2학기 1차 고사 시간표(${item.date || `10/${12 + idx}`})`,
+    fullTitle: item.fullTitle || `2026학년도 2학기 고사 시간표(${item.date || `10/${12 + idx}`})`,
     notice: cleanNoticeText(item.notice),
     bottomNotice: item.bottomNotice || DEFAULT_BOTTOM_NOTICE,
     schedule: item.schedule || [],
