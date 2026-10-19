@@ -309,49 +309,9 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
 
             {/* Schedule Content */}
             <div className="p-6 space-y-6">
-              {/* 모의고사 모드 전용 교시 선택 탭 바 (1교시부터 4교시 중 선택한 교시만 집중 표시) */}
+              {/* 모의고사 모드: '전체' 고정 모드로 동작하도록 버튼 제거 */}
               {isMockSchedule(day) && (
-                <div className="bg-slate-900 text-white p-3.5 rounded-2xl border border-slate-700 shadow-md space-y-2">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <span className="text-xs sm:text-sm font-black text-purple-300 flex items-center gap-1.5">
-                      <Award className="w-4 h-4 text-yellow-300" />
-                      <span>교시 선택 (예비령 · 준비령 · 본령 집중 보기):</span>
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      원하는 교시를 선택하면 해당 교시의 타종 정보만 깔끔하게 표시됩니다
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedMockPeriodId('all')}
-                      className={`py-2 px-3 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 ${
-                        selectedMockPeriodId === 'all'
-                          ? 'bg-purple-600 text-white shadow-xs font-black ring-2 ring-yellow-400'
-                          : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700'
-                      }`}
-                    >
-                      <span>전체 (1~4교시)</span>
-                    </button>
-                    {day.schedule.map((p) => {
-                      const isCurrent = selectedMockPeriodId === p.id;
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => setSelectedMockPeriodId(p.id || 'p-mk-1')}
-                          className={`py-2 px-3 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 ${
-                            isCurrent
-                              ? 'bg-purple-600 text-white shadow-xs font-black ring-2 ring-yellow-400'
-                              : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700'
-                          }`}
-                        >
-                          <span>{p.period}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                <div className="hidden"></div>
               )}
 
               {(isMockSchedule(day)

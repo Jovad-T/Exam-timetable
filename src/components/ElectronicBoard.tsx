@@ -1325,19 +1325,20 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
   // 전체(1~4교시) 선택 여부: 4개 교시 카드가 한 화면 안에 깔끔하게 모두 들어가도록 높이 및 스케일 동적 맞춤
   const isMockAll = isMockSchedule(daySchedule) && selectedMockPeriodId === 'all';
-  const BASE_HEIGHT = isMockAll ? 780 : 880;
+  const BASE_HEIGHT = isMockAll ? 700 : 880;
 
   // Fullscreen Safe Margins:
   // 상단 여백을 충분히 확보하여 전자칠판 상단 프레임 및 제목이 화면 위로 잘리거나 튀어나가지 않도록 설정
-  const topReservedSpace = isFullscreen ? 64 : 0;
+  const topReservedSpace = isFullscreen ? (isMockAll ? 22.5 : 45) : 0;
   const bottomReservedSpace = isFullscreen ? 36 : 0;
   const sideReservedSpace = isFullscreen ? 40 : 0;
 
   const availableWidth = Math.max(360, windowSize.width - sideReservedSpace);
   const availableHeight = Math.max(300, windowSize.height - (topReservedSpace + bottomReservedSpace));
 
-  const targetVerticalScale = availableHeight / BASE_HEIGHT;
-  const targetHorizontalScale = availableWidth / BASE_WIDTH;
+  const targetScale = Math.min(availableHeight / BASE_HEIGHT, availableWidth / BASE_WIDTH);
+  const targetVerticalScale = targetScale;
+  const targetHorizontalScale = targetScale;
 
   let autoCalculatedScale: number;
   let dynamicBaseWidth: number;
@@ -1466,7 +1467,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 <Calendar className="w-4 h-4 text-yellow-300 shrink-0" />
                 <span>
                   {isMockSchedule(daySchedule)
-                    ? '전국연합학력평가'
+                    ? '모의고사 실시일'
                     : currentFullDate}
                 </span>
               </span>
@@ -1509,44 +1510,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 </button>
               )}
 
-              {/* 모의고사 모드 전용 교시 선택 버튼 (알림 OFF 바로 옆) */}
+              {/* 모의고사 모드: '전체' 고정 모드로 동작하도록 버튼 제거 */}
               {isMockSchedule(daySchedule) && (
-                <div className="flex items-center gap-1 bg-slate-900/95 px-2 py-1 rounded-xl border border-purple-400/60 shadow-xs shrink-0">
-                  <span className="text-xs font-black text-purple-300 flex items-center gap-1 mr-0.5 whitespace-nowrap">
-                    <Award className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
-                    <span>교시:</span>
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedMockPeriodId('all')}
-                      className={`px-2 py-0.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1 whitespace-nowrap ${
-                        selectedMockPeriodId === 'all'
-                          ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white ring-2 ring-yellow-400 shadow-[0_0_10px_rgba(168,85,247,0.5)] font-black'
-                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700'
-                      }`}
-                    >
-                      <span>전체 (1~4교시)</span>
-                    </button>
-                    {daySchedule.schedule.map((p) => {
-                      const isCurrent = selectedMockPeriodId === p.id;
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => setSelectedMockPeriodId(p.id || 'p-mk-1')}
-                          className={`px-2 py-0.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1 whitespace-nowrap ${
-                            isCurrent
-                              ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white ring-2 ring-yellow-400 shadow-[0_0_10px_rgba(168,85,247,0.5)] font-black'
-                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700'
-                          }`}
-                        >
-                          <span>{p.period.split('-')[0].trim()}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                <div className="hidden"></div>
               )}
             </div>
           </div>
@@ -1980,13 +1946,13 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                                 📻 무타종 (듣기평가 직결)
                               </span>
                             ) : isG4 ? (
-                              <div className="flex items-center gap-1 flex-wrap justify-center">
+                              <div className="grid grid-cols-2 gap-1.5 w-full">
                                 {g4Options.map((opt) => (
                                   <button
                                     key={opt.key}
                                     type="button"
                                     onClick={() => setSelectedG4SubIdx(opt.subIdx === -1 ? 3 : opt.subIdx)}
-                                    className={`font-black rounded-md transition cursor-pointer ${isMockAll ? 'px-1 py-0.2 text-[9px]' : 'px-1.5 py-0.5 text-[10px]'} ${
+                                    className={`w-full font-black rounded-md transition cursor-pointer ${isMockAll ? 'px-1 py-0.2 text-[9px]' : 'px-1.5 py-0.5 text-[10px]'} ${
                                       (opt.subIdx === -1 && selectedG4SubIdx === 3) || (opt.subIdx === selectedG4SubIdx && selectedG4SubIdx !== 3)
                                         ? 'bg-purple-600 text-white shadow-xs'
                                         : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
@@ -2590,7 +2556,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
         {/* Luxurious Dark Mode Chalkboard Canvas */}
         <div
-          className={`${currentTheme.canvasBg} rounded-2xl p-3.5 sm:p-4.5 md:p-5 border-4 ${currentTheme.canvasBorder} shadow-[inset_0_4px_30px_rgba(0,0,0,0.92)] text-white relative flex flex-col justify-between select-none`}
+          className={`${currentTheme.canvasBg} rounded-2xl p-2 sm:p-3.5 md:p-5 border-4 ${currentTheme.canvasBorder} shadow-[inset_0_4px_30px_rgba(0,0,0,0.92)] text-white relative flex flex-col justify-between select-none`}
         >
           {/* Direct Electronic Board Drawing Layer */}
           <ChalkCanvas
@@ -3055,38 +3021,21 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                     </div>
                   </div>
 
-                  {/* 시험 장소 */}
+                  {/* 현재 시간 */}
                   <div className="bg-white rounded-2xl p-4 sm:p-5 border-3 border-slate-300 shadow-xl flex items-center justify-between gap-3">
                     <div className="flex items-center gap-4 min-w-0">
-                      <div className="w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md">
-                        <MapPin className="w-7 h-7 sm:w-9 sm:h-9" />
+                      <div className="w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                        <Clock className="w-7 h-7 sm:w-9 sm:h-9" />
                       </div>
                       <div className="min-w-0">
                         <div className="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-wider">
-                          시험 장소 / 고사장
+                          현재 시간
                         </div>
-                        <div className="text-xl sm:text-2xl md:text-3xl font-black text-slate-950 truncate tracking-tight">
-                          {primarySubject.targetClass || `${attendance.grade}학년 ${attendance.classNum}반 교실`}
+                        <div className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-950 truncate tracking-tight font-mono">
+                          {currentTime}
                         </div>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTempTargetClassValue(primarySubject.targetClass || '행정학급');
-                        setTargetClassModal({
-                          isOpen: true,
-                          periodIdx: focusedPeriodIdx,
-                          subjectIdx: 0,
-                          subName: primarySubject.name,
-                          initialValue: primarySubject.targetClass || '행정학급',
-                        });
-                      }}
-                      className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition cursor-pointer shrink-0 border border-slate-300 shadow-2xs"
-                      title="시험 장소 수정"
-                    >
-                      <Edit3 className="w-4 h-4 text-slate-700" />
-                    </button>
                   </div>
 
                   {/* 시험 시간 */}
