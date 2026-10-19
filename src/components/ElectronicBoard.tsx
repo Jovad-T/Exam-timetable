@@ -29,13 +29,16 @@ import {
   Sun,
   SunMedium,
   SunDim,
+  Coffee,
+  Award,
+  GraduationCap,
 } from 'lucide-react';
 import { ChalkCanvas } from './ChalkCanvas';
 import { audioAlert } from '../utils/audioAlert';
 import { SubjectItem } from '../types/schedule';
 import { DEFAULT_ANNOUNCEMENT_TEMPLATES } from './AlertSettingsCard';
 import { getKoreaDate, isTodayScheduleDay } from '../utils/dateUtils';
-import { cleanNoticeText } from '../data/scheduleData';
+import { cleanNoticeText, isSuneungOrMockSchedule, isMockSchedule, isSuneungSchedule, isRegularSchedule } from '../data/scheduleData';
 
 export const DAILY_ENCOURAGEMENT_QUOTES = [
   "오늘 흘린 땀방울은 내일의 찬란한 꿈을 이루는 가장 확실한 증거입니다. 힘내세요!",
@@ -173,6 +176,8 @@ interface ElectronicBoardProps {
   onSwitchToSelector?: () => void;
   maxClasses?: number;
   schoolName?: string;
+  examMode?: 'regular' | 'mock';
+  onChangeExamMode?: (mode: 'regular' | 'mock') => void;
 }
 
 // Interface for current active exam progress
@@ -217,6 +222,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   onSwitchToSelector,
   maxClasses = 15,
   schoolName,
+  examMode,
+  onChangeExamMode,
 }) => {
   const [internalIsFullscreen, setInternalIsFullscreen] = useState(false);
   const isFullscreen = externalIsFullscreen !== undefined ? externalIsFullscreen : internalIsFullscreen;
@@ -479,6 +486,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   const alertThresholdSec = alertMinutes * 60;
   const lastPlayedAlertKeyRef = useRef<string | null>(null);
   const lastPlayedStartAlertKeyRef = useRef<string | null>(null);
+  const lastPlayedPrepAlertKeyRef = useRef<string | null>(null);
 
   // Fullscreen Aspect Ratio Mode: 'photo' (첨부 사진 황금비율 ~1.63:1) vs 'wide' (가로 전체 채우기)
   // 사용자 요청: "나는 전체화면이 항상 첨부한 비율이 좋을거 같고" -> 'photo' 비율을 기본값으로 고정
@@ -542,6 +550,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   const [tempBottomNotice, setTempBottomNotice] = useState(
     daySchedule.bottomNotice || '※ 시험 시작 10분 전까지 입실을 완료하여 주시기 바랍니다 ※'
   );
+
+  // 모의고사 모드에서 교시 표시 (기본값: 'all' -> 1~4교시 전체 한줄 구성으로 동시 표시)
+  const [selectedMockPeriodId, setSelectedMockPeriodId] = useState<string>('all');
+  const [selectedG4SubIdx, setSelectedG4SubIdx] = useState<number>(0);
 
   useEffect(() => {
     setTempBottomNotice(
@@ -647,6 +659,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
     classNum: string
   ): { isMatch: boolean; isExplicit: boolean; isElective: boolean } => {
     if (!subject) return { isMatch: false, isExplicit: false, isElective: false };
+    // 수능 및 모의고사(전국연합학력평가) 시간표는 전 학급 공통 타종 일정이므로 항상 일치 처리
+    if (isSuneungOrMockSchedule(daySchedule)) {
+      return { isMatch: true, isExplicit: true, isElective: false };
+    }
     const target = (subject.targetClass || '').trim();
 
     // 1. If target is empty, '전체', or '공통' -> matches all classes in all grades
@@ -672,8 +688,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       return { isMatch: true, isExplicit: false, isElective: false };
     }
 
-    // 4. Class range check: e.g. "1~3반", "4~8반", "1-3반", "5~8반"
-    const rangeRegex = /(\d+)\s*[~-]\s*(\d+)(?:반)?/g;
+    // 4. Class range check: e.g. "1~3반", "4~8반", "1-3반", "5~8반" (반 필수)
+    const rangeRegex = /(\d+)\s*[~-]\s*(\d+)\s*반/g;
     let rangeFound = false;
     let inRange = false;
     let match;
@@ -796,7 +812,17 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           durationMin: Math.max(1, Math.round((endSec - startSec) / 60)),
         };
       })
-      .filter((item) => item.startSec > 0 && item.endSec > item.startSec);
+      .filter(
+        (item) =>
+          item.startSec > 0 &&
+          item.endSec > item.startSec &&
+          !item.periodName.includes('휴식') &&
+          !item.periodName.includes('쉬는') &&
+          !item.periodName.includes('점심') &&
+          !item.periodName.includes('중식') &&
+          !item.periodName.includes('조례') &&
+          !item.periodName.includes('청소')
+      );
   };
 
   // Real-time Current Exam Progress State
@@ -851,7 +877,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
         effectiveNowSec = target.endSec - (alertThresholdSec - 30);
       }
 
-      // Check for 10 minutes before exam start time automated alert & TTS
+      // Check for 10 minutes before exam start time automated alert & TTS (예비령)
       const startAlertTarget = (Array.isArray(parsed) ? parsed : []).find((p) => {
         const timeToStart = p.startSec - effectiveNowSec;
         return timeToStart <= 600 && timeToStart > 570; // 10분 전 (600초 ~ 570초)
@@ -864,7 +890,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           audioAlert.playAlertSound(alertSettings?.soundType || 'chime', alertSettings?.volume || 0.7);
           setActiveCenterNotification({
             type: 'warning',
-            title: `[시험 시작 10분 전]`,
+            title: `[예비령: 시험 시작 10분 전]`,
             message: `곧 ${startAlertTarget.periodName} (${startAlertTarget.subjectNames}) 시험이 시작됩니다!\n입실 및 착석을 완료해주세요.`,
             periodName: startAlertTarget.periodName,
             subjectNames: startAlertTarget.subjectNames,
@@ -894,6 +920,34 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
         }
       }
 
+      // Check for 5 minutes before exam start time automated alert (준비령: 문제지/답안지 배부)
+      const prepAlertTarget = (Array.isArray(parsed) ? parsed : []).find((p) => {
+        const timeToStart = p.startSec - effectiveNowSec;
+        return timeToStart <= 300 && timeToStart > 270; // 5분 전 (300초 ~ 270초)
+      });
+      if (prepAlertTarget && startAlertEnabled && isSoundEnabled && !prepAlertTarget.subjectNames.includes('자습')) {
+        const prepAlertKey = `prep-${prepAlertTarget.periodName}-${prepAlertTarget.startTime}`;
+        if (lastPlayedPrepAlertKeyRef.current !== prepAlertKey) {
+          audioAlert.playAlertSound(alertSettings?.soundType || 'chime', alertSettings?.volume || 0.7);
+          setActiveCenterNotification({
+            type: 'warning',
+            title: `[준비령: 시험 시작 5분 전]`,
+            message: `${prepAlertTarget.periodName} (${prepAlertTarget.subjectNames}) 준비령입니다.\n문제지 및 답안지 이상 유무를 확인해 주세요.`,
+            periodName: prepAlertTarget.periodName,
+            subjectNames: prepAlertTarget.subjectNames,
+          });
+          lastPlayedPrepAlertKeyRef.current = prepAlertKey;
+        }
+      } else {
+        const inAnyPrepWindow = parsed.some((p) => {
+          const t = p.startSec - effectiveNowSec;
+          return t <= 300 && t > 0;
+        });
+        if (!inAnyPrepWindow) {
+          lastPlayedPrepAlertKeyRef.current = null;
+        }
+      }
+
       // 1. Ongoing Exam Check: startSec <= effectiveNowSec < endSec
       const active = (Array.isArray(parsed) ? parsed : []).find((p) => effectiveNowSec >= p.startSec && effectiveNowSec < p.endSec);
       if (active) {
@@ -905,15 +959,36 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
         // Check if exam just started (within first 15 seconds)
         const startCenterKey = `center-start-${active.periodName}-${active.startTime}`;
+        const isEnglishListening =
+          (active.startTime === '13:10' || active.subjectNames.includes('영어') || active.periodName.includes('3교시')) &&
+          (active.subjectNames.includes('듣기') || isSuneungOrMockSchedule(daySchedule) || active.startTime === '13:10');
+
         if (effectiveNowSec - active.startSec <= 15 && lastCenterNotificationKeyRef.current !== startCenterKey && !active.subjectNames.includes('자습')) {
           lastCenterNotificationKeyRef.current = startCenterKey;
-          setActiveCenterNotification({
-            type: 'start',
-            title: `[${active.periodName}] 시험 시작`,
-            message: `${active.subjectNames} 시험이 시작되었습니다.\n학생들은 시험에 집중해 주시기 바랍니다.`,
-            periodName: active.periodName,
-            subjectNames: active.subjectNames,
-          });
+          
+          if (isEnglishListening) {
+            // [사용자 절대 규칙] 3교시 영어영역은 13:10분 종이 울리면 안됨 (영어듣기가 시작되서)
+            // 타종 및 소리 일체 차단! 무음 팝업 알림만 표출
+            setActiveCenterNotification({
+              type: 'start',
+              title: `[3교시 영어 영역] 듣기평가 시작`,
+              message: `※ 13:10 정각 본령(타종) 절대 금지 및 교내 정숙 ※\n영어 듣기평가 방송이 시작됩니다. 학생들은 청취에 집중해 주세요.`,
+              periodName: active.periodName,
+              subjectNames: active.subjectNames,
+            });
+          } else {
+            // 일반 시험 시작 본령 (타종 및 안내)
+            if (isSoundEnabled && startAlertEnabled) {
+              audioAlert.playAlertSound(alertSettings?.soundType || 'chime', alertSettings?.volume || 0.7);
+            }
+            setActiveCenterNotification({
+              type: 'start',
+              title: `[${active.periodName}] 시험 시작 (본령)`,
+              message: `${active.subjectNames} 시험이 시작되었습니다.\n학생들은 시험에 집중해 주시기 바랍니다.`,
+              periodName: active.periodName,
+              subjectNames: active.subjectNames,
+            });
+          }
         }
 
         // 경고 알림 시점에 도달했고 소리가 켜져 있으면 학교 차임벨 및 TTS 방송 재생 (중복 재생 방지)
@@ -1248,9 +1323,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       </div>
     );
 
-  // 사용자 요청: "날짜마다 내가 첨부한 부분이 사이즈가 달라지는데? 이건 고정해야 되지 않아?"
-  // BASE_HEIGHT를 930으로 고정하여 날짜별 교시 수나 내용에 상관없이 칠판 및 첨부 영역 사이즈가 항상 일정하게 유지되도록 함
-  const BASE_HEIGHT = 880;
+  // 전체(1~4교시) 선택 여부: 4개 교시 카드가 한 화면 안에 깔끔하게 모두 들어가도록 높이 및 스케일 동적 맞춤
+  const isMockAll = isMockSchedule(daySchedule) && selectedMockPeriodId === 'all';
+  const BASE_HEIGHT = isMockAll ? 780 : 880;
 
   // Fullscreen Safe Margins:
   // 상단 여백을 충분히 확보하여 전자칠판 상단 프레임 및 제목이 화면 위로 잘리거나 튀어나가지 않도록 설정
@@ -1299,7 +1374,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   // Render the core chalkboard content
   const renderChalkboardContent = () => (
     <div
-      className={`relative rounded-3xl p-3 sm:p-4 md:p-5 ${currentTheme.frameBg} ${currentTheme.frameBorder} border-4 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.92),inset_0_1px_2px_rgba(255,255,255,0.18)] flex flex-col justify-between`}
+      className={`relative rounded-3xl ${isMockAll ? 'p-2 sm:p-3 md:p-3.5' : 'p-3 sm:p-4 md:p-5'} ${currentTheme.frameBg} ${currentTheme.frameBorder} border-4 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.92),inset_0_1px_2px_rgba(255,255,255,0.18)] flex flex-col justify-between`}
     >
       {/* Metallic Frame Corner Accents */}
       <div
@@ -1317,7 +1392,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
       {/* Luxurious Dark Mode Chalkboard Canvas */}
       <div
-        className={`${currentTheme.canvasBg} rounded-2xl p-3.5 sm:p-4.5 md:p-5 border-4 ${currentTheme.canvasBorder} shadow-[inset_0_4px_30px_rgba(0,0,0,0.92)] text-white relative flex flex-col justify-between select-none`}
+        className={`${currentTheme.canvasBg} rounded-2xl ${isMockAll ? 'p-2.5 sm:p-3 md:p-3.5' : 'p-3.5 sm:p-4.5 md:p-5'} border-4 ${currentTheme.canvasBorder} shadow-[inset_0_4px_30px_rgba(0,0,0,0.92)] text-white relative flex flex-col justify-between select-none`}
       >
         {/* Direct Electronic Board Drawing Layer */}
         <ChalkCanvas
@@ -1337,7 +1412,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
         {/* Top Banner Header */}
         <div
-          className={`relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-3 pb-3 border-b-2 ${currentTheme.headerBorder}`}
+          className={`relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 ${isMockAll ? 'pb-2' : 'pb-3'} border-b-2 ${currentTheme.headerBorder}`}
         >
           {/* School Emblem & Title */}
           <div className="flex items-center gap-3 min-w-0 flex-1 flex-wrap">
@@ -1371,12 +1446,16 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               )}
 
               {/* Title right next to emblem */}
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 flex-wrap">
                 {schoolName && !daySchedule.fullTitle?.includes(schoolName) && (
                   <span className="text-yellow-300 font-black text-sm sm:text-lg md:text-2xl whitespace-nowrap">{schoolName}</span>
                 )}
-                <span className="text-sm sm:text-lg md:text-2xl font-black text-white tracking-tight drop-shadow-xs whitespace-nowrap">
-                  {(daySchedule.fullTitle || `2026학년도 2학기 1차 고사 시간표(${daySchedule.date})`).replace(/\s*\([^)]*\)/g, '').replace(/[()]$/g, '').trim()}
+                <span className="text-sm sm:text-lg md:text-2xl font-black text-white tracking-tight drop-shadow-xs break-keep">
+                  {isMockSchedule(daySchedule)
+                    ? '전국연합학력평가'
+                    : isSuneungOrMockSchedule(daySchedule)
+                    ? daySchedule.fullTitle
+                    : (daySchedule.fullTitle || `2026학년도 2학기 1차 고사 시간표(${daySchedule.date})`).replace(/\s*\([^)]*\)/g, '').replace(/[()]$/g, '').trim()}
                 </span>
               </div>
             </div>
@@ -1385,7 +1464,11 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             <div className="flex items-center gap-2 flex-wrap min-w-0">
               <span className="text-xs sm:text-sm md:text-base font-black text-yellow-300 bg-yellow-400/20 px-3 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs whitespace-nowrap">
                 <Calendar className="w-4 h-4 text-yellow-300 shrink-0" />
-                <span>{currentFullDate}</span>
+                <span>
+                  {isMockSchedule(daySchedule)
+                    ? '전국연합학력평가'
+                    : currentFullDate}
+                </span>
               </span>
               <span className="text-xs sm:text-sm md:text-base font-black text-emerald-300 bg-emerald-950/70 px-3 py-1 rounded-xl border border-emerald-500/50 flex items-center gap-1.5 shadow-xs font-mono whitespace-nowrap">
                 <Clock className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
@@ -1425,31 +1508,73 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                   )}
                 </button>
               )}
+
+              {/* 모의고사 모드 전용 교시 선택 버튼 (알림 OFF 바로 옆) */}
+              {isMockSchedule(daySchedule) && (
+                <div className="flex items-center gap-1 bg-slate-900/95 px-2 py-1 rounded-xl border border-purple-400/60 shadow-xs shrink-0">
+                  <span className="text-xs font-black text-purple-300 flex items-center gap-1 mr-0.5 whitespace-nowrap">
+                    <Award className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
+                    <span>교시:</span>
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMockPeriodId('all')}
+                      className={`px-2 py-0.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1 whitespace-nowrap ${
+                        selectedMockPeriodId === 'all'
+                          ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white ring-2 ring-yellow-400 shadow-[0_0_10px_rgba(168,85,247,0.5)] font-black'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700'
+                      }`}
+                    >
+                      <span>전체 (1~4교시)</span>
+                    </button>
+                    {daySchedule.schedule.map((p) => {
+                      const isCurrent = selectedMockPeriodId === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => setSelectedMockPeriodId(p.id || 'p-mk-1')}
+                          className={`px-2 py-0.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1 whitespace-nowrap ${
+                            isCurrent
+                              ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white ring-2 ring-yellow-400 shadow-[0_0_10px_rgba(168,85,247,0.5)] font-black'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700'
+                          }`}
+                        >
+                          <span>{p.period.split('-')[0].trim()}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Right Top Notice Banner */}
-          <div
-            className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-3.5 py-2 flex items-center gap-2 text-xs sm:text-sm md:text-base font-black text-yellow-300 shadow-md shrink-0 whitespace-normal break-words max-w-full`}
-          >
-            <span className="text-yellow-200 font-black break-words drop-shadow-xs">
-              {cleanNoticeText(daySchedule.notice)}
-            </span>
-            <span
-              className="inline-block w-3 h-4 bg-white/90 rotate-12 rounded-xs ml-1 shadow-xs shrink-0"
-              title="분필 아이콘"
-            />
-          </div>
+          {cleanNoticeText(daySchedule.notice)?.trim() ? (
+            <div
+              className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-3.5 py-2 flex items-center gap-2 text-xs sm:text-sm md:text-base font-black text-yellow-300 shadow-md shrink-0 whitespace-normal break-words max-w-full`}
+            >
+              <span className="text-yellow-200 font-black break-words drop-shadow-xs">
+                {cleanNoticeText(daySchedule.notice)}
+              </span>
+              <span
+                className="inline-block w-3 h-4 bg-white/90 rotate-12 rounded-xs ml-1 shadow-xs shrink-0"
+                title="분필 아이콘"
+              />
+            </div>
+          ) : null}
         </div>
 
 
 
         {/* Blackboard Body: Left Attendance Panel & Right Schedule Table */}
-        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-5 my-4 items-stretch flex-1 h-[calc(100vh-80px)] overflow-hidden">
+        <div className={`relative z-10 grid grid-cols-1 lg:grid-cols-12 ${isMockAll ? 'gap-3 my-2' : 'gap-5 my-4'} items-stretch flex-1`}>
           {/* Left Panel: Class & Attendance Box */}
-          <div className="lg:col-span-4 bg-white rounded-3xl p-4.5 text-slate-900 shadow-xl border-4 border-slate-200 flex flex-col justify-between h-full relative">
+          <div className={`lg:col-span-4 bg-white rounded-3xl ${isMockAll ? 'p-3 sm:p-3.5' : 'p-4.5'} text-slate-900 shadow-xl border-4 border-slate-200 flex flex-col justify-between h-full relative`}>
             {/* Top Red Header: 학년 / 반 드롭다운 */}
-            <div className="bg-gradient-to-r from-red-600 to-rose-700 text-white font-black text-lg sm:text-xl py-2.5 px-4 rounded-2xl text-center shadow-md flex items-center justify-center gap-3">
+            <div className={`bg-gradient-to-r from-red-600 to-rose-700 text-white font-black text-lg sm:text-xl ${isMockAll ? 'py-1.5 px-3' : 'py-2.5 px-4'} rounded-2xl text-center shadow-md flex items-center justify-center gap-3`}>
               {/* 학년 드롭다운 */}
               <div className="flex items-center gap-1.5">
                 <div className="relative">
@@ -1488,15 +1613,15 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             </div>
 
             {/* Attendance Rows Table - 글자 가독성 대폭 향상 (폰트 굵기 font-black & 큼직한 폰트) */}
-            <div className="flex-1 my-3 flex flex-col justify-around border-2 border-slate-300 rounded-2xl overflow-hidden bg-white shadow-md divide-y-2 divide-slate-300">
+            <div className={`flex-1 ${isMockAll ? 'my-1.5' : 'my-3'} flex flex-col justify-around border-2 border-slate-300 rounded-2xl overflow-hidden bg-white shadow-md divide-y-2 divide-slate-300`}>
               {/* 총원 */}
-              <div className="grid grid-cols-12 items-center bg-slate-50 flex-1 min-h-[58px]">
-                <div className="col-span-5 bg-slate-200/90 py-3.5 px-3 text-slate-950 text-center border-r-2 border-slate-300 font-black text-base sm:text-lg md:text-xl">
+              <div className={`grid grid-cols-12 items-center bg-slate-50 flex-1 ${isMockAll ? 'min-h-[42px]' : 'min-h-[58px]'}`}>
+                <div className={`col-span-5 bg-slate-200/90 ${isMockAll ? 'py-2 px-2 text-sm sm:text-base' : 'py-3.5 px-3 text-base sm:text-lg md:text-xl'} text-slate-950 text-center border-r-2 border-slate-300 font-black`}>
                   총원
                 </div>
                 <div
                   onClick={() => !isEditingAttendance && setIsEditingAttendance(true)}
-                  className="col-span-7 py-2.5 px-4 text-slate-950 text-center font-black text-2xl sm:text-3xl md:text-4xl min-h-[52px] flex items-center justify-center cursor-pointer hover:bg-slate-100/70 transition font-mono tracking-wider"
+                  className={`col-span-7 ${isMockAll ? 'py-1 px-3 min-h-[38px]' : 'py-2.5 px-4 min-h-[52px]'} text-slate-950 text-center font-black ${isMockAll ? 'text-xl sm:text-2xl md:text-3xl' : 'text-2xl sm:text-3xl md:text-4xl'} flex items-center justify-center cursor-pointer hover:bg-slate-100/70 transition font-mono tracking-wider`}
                   title="클릭하여 숫자 입력 또는 전자칠판 판서 쓰기"
                 >
                   {isEditingAttendance ? (
@@ -1507,10 +1632,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                       onChange={(e) =>
                         setAttendance({ ...attendance, totalCount: e.target.value.replace(/명$/, '') })
                       }
-                      className="w-full text-center border-2 border-indigo-500 rounded-lg px-1 py-1 font-black text-2xl font-mono text-slate-950"
+                      className={`w-full text-center border-2 border-indigo-500 rounded-lg px-1 py-0.5 font-black ${isMockAll ? 'text-xl' : 'text-2xl'} font-mono text-slate-950`}
                     />
                   ) : (
-                    <span className="font-black text-slate-950 text-2xl sm:text-3xl md:text-4xl font-mono tracking-wider">
+                    <span className={`font-black text-slate-950 ${isMockAll ? 'text-xl sm:text-2xl md:text-3xl' : 'text-2xl sm:text-3xl md:text-4xl'} font-mono tracking-wider`}>
                       {formatCountDisplay(attendance.totalCount)}
                     </span>
                   )}
@@ -1518,13 +1643,13 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               </div>
 
               {/* 응시 */}
-              <div className="grid grid-cols-12 items-center flex-1 min-h-[58px]">
-                <div className="col-span-5 bg-slate-200/90 py-3.5 px-3 text-slate-950 text-center border-r-2 border-slate-300 font-black text-base sm:text-lg md:text-xl">
+              <div className={`grid grid-cols-12 items-center flex-1 ${isMockAll ? 'min-h-[42px]' : 'min-h-[58px]'}`}>
+                <div className={`col-span-5 bg-slate-200/90 ${isMockAll ? 'py-2 px-2 text-sm sm:text-base' : 'py-3.5 px-3 text-base sm:text-lg md:text-xl'} text-slate-950 text-center border-r-2 border-slate-300 font-black`}>
                   응시
                 </div>
                 <div
                   onClick={() => !isEditingAttendance && setIsEditingAttendance(true)}
-                  className="col-span-7 py-2.5 px-4 text-emerald-700 text-center font-black text-2xl sm:text-3xl md:text-4xl min-h-[52px] flex items-center justify-center cursor-pointer hover:bg-slate-100/70 transition font-mono tracking-wider"
+                  className={`col-span-7 ${isMockAll ? 'py-1 px-3 min-h-[38px]' : 'py-2.5 px-4 min-h-[52px]'} text-emerald-700 text-center font-black ${isMockAll ? 'text-xl sm:text-2xl md:text-3xl' : 'text-2xl sm:text-3xl md:text-4xl'} flex items-center justify-center cursor-pointer hover:bg-slate-100/70 transition font-mono tracking-wider`}
                   title="클릭하여 숫자 입력 또는 전자칠판 판서 쓰기"
                 >
                   {isEditingAttendance ? (
@@ -1535,10 +1660,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                       onChange={(e) =>
                         setAttendance({ ...attendance, presentCount: e.target.value.replace(/명$/, '') })
                       }
-                      className="w-full text-center border-2 border-indigo-500 rounded-lg px-1 py-1 font-black text-2xl font-mono text-emerald-700"
+                      className={`w-full text-center border-2 border-indigo-500 rounded-lg px-1 py-0.5 font-black ${isMockAll ? 'text-xl' : 'text-2xl'} font-mono text-emerald-700`}
                     />
                   ) : (
-                    <span className="font-black text-emerald-700 text-2xl sm:text-3xl md:text-4xl font-mono tracking-wider">
+                    <span className={`font-black text-emerald-700 ${isMockAll ? 'text-xl sm:text-2xl md:text-3xl' : 'text-2xl sm:text-3xl md:text-4xl'} font-mono tracking-wider`}>
                       {formatCountDisplay(attendance.presentCount)}
                     </span>
                   )}
@@ -1546,13 +1671,13 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               </div>
 
               {/* 결번 */}
-              <div className="grid grid-cols-12 items-center bg-slate-50 flex-1 min-h-[58px]">
-                <div className="col-span-5 bg-slate-200/90 py-3.5 px-3 text-slate-950 text-center border-r-2 border-slate-300 font-black text-base sm:text-lg md:text-xl">
+              <div className={`grid grid-cols-12 items-center bg-slate-50 flex-1 ${isMockAll ? 'min-h-[42px]' : 'min-h-[58px]'}`}>
+                <div className={`col-span-5 bg-slate-200/90 ${isMockAll ? 'py-2 px-2 text-sm sm:text-base' : 'py-3.5 px-3 text-base sm:text-lg md:text-xl'} text-slate-950 text-center border-r-2 border-slate-300 font-black`}>
                   결번
                 </div>
                 <div
                   onClick={() => !isEditingAttendance && setIsEditingAttendance(true)}
-                  className="col-span-7 py-2.5 px-4 text-rose-600 text-center font-black text-2xl sm:text-3xl md:text-4xl min-h-[52px] flex items-center justify-center cursor-pointer hover:bg-slate-100/70 transition font-mono tracking-wider"
+                  className={`col-span-7 ${isMockAll ? 'py-1 px-3 min-h-[38px]' : 'py-2.5 px-4 min-h-[52px]'} text-rose-600 text-center font-black ${isMockAll ? 'text-xl sm:text-2xl md:text-3xl' : 'text-2xl sm:text-3xl md:text-4xl'} flex items-center justify-center cursor-pointer hover:bg-slate-100/70 transition font-mono tracking-wider`}
                   title="클릭하여 숫자/내용 입력 또는 전자칠판 판서 쓰기"
                 >
                   {isEditingAttendance ? (
@@ -1561,10 +1686,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                       placeholder="결시 번호 또는 없음"
                       value={attendance.absentNotes}
                       onChange={(e) => setAttendance({ ...attendance, absentNotes: e.target.value })}
-                      className="w-full text-center border-2 border-indigo-500 rounded-lg px-1 py-1 font-black text-2xl font-mono text-rose-600"
+                      className={`w-full text-center border-2 border-indigo-500 rounded-lg px-1 py-0.5 font-black ${isMockAll ? 'text-xl' : 'text-2xl'} font-mono text-rose-600`}
                     />
                   ) : (
-                    <span className="font-black text-rose-600 text-2xl sm:text-3xl md:text-4xl font-mono tracking-wider">
+                    <span className={`font-black text-rose-600 ${isMockAll ? 'text-xl sm:text-2xl md:text-3xl' : 'text-2xl sm:text-3xl md:text-4xl'} font-mono tracking-wider`}>
                       {formatAbsentDisplay(attendance.absentNotes)}
                     </span>
                   )}
@@ -1572,13 +1697,13 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               </div>
 
               {/* 끝 번호 */}
-              <div className="grid grid-cols-12 items-center flex-1 min-h-[58px]">
-                <div className="col-span-5 bg-slate-200/90 py-3.5 px-3 text-slate-950 text-center border-r-2 border-slate-300 font-black text-base sm:text-lg md:text-xl">
+              <div className={`grid grid-cols-12 items-center flex-1 ${isMockAll ? 'min-h-[42px]' : 'min-h-[58px]'}`}>
+                <div className={`col-span-5 bg-slate-200/90 ${isMockAll ? 'py-2 px-2 text-sm sm:text-base' : 'py-3.5 px-3 text-base sm:text-lg md:text-xl'} text-slate-950 text-center border-r-2 border-slate-300 font-black`}>
                   끝 번호
                 </div>
                 <div
                   onClick={() => !isEditingAttendance && setIsEditingAttendance(true)}
-                  className="col-span-7 py-2.5 px-4 text-slate-950 text-center font-black text-2xl sm:text-3xl md:text-4xl min-h-[52px] flex items-center justify-center cursor-pointer hover:bg-slate-100/70 transition font-mono tracking-wider"
+                  className={`col-span-7 ${isMockAll ? 'py-1 px-3 min-h-[38px]' : 'py-2.5 px-4 min-h-[52px]'} text-slate-950 text-center font-black ${isMockAll ? 'text-xl sm:text-2xl md:text-3xl' : 'text-2xl sm:text-3xl md:text-4xl'} flex items-center justify-center cursor-pointer hover:bg-slate-100/70 transition font-mono tracking-wider`}
                   title="클릭하여 숫자 입력 또는 전자칠판 판서 쓰기"
                 >
                   {isEditingAttendance ? (
@@ -1589,10 +1714,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                       onChange={(e) =>
                         setAttendance({ ...attendance, lastNum: e.target.value.replace(/번$/, '') })
                       }
-                      className="w-full text-center border-2 border-indigo-500 rounded-lg px-1 py-1 font-black text-2xl font-mono text-slate-950"
+                      className={`w-full text-center border-2 border-indigo-500 rounded-lg px-1 py-0.5 font-black ${isMockAll ? 'text-xl' : 'text-2xl'} font-mono text-slate-950`}
                     />
                   ) : (
-                    <span className="font-black text-slate-950 text-2xl sm:text-3xl md:text-4xl font-mono tracking-wider">
+                    <span className={`font-black text-slate-950 ${isMockAll ? 'text-xl sm:text-2xl md:text-3xl' : 'text-2xl sm:text-3xl md:text-4xl'} font-mono tracking-wider`}>
                       {formatLastNumDisplay(attendance.lastNum)}
                     </span>
                   )}
@@ -1601,10 +1726,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             </div>
 
             {/* Attendance Controls Bar */}
-            <div className="flex items-center gap-1.5 pt-1">
+            <div className={`flex items-center gap-1.5 ${isMockAll ? 'pt-0.5' : 'pt-1'}`}>
               <button
                 onClick={() => setIsEditingAttendance(!isEditingAttendance)}
-                className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-900 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1 transition cursor-pointer border border-slate-300 shadow-2xs"
+                className={`flex-1 ${isMockAll ? 'py-1.5 text-xs' : 'py-2 text-xs sm:text-sm'} bg-slate-100 hover:bg-slate-200 text-slate-900 rounded-xl font-black flex items-center justify-center gap-1 transition cursor-pointer border border-slate-300 shadow-2xs`}
               >
                 {isEditingAttendance ? (
                   <>
@@ -1675,12 +1800,12 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
           {/* Right Panel: Period Exam Schedule Table */}
           <div
-            className={`lg:col-span-8 ${currentTheme.schedulePanelBg} rounded-3xl border-3 ${currentTheme.schedulePanelBorder} p-3.5 sm:p-4.5 shadow-inner space-y-4 flex flex-col justify-between`}
+            className={`lg:col-span-8 ${currentTheme.schedulePanelBg} rounded-3xl border-3 ${currentTheme.schedulePanelBorder} ${isMockAll ? 'p-2.5 sm:p-3 space-y-2' : 'p-3.5 sm:p-4.5 space-y-4'} shadow-inner flex flex-col justify-between`}
           >
-            <div className="space-y-4">
+            <div className={isMockAll ? 'space-y-1.5' : 'space-y-4'}>
               {/* Timetable Header with Class Filter Toggle */}
               <div
-                className={`flex items-center justify-between pb-2.5 border-b-2 ${currentTheme.scheduleHeaderBorder} flex-wrap gap-2`}
+                className={`flex items-center justify-between ${isMockAll ? 'pb-1.5' : 'pb-2.5'} border-b-2 ${currentTheme.scheduleHeaderBorder} flex-wrap gap-2`}
               >
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-yellow-400 animate-pulse shrink-0" />
@@ -1695,27 +1820,29 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setFilterMyClassOnly(!filterMyClassOnly)}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black transition cursor-pointer shadow-xs border ${
-                      filterMyClassOnly
-                        ? 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 border-yellow-300 font-black'
-                        : 'bg-emerald-900/90 hover:bg-emerald-800 text-emerald-100 border-emerald-600'
-                    }`}
-                    title="우리 반 맞춤 과목만 보기 또는 전체 과목 보기 전환"
-                  >
-                    {filterMyClassOnly ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-slate-950 shrink-0" />
-                        <span>우리 반 맞춤 보기 ({attendance.grade}-{attendance.classNum})</span>
-                      </>
-                    ) : (
-                      <>
-                        <Layers className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
-                        <span>전체 과목 보기</span>
-                      </>
-                    )}
-                  </button>
+                  {!isMockSchedule(daySchedule) && (
+                    <button
+                      onClick={() => setFilterMyClassOnly(!filterMyClassOnly)}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black transition cursor-pointer shadow-xs border ${
+                        filterMyClassOnly
+                          ? 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 border-yellow-300 font-black'
+                          : 'bg-emerald-900/90 hover:bg-emerald-800 text-emerald-100 border-emerald-600'
+                      }`}
+                      title="우리 반 맞춤 과목만 보기 또는 전체 과목 보기 전환"
+                    >
+                      {filterMyClassOnly ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-slate-950 shrink-0" />
+                          <span>우리 반 맞춤 보기 ({attendance.grade}-{attendance.classNum})</span>
+                        </>
+                      ) : (
+                        <>
+                          <Layers className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+                          <span>전체 과목 보기</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1734,9 +1861,201 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 </div>
               )}
 
-              {daySchedule.schedule.map((period, pIdx) => {
+
+
+              {(isMockSchedule(daySchedule)
+                ? (selectedMockPeriodId === 'all'
+                    ? daySchedule.schedule
+                    : daySchedule.schedule.filter((p) => p.id === selectedMockPeriodId))
+                : daySchedule.schedule
+              ).map((period, pIdx) => {
                 const isCurrentActivePeriod =
                   currentExam.activePeriodIndex === pIdx && currentExam.statusType === 'ongoing';
+
+                const isEnglish = period.period.includes('3교시') && (isSuneungOrMockSchedule(daySchedule) || period.subjects.some((s) => s.name.includes('영어')));
+                const isG4 = period.id === 'p-mk-4' || period.period.includes('4교시');
+
+                // 모의고사 모드 전용: 1교시 국어 영역을 예비령 왼쪽에 넣은 1줄 4단 구성 (1~4교시 통일 레이아웃)
+                if (isMockSchedule(daySchedule)) {
+                  // 4교시의 경우 세부 과목(한국사, 탐구1, 탐구2) 선택 처리
+                  const g4Options = [
+                    { key: 'all', label: '전체 (102분)', subIdx: -1 },
+                    { key: 'history', label: '한국사 (30분)', subIdx: 0 },
+                    { key: 'inq1', label: '탐구 1 (40분)', subIdx: 1 },
+                    { key: 'inq2', label: '탐구 2 (40분)', subIdx: 2 },
+                  ];
+
+                  let activeSub = period.subjects[0];
+                  let displayPrelim = activeSub?.preliminaryBell || activeSub?.entryTime || '08:25';
+                  let displayPrep = activeSub?.prepTimeRange ? activeSub.prepTimeRange.replace(/\s+/g, '') : '08:35';
+                  let displayMain = activeSub?.time || '08:40 ~ 10:00';
+                  let displayDuration = activeSub?.duration || 80;
+                  let displayEnd = activeSub?.endBell || activeSub?.time?.split('~')[1]?.trim() || '10:00';
+                  // 교시 번호(1교시 등)는 위의 배지에서 이미 표시되므로, 과목명에서는 교시명을 제거하여 중복 방지
+                  let cleanSubjectName = (activeSub?.name || '')
+                    .replace(/^\s*\d+교시\s*[-·:]?\s*/, '')
+                    .trim();
+                  let displayTitle = cleanSubjectName || '과목 정보';
+                  let subNote = '';
+
+                  if (isG4) {
+                    displayTitle = '한국사 및 탐구 영역';
+                    if (selectedG4SubIdx === 0 && period.subjects[0]) {
+                      activeSub = period.subjects[0];
+                      displayTitle = '한국사 (필수)';
+                      displayPrelim = activeSub.preliminaryBell || '14:40';
+                      displayPrep = activeSub.prepTimeRange || '14:45';
+                      displayMain = activeSub.time || '14:50 ~ 15:20';
+                      displayDuration = activeSub.duration || 30;
+                      displayEnd = activeSub.endBell || '15:20';
+                    } else if (selectedG4SubIdx === 1 && period.subjects[1]) {
+                      activeSub = period.subjects[1];
+                      displayTitle = '탐구 1 (통합사회)';
+                      displayPrelim = activeSub.preliminaryBell || '15:25';
+                      displayPrep = activeSub.prepTimeRange || '15:30';
+                      displayMain = activeSub.time || '15:35 ~ 16:15';
+                      displayDuration = activeSub.duration || 40;
+                      displayEnd = activeSub.endBell || '16:15';
+                    } else if (selectedG4SubIdx === 2 && period.subjects[2]) {
+                      activeSub = period.subjects[2];
+                      displayTitle = '탐구 2 (통합과학)';
+                      displayPrelim = activeSub.preliminaryBell || '16:20';
+                      displayPrep = activeSub.prepTimeRange || '16:25';
+                      displayMain = activeSub.time || '16:30 ~ 17:10';
+                      displayDuration = activeSub.duration || 40;
+                      displayEnd = activeSub.endBell || '17:10';
+                    } else {
+                      // 전체 4교시 종합 일정
+                      displayPrelim = '14:40';
+                      displayPrep = '14:45';
+                      displayMain = '14:50 ~ 17:10';
+                      displayDuration = 102;
+                      displayEnd = '17:10';
+                      subNote = '한국사(14:50~15:20) · 탐구(15:35~17:10)';
+                    }
+                  }
+
+                  return (
+                    <div
+                      key={period.id || period.period}
+                      ref={(el) => {
+                        periodItemRefs.current[pIdx] = el;
+                      }}
+                      className={`bg-white rounded-2xl border-2 ${isMockAll ? 'p-1.5 sm:p-2 shadow-xs' : 'p-3 sm:p-3.5 shadow-sm'} transition-all hover:shadow-md ${
+                        isCurrentActivePeriod
+                          ? 'border-yellow-400 ring-2 ring-yellow-400/50 shadow-md'
+                          : 'border-slate-300'
+                      }`}
+                    >
+                      {/* 1줄 4단 그리드: [1. 과목정보] | [2. 예비령] | [3. 준비령] | [4. 본령] */}
+                      <div className={`grid grid-cols-1 md:grid-cols-12 ${isMockAll ? 'gap-1.5 sm:gap-2' : 'gap-2.5 sm:gap-3'} items-stretch`}>
+                        {/* 1. Left: 교시 및 과목 정보 (예비령 왼쪽 한줄 배치) */}
+                        <div className={`col-span-12 md:col-span-3 bg-slate-50 border-2 border-slate-200/90 rounded-xl ${isMockAll ? 'p-1.5 sm:p-2' : 'p-3'} flex flex-col justify-between items-center text-center`}>
+                          {/* 상단: 교시 배지 및 바로 밑 과목명 · 시험시간 */}
+                          <div className="w-full flex flex-col items-center">
+                            <div className={`flex items-center gap-1.5 flex-wrap justify-center ${isMockAll ? 'mb-0.5' : 'mb-1'}`}>
+                              <span className={`font-black bg-purple-700 text-white rounded-full shadow-2xs ${isMockAll ? 'text-[11px] px-2 py-0.2' : 'text-xs px-2.5 py-0.5'}`}>
+                                {period.period.split('-')[0].trim()}
+                              </span>
+                              {isCurrentActivePeriod && (
+                                <span className={`bg-yellow-400 text-slate-950 px-2 py-0.5 rounded-full font-black animate-pulse flex items-center gap-1 shadow-2xs ${isMockAll ? 'text-[9px]' : 'text-[10px]'}`}>
+                                  <Flame className="w-3 h-3 text-red-600" />
+                                  <span>진행 중</span>
+                                </span>
+                              )}
+                            </div>
+
+                            <h4 className={`font-black text-slate-950 leading-tight ${isMockAll ? 'text-sm sm:text-base' : 'text-base sm:text-lg'}`}>
+                              {displayTitle}
+                            </h4>
+                            <span className={`inline-block font-black bg-indigo-100 text-indigo-900 rounded-full border border-indigo-200 ${isMockAll ? 'text-[10px] px-2 py-0.2 mt-0.5' : 'text-xs px-2.5 py-0.5 mt-1'}`}>
+                              시험시간: {displayDuration}분
+                            </span>
+                          </div>
+
+                          {/* 하단 보조 정보 및 칩: 1·2교시는 사용자 요청에 따라 정규타종 라벨 제거하고 위치 보존 */}
+                          <div className={`w-full flex justify-center ${isMockAll ? 'mt-0.5 min-h-[16px]' : 'mt-2 min-h-[22px]'}`}>
+                            {isEnglish ? (
+                              <span className={`font-black bg-rose-100 text-rose-800 rounded-md border border-rose-200 shadow-2xs ${isMockAll ? 'text-[9px] px-1.5 py-0.2' : 'text-[10px] px-2.5 py-0.5'}`}>
+                                📻 무타종 (듣기평가 직결)
+                              </span>
+                            ) : isG4 ? (
+                              <div className="flex items-center gap-1 flex-wrap justify-center">
+                                {g4Options.map((opt) => (
+                                  <button
+                                    key={opt.key}
+                                    type="button"
+                                    onClick={() => setSelectedG4SubIdx(opt.subIdx === -1 ? 3 : opt.subIdx)}
+                                    className={`font-black rounded-md transition cursor-pointer ${isMockAll ? 'px-1 py-0.2 text-[9px]' : 'px-1.5 py-0.5 text-[10px]'} ${
+                                      (opt.subIdx === -1 && selectedG4SubIdx === 3) || (opt.subIdx === selectedG4SubIdx && selectedG4SubIdx !== 3)
+                                        ? 'bg-purple-600 text-white shadow-xs'
+                                        : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                                    }`}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        {/* 2. 예비령 */}
+                        <div className={`col-span-12 sm:col-span-4 md:col-span-3 bg-blue-50/90 border-2 border-blue-300 rounded-xl ${isMockAll ? 'p-1.5 sm:p-2' : 'p-3'} text-center flex flex-col justify-between shadow-2xs`}>
+                          <div>
+                            <span className={`inline-block font-black bg-blue-600 text-white rounded-md shadow-2xs ${isMockAll ? 'text-[11px] px-2 py-0.2 mb-0.5' : 'text-xs px-2.5 py-0.5 mb-1'}`}>
+                              🔔 예비령
+                            </span>
+                            <div className={`${isMockAll ? 'text-[10px]' : 'text-[11px]'} text-slate-600 font-bold`}>수험생 입실 완료</div>
+                          </div>
+                          <div className={`${isMockAll ? 'text-lg sm:text-xl my-0.5' : 'text-2xl sm:text-3xl my-1'} font-mono font-black text-blue-950 tracking-tight`}>
+                            {displayPrelim}
+                          </div>
+                          <div className={`${isMockAll ? 'text-[9px]' : 'text-[10px]'} text-blue-700 font-bold`}>입실 및 착석</div>
+                        </div>
+
+                        {/* 3. 준비령 */}
+                        <div className={`col-span-12 sm:col-span-4 md:col-span-3 bg-amber-50/90 border-2 border-amber-300 rounded-xl ${isMockAll ? 'p-1.5 sm:p-2' : 'p-3'} text-center flex flex-col justify-between shadow-2xs`}>
+                          <div>
+                            <span className={`inline-block font-black bg-amber-600 text-white rounded-md shadow-2xs ${isMockAll ? 'text-[11px] px-2 py-0.2 mb-0.5' : 'text-xs px-2.5 py-0.5 mb-1'}`}>
+                              🔔 준비령
+                            </span>
+                            <div className={`${isMockAll ? 'text-[10px]' : 'text-[11px]'} text-slate-600 font-bold`}>문제지·답안지 배부</div>
+                          </div>
+                          <div className={`${isMockAll ? 'text-lg sm:text-xl my-0.5' : 'text-2xl sm:text-3xl my-1'} font-mono font-black text-amber-950 tracking-tight`}>
+                            {displayPrep}
+                          </div>
+                          <div className={`${isMockAll ? 'text-[9px]' : 'text-[10px]'} text-amber-700 font-bold`}>문답지 확인 및 마킹</div>
+                        </div>
+
+                        {/* 4. 본령 */}
+                        <div className={`col-span-12 sm:col-span-4 md:col-span-3 bg-rose-50/95 border-2 border-rose-300 rounded-xl ${isMockAll ? 'p-1.5 sm:p-2' : 'p-3'} text-center flex flex-col justify-between shadow-2xs ring-1 ring-rose-400/40`}>
+                          <div>
+                            <span className={`inline-block font-black bg-rose-600 text-white rounded-md shadow-2xs ${isMockAll ? 'text-[11px] px-2 py-0.2 mb-0.5' : 'text-xs px-2.5 py-0.5 mb-1'}`}>
+                              {isEnglish ? '📻 본령 (무타종)' : '🔔 본령 (시험 시작)'}
+                            </span>
+                            <div className={`${isMockAll ? 'text-[10px]' : 'text-[11px]'} text-rose-800 font-bold`}>
+                              {isEnglish ? '영어 듣기평가 방송 직결' : '문제풀이 및 답안작성'}
+                            </div>
+                          </div>
+                          <div>
+                            <div className={`${isMockAll ? 'text-base sm:text-lg my-0.5' : 'text-xl sm:text-2xl my-0.5'} font-mono font-black text-rose-950 tracking-tight`}>
+                              {displayMain}
+                            </div>
+                            {subNote && (
+                              <div className={`${isMockAll ? 'text-[9px]' : 'text-[10px]'} text-rose-800 font-bold`}>
+                                {subNote}
+                              </div>
+                            )}
+                          </div>
+                          <div className={`${isMockAll ? 'text-[9px]' : 'text-[10px]'} text-rose-800 font-bold`}>
+                            종료 {displayEnd} (총 {displayDuration}분)
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
 
                 const displayedSubjects = filterMyClassOnly
                   ? getPeriodSubjectsForClass(period.subjects, attendance.grade, attendance.classNum)
@@ -1745,6 +2064,176 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 const electiveNotes = filterMyClassOnly
                   ? getElectiveNotesForPeriod(period.subjects, attendance.grade, attendance.classNum)
                   : [];
+
+                const isBreak = period.period.includes('휴식') || period.period.includes('쉬는');
+                const isLunch = period.period.includes('점심') || period.period.includes('중식');
+                const isMorningAssembly = period.period.includes('입실') || period.period.includes('조례');
+                const isCleanup = period.period.includes('채점') || period.period.includes('청소');
+
+                if (isMorningAssembly || isCleanup) {
+                  const sub0 = period.subjects[0];
+                  return (
+                    <div
+                      key={period.id || `special-${pIdx}`}
+                      ref={(el) => {
+                        periodItemRefs.current[pIdx] = el;
+                      }}
+                      className="rounded-2xl transition-all duration-300"
+                    >
+                      <div className={`p-3 sm:p-4 rounded-xl border-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md ${
+                        isMorningAssembly
+                          ? 'bg-indigo-950/80 border-indigo-400/60 text-indigo-100'
+                          : 'bg-slate-900/90 border-purple-400/60 text-purple-100'
+                      }`}>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 font-black border ${
+                            isMorningAssembly
+                              ? 'bg-indigo-500/20 border-indigo-400/50 text-indigo-300'
+                              : 'bg-purple-500/20 border-purple-400/50 text-purple-300'
+                          }`}>
+                            <Bell className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                                isMorningAssembly
+                                  ? 'bg-indigo-400 text-slate-950'
+                                  : 'bg-purple-400 text-slate-950'
+                              }`}>
+                                {period.period} ({sub0?.duration || 10}분)
+                              </span>
+                              {sub0?.proceedGuide && (
+                                <span className="text-xs font-black text-yellow-300 bg-slate-950/80 px-2.5 py-0.5 rounded-lg border border-yellow-400/40">
+                                  진행요령: {sub0.proceedGuide}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm sm:text-base font-black text-white mt-1">
+                              {sub0?.name}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 self-end sm:self-auto flex-wrap">
+                          <div className="text-xs sm:text-sm font-mono font-black text-white bg-slate-950/90 border border-slate-600 px-3 py-1.5 rounded-xl">
+                            {sub0?.time}
+                          </div>
+                          {sub0?.supervisorInfo && (
+                            <div className="text-xs sm:text-sm font-black text-yellow-300 bg-indigo-900/80 border border-indigo-400/50 px-3 py-1.5 rounded-xl">
+                              감독교사: <strong className="text-white">{sub0.supervisorInfo}</strong>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (isBreak) {
+                  return (
+                    <div
+                      key={period.id || `break-${pIdx}`}
+                      ref={(el) => {
+                        periodItemRefs.current[pIdx] = el;
+                      }}
+                      className={`rounded-2xl transition-all duration-300 ${
+                        isCurrentActivePeriod ? 'p-1.5 ring-4 ring-emerald-400 shadow-[0_0_25px_rgba(16,185,129,0.6)] animate-pulse' : ''
+                      }`}
+                    >
+                      <div className={`p-3 sm:p-4 rounded-xl border-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md ${
+                        isCurrentActivePeriod
+                          ? 'bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-900 border-emerald-400 text-emerald-100 ring-2 ring-emerald-400/50'
+                          : 'bg-emerald-950/60 border-emerald-500/40 text-emerald-200'
+                      }`}>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/50 flex items-center justify-center text-emerald-300 shrink-0">
+                            <Coffee className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black uppercase tracking-wider bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full">
+                                ☕ 휴식시간 ({period.subjects[0]?.duration || 20}분)
+                              </span>
+                              {isCurrentActivePeriod && (
+                                <span className="text-xs font-black text-yellow-300 animate-pulse flex items-center gap-1">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                                  현재 휴식 중
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm sm:text-base font-black text-white mt-0.5">
+                              {period.subjects[0]?.name || '시험 종료 후 휴식'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 self-end sm:self-auto">
+                          <div className="text-xs sm:text-sm font-mono font-black text-emerald-300 bg-emerald-900/60 border border-emerald-500/40 px-3 py-1.5 rounded-xl">
+                            {period.subjects[0]?.time}
+                          </div>
+                          {period.subjects[0]?.entryTime && (
+                            <div className="text-xs sm:text-sm font-black text-yellow-300 bg-amber-950/80 border border-amber-500/60 px-3 py-1.5 rounded-xl flex items-center gap-1">
+                              <span>다음 준비령/입실:</span>
+                              <strong className="font-mono text-white text-sm">{period.subjects[0].entryTime}</strong>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (isLunch) {
+                  return (
+                    <div
+                      key={period.id || `lunch-${pIdx}`}
+                      ref={(el) => {
+                        periodItemRefs.current[pIdx] = el;
+                      }}
+                      className={`rounded-2xl transition-all duration-300 ${
+                        isCurrentActivePeriod ? 'p-1.5 ring-4 ring-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.6)] animate-pulse' : ''
+                      }`}
+                    >
+                      <div className={`p-3.5 sm:p-4 rounded-xl border-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg ${
+                        isCurrentActivePeriod
+                          ? 'bg-gradient-to-r from-amber-950 via-orange-950 to-slate-900 border-amber-400 text-amber-100 ring-2 ring-amber-400/50'
+                          : 'bg-amber-950/70 border-amber-500/50 text-amber-200'
+                      }`}>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-300 shrink-0">
+                            <Sun className="w-5 h-5 text-amber-300" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black uppercase tracking-wider bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full">
+                                🍱 중식 및 점심시간 ({period.subjects[0]?.duration || 50}분)
+                              </span>
+                              {isCurrentActivePeriod && (
+                                <span className="text-xs font-black text-yellow-300 animate-pulse flex items-center gap-1">
+                                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                                  현재 점심시간 진행 중
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm sm:text-base font-black text-white mt-0.5">
+                              {period.subjects[0]?.name || '중식 및 휴식 (3교시 전원 입실)'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 self-end sm:self-auto flex-wrap">
+                          <div className="text-xs sm:text-sm font-mono font-black text-amber-200 bg-amber-900/60 border border-amber-500/40 px-3 py-1.5 rounded-xl">
+                            {period.subjects[0]?.time}
+                          </div>
+                          <div className="text-xs font-black text-rose-200 bg-rose-950/90 border border-rose-500/60 px-3 py-1.5 rounded-xl flex items-center gap-1">
+                            <span>🚨 3교시 준비령/입실:</span>
+                            <strong className="font-mono text-white text-sm">13:00 정각</strong>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
 
                 return (
                   <div
@@ -1756,16 +2245,28 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                       isCurrentActivePeriod ? `p-2.5 ring-4 ring-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.8)] animate-pulse` : ''
                     }`}
                   >
+                    {/* 3교시 영어 영역 특수 타종 금지 배너 */}
+                    {isEnglish && (
+                      <div className="bg-gradient-to-r from-rose-950 via-red-950 to-slate-950 border-2 border-rose-500/80 rounded-xl p-2.5 sm:px-4 sm:py-2 text-rose-200 text-xs sm:text-sm font-black flex items-center justify-between shadow-md">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base sm:text-lg">🚫</span>
+                          <span>13:10 정각 본령(타종) 절대 금지 | 영어 듣기평가 방송 송출 구간 (교내 절대 정숙)</span>
+                        </div>
+                        <span className="bg-red-500 text-white text-[10px] sm:text-xs px-2 py-0.5 rounded-md font-black shrink-0">
+                          무타종 방송 원칙
+                        </span>
+                      </div>
+                    )}
+
                     {/* Red Period Badge with Live Status Indicator */}
                     <div
-                      className={`text-white font-black text-base sm:text-lg py-1.5 px-4 sm:px-5 rounded-xl shadow-md border-2 tracking-wider flex items-center justify-between transition-all ${
+                      className={`text-white font-black text-base sm:text-lg py-1.5 px-4 sm:px-5 rounded-xl shadow-md border-2 tracking-wider flex items-center justify-between flex-wrap gap-2 transition-all ${
                         isCurrentActivePeriod
                           ? 'bg-rose-600 border-yellow-300 ring-2 ring-yellow-400 animate-pulse'
                           : 'bg-[#ef4444] border-red-300/40'
                       }`}
                     >
-                      <div className="w-12 hidden sm:block" />
-                      <div className="flex items-center gap-2 justify-center flex-1 sm:flex-initial">
+                      <div className="flex items-center gap-2">
                         <span className="font-black text-lg">{period.period}</span>
                         {isCurrentActivePeriod && (
                           <span className="bg-yellow-400 text-slate-950 text-xs px-2.5 py-0.5 rounded-full font-black animate-pulse flex items-center gap-1 shadow-xs">
@@ -1774,8 +2275,17 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                           </span>
                         )}
                       </div>
-                      <div className="text-xs font-black text-red-100 opacity-95 text-right whitespace-nowrap">
-                        {displayedSubjects.length > 0 && displayedSubjects[0].time}
+                      <div className="flex items-center gap-2 text-xs font-black text-red-100 opacity-95 text-right flex-wrap">
+                        {displayedSubjects.length > 0 && displayedSubjects[0].prepTimeRange && (
+                          <span className="bg-slate-950/70 text-yellow-300 px-2.5 py-0.5 rounded-lg border border-yellow-300/40 font-mono">
+                            준비령 {displayedSubjects[0].prepTimeRange}
+                          </span>
+                        )}
+                        {displayedSubjects.length > 0 && (
+                          <span className="font-mono bg-red-900/50 px-2.5 py-0.5 rounded-lg">
+                            본령 {displayedSubjects[0].time} ({displayedSubjects[0].duration}분)
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -1787,12 +2297,15 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                         const matchInfo = matchSubjectForClass(sub, attendance.grade, attendance.classNum);
                         const isThisClassSubject = matchInfo.isMatch;
                         const isSelfStudy = sub.name.includes('자습');
+                        const isCollectionStep = sub.name.includes('회수') || sub.name.includes('교체');
 
                         return (
                           <div
                             key={sub.id || `${sub.name}-${sIdx}`}
                             className={`grid grid-cols-12 items-center p-2.5 sm:p-3.5 text-slate-950 font-black text-base sm:text-lg transition-colors ${
-                              !filterMyClassOnly && isThisClassSubject
+                              isCollectionStep
+                                ? 'bg-amber-50/90'
+                                : !filterMyClassOnly && isThisClassSubject
                                 ? 'bg-emerald-50/90 ring-2 ring-emerald-500'
                                 : isSelfStudy
                                 ? 'bg-slate-50'
@@ -1800,22 +2313,26 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                             } ${isCurrentActivePeriod ? 'bg-amber-50/70' : ''}`}
                           >
                             {/* Subject Name - 입실처럼 정돈된 칸(박스)에 가운데 정렬 배치 */}
-                            <div className="col-span-4 sm:col-span-4 pr-1.5 sm:pr-2">
+                            <div className="col-span-4 sm:col-span-3 pr-1.5 sm:pr-2">
                               <div
                                 className={`py-1.5 px-3 rounded-xl border-2 shadow-xs flex items-center justify-center text-center gap-1.5 min-h-[52px] transition-all relative ${
-                                  !filterMyClassOnly && isThisClassSubject
+                                  isCollectionStep
+                                    ? 'bg-amber-100 border-amber-400 text-amber-950'
+                                    : !filterMyClassOnly && isThisClassSubject
                                     ? 'bg-emerald-50 border-emerald-400 text-emerald-950 ring-2 ring-emerald-400/40'
                                     : isSelfStudy
                                     ? 'bg-slate-100 border-slate-300 text-slate-700'
                                     : 'bg-slate-50 border-slate-300 text-slate-950'
                                 }`}
                               >
-                                <span className="font-black text-slate-950 text-base sm:text-lg md:text-xl tracking-tight break-keep leading-tight text-center">
+                                <span className={`font-black text-slate-950 tracking-tight break-keep leading-tight text-center ${
+                                  isCollectionStep ? 'text-xs sm:text-sm text-amber-950' : 'text-base sm:text-lg md:text-xl'
+                                }`}>
                                   {sub.subjectCode && !sub.name.includes('(')
                                     ? `${sub.name}(${sub.subjectCode})`
                                     : sub.name}
                                 </span>
-                                {!filterMyClassOnly && isThisClassSubject && (
+                                {!filterMyClassOnly && isThisClassSubject && !isSuneungOrMockSchedule(daySchedule) && (
                                   <span className="bg-emerald-600 text-white text-[10px] sm:text-[11px] px-1.5 py-0.5 rounded-md font-black shrink-0 shadow-2xs absolute right-2">
                                     우리 반
                                   </span>
@@ -1823,24 +2340,40 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                               </div>
                             </div>
 
-                            {/* Entry Time (입실) - 시인성 강화 (한 줄 아래로 줄바꿈) */}
-                            <div className="col-span-2 text-center text-indigo-950 font-black text-sm sm:text-base md:text-xl bg-indigo-50 border-2 border-indigo-300 py-1.5 px-2.5 rounded-xl shadow-xs flex flex-col items-center justify-center leading-tight min-h-[52px]">
-                              {sub.entryTime ? (
+                            {/* Entry Time / 준비령 (입실) */}
+                            <div className="col-span-2 text-center text-indigo-950 font-black text-sm sm:text-base md:text-xl bg-indigo-50 border-2 border-indigo-300 py-1.5 px-2 rounded-xl shadow-xs flex flex-col items-center justify-center leading-tight min-h-[52px]">
+                              {sub.prepTimeRange ? (
+                                <>
+                                  <span className="text-[10px] sm:text-xs bg-indigo-600 text-white px-1.5 py-0.2 rounded font-black mb-0.5">
+                                    준비령
+                                  </span>
+                                  <span className="font-mono tracking-tight text-indigo-800 text-xs sm:text-sm md:text-base font-black whitespace-nowrap">
+                                    {sub.prepTimeRange.replace(/\s+/g, '')}
+                                  </span>
+                                </>
+                              ) : sub.entryTime ? (
                                 <>
                                   <span className="font-mono tracking-tight text-indigo-700 text-base sm:text-lg md:text-2xl font-black">{sub.entryTime.replace('입실', '').trim()}</span>
-                                  <span className="text-[11px] sm:text-xs text-indigo-600 font-extrabold uppercase">입실</span>
+                                  <span className="text-[11px] sm:text-xs text-indigo-600 font-extrabold uppercase">
+                                    {isCollectionStep ? '회수/배부' : isSuneungOrMockSchedule(daySchedule) ? '본령/입실' : '입실'}
+                                  </span>
                                 </>
                               ) : (
                                 <span className="text-slate-400">입실-</span>
                               )}
                             </div>
 
-                            {/* Exam Time & Duration */}
-                            <div className="col-span-3 sm:col-span-3 text-center text-slate-950 font-black text-sm sm:text-base md:text-lg font-mono px-0.5 whitespace-nowrap flex items-center justify-center min-h-[52px]">
+                            {/* Exam Time & Duration (본령) */}
+                            <div className="col-span-3 sm:col-span-3 text-center text-slate-950 font-black text-sm sm:text-base md:text-lg font-mono px-1 whitespace-nowrap flex flex-col items-center justify-center min-h-[52px]">
+                              {isSuneungOrMockSchedule(daySchedule) && !isCollectionStep && (
+                                <span className="text-[10px] sm:text-xs text-rose-600 font-sans font-black">
+                                  본령 (문제풀이·답안작성)
+                                </span>
+                              )}
                               <div>
                                 <span>{sub.time}</span>
                                 {sub.duration ? (
-                                  <span className="text-slate-700 font-black text-xs sm:text-sm ml-0.5">
+                                  <span className="text-rose-700 font-black text-xs sm:text-sm ml-1">
                                     ({sub.duration}분)
                                   </span>
                                 ) : (
@@ -1849,7 +2382,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                               </div>
                             </div>
 
-                            {/* Target Class / Room */}
+                            {/* Target Class / Room / 진행요령 & 감독교사 */}
                             <button
                               type="button"
                               onClick={() => {
@@ -1866,15 +2399,32 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                                   initialValue: sub.targetClass || '행정학급',
                                 });
                               }}
-                              className={`col-span-3 sm:col-span-3 text-center font-black py-1.5 px-2 rounded-xl border-2 text-xs sm:text-sm md:text-base cursor-pointer transition flex items-center justify-center gap-1 shadow-2xs min-h-[52px] ${
+                              className={`col-span-3 sm:col-span-4 text-center font-black py-1.5 px-2.5 rounded-xl border-2 text-xs sm:text-sm cursor-pointer transition flex flex-col items-center justify-center gap-0.5 shadow-2xs min-h-[52px] ${
                                 isThisClassSubject
-                                  ? 'text-emerald-900 bg-emerald-100/90 border-emerald-400 hover:bg-emerald-200'
-                                  : 'text-indigo-900 bg-indigo-50 border-indigo-300 hover:bg-indigo-100'
+                                  ? 'text-emerald-950 bg-emerald-50/90 border-emerald-400 hover:bg-emerald-100'
+                                  : 'text-indigo-950 bg-indigo-50 border-indigo-300 hover:bg-indigo-100'
                               }`}
-                              title="클릭하여 대상 반/장소 수동 수정"
+                              title="클릭하여 진행요령/감독교사/대상 반 수정"
                             >
-                              <span>{sub.targetClass}</span>
-                              <Edit3 className="w-3 h-3 opacity-40 hover:opacity-100 shrink-0" />
+                              {sub.proceedGuide || sub.supervisorInfo ? (
+                                <div className="w-full text-left space-y-0.5 leading-snug">
+                                  {sub.proceedGuide && (
+                                    <div className="text-[11px] sm:text-xs font-extrabold text-slate-800 break-keep">
+                                      • {sub.proceedGuide}
+                                    </div>
+                                  )}
+                                  {sub.supervisorInfo && (
+                                    <div className="text-[11px] sm:text-xs font-black text-indigo-800 bg-indigo-100/90 px-2 py-0.5 rounded-md border border-indigo-300 inline-block break-keep">
+                                      감독교사: {sub.supervisorInfo}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-center gap-1">
+                                  <span>{sub.targetClass}</span>
+                                  <Edit3 className="w-3 h-3 opacity-40 hover:opacity-100 shrink-0" />
+                                </div>
+                              )}
                             </button>
                           </div>
                         );
@@ -1904,10 +2454,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
         {/* Blackboard Bottom Accent (두번째 사진의 멘트 - 관리자 및 전자칠판에서 수정 가능) */}
         <div
-          className={`relative z-10 pt-3 mt-1 border-t-2 ${currentTheme.bottomNoticeWrapper} flex items-center justify-center`}
+          className={`relative z-10 ${isMockAll ? 'pt-1.5 mt-0.5' : 'pt-3 mt-1'} border-t-2 ${currentTheme.bottomNoticeWrapper} flex items-center justify-center`}
         >
           <div
-            className={`w-full text-center py-2.5 px-4 ${currentTheme.bottomNoticeBg} rounded-xl border-2 ${currentTheme.bottomNoticeBorder} shadow-lg flex items-center justify-between gap-3 group relative`}
+            className={`w-full text-center ${isMockAll ? 'py-1.5 px-3' : 'py-2.5 px-4'} ${currentTheme.bottomNoticeBg} rounded-xl border-2 ${currentTheme.bottomNoticeBorder} shadow-lg flex items-center justify-between gap-3 group relative`}
           >
             {isEditingBottomNotice ? (
               <div className="flex flex-col sm:flex-row items-center gap-2 w-full">
@@ -1947,7 +2497,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               <>
                 <div className="flex-1 text-center">
                   <p
-                    className={`text-base sm:text-xl md:text-2xl lg:text-3xl font-black ${currentTheme.bottomNoticeText} tracking-wider sm:tracking-widest drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] whitespace-nowrap text-center`}
+                    className={`${isMockAll ? 'text-sm sm:text-base md:text-lg lg:text-xl' : 'text-base sm:text-xl md:text-2xl lg:text-3xl'} font-black ${currentTheme.bottomNoticeText} tracking-wider sm:tracking-widest drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] whitespace-nowrap text-center`}
                   >
                     {daySchedule.bottomNotice || '※ 시험 시작 10분 전까지 입실을 완료하여 주시기 바랍니다 ※'}
                   </p>
@@ -2087,17 +2637,27 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                   </div>
                 )}
 
-                <h2 className="text-lg sm:text-2xl md:text-3xl font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] flex items-center gap-2 whitespace-nowrap">
+                <h2 className="text-lg sm:text-2xl md:text-3xl font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] flex items-center gap-2 flex-wrap">
                   {schoolName && !daySchedule.fullTitle?.includes(schoolName) && (
                     <span className="text-yellow-300 font-black">{schoolName}</span>
                   )}
-                  <span>{(daySchedule.fullTitle || `2026학년도 2학기 1차 고사 시간표(${daySchedule.date})`).replace(/\s*\([^)]*\)/g, '').replace(/[()]$/g, '').trim()}</span>
+                  <span>
+                    {isMockSchedule(daySchedule)
+                      ? '전국연합학력평가'
+                      : isSuneungOrMockSchedule(daySchedule)
+                      ? daySchedule.fullTitle
+                      : (daySchedule.fullTitle || `2026학년도 2학기 1차 고사 시간표(${daySchedule.date})`).replace(/\s*\([^)]*\)/g, '').replace(/[()]$/g, '').trim()}
+                  </span>
                 </h2>
               </div>
 
               <span className="text-xs sm:text-sm md:text-base font-extrabold text-yellow-300 bg-yellow-400/20 px-3 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs whitespace-nowrap">
                 <Calendar className="w-4 h-4 text-yellow-300" />
-                <span>{currentFullDate}</span>
+                <span>
+                  {isMockSchedule(daySchedule)
+                    ? '전국연합학력평가'
+                    : currentFullDate}
+                </span>
               </span>
 
               {/* 전자칠판 화면 밝기 조절 스크롤바 (아이들 눈부심 방지) */}
@@ -2105,14 +2665,16 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             </div>
 
             {/* Right Top Notice Banner */}
-            <div
-              className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-4 py-2 flex items-center gap-2 text-xs sm:text-sm md:text-base font-black text-yellow-300 shadow-md shrink-0 whitespace-normal break-words max-w-full`}
-            >
-              <span className="text-yellow-200 font-black break-words drop-shadow-xs">
-                {cleanNoticeText(daySchedule.notice)}
-              </span>
-              <span className="inline-block w-3.5 h-5 bg-white/90 rotate-12 rounded-xs ml-1 shadow-xs shrink-0" />
-            </div>
+            {cleanNoticeText(daySchedule.notice)?.trim() ? (
+              <div
+                className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-4 py-2 flex items-center gap-2 text-xs sm:text-sm md:text-base font-black text-yellow-300 shadow-md shrink-0 whitespace-normal break-words max-w-full`}
+              >
+                <span className="text-yellow-200 font-black break-words drop-shadow-xs">
+                  {cleanNoticeText(daySchedule.notice)}
+                </span>
+                <span className="inline-block w-3.5 h-5 bg-white/90 rotate-12 rounded-xs ml-1 shadow-xs shrink-0" />
+              </div>
+            ) : null}
           </div>
 
           {/* Screen Mode & Period Switcher Bar */}
@@ -2660,6 +3222,33 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             </span>
           </div>
 
+          {/* Exam Mode Quick Switcher in Clock Bar */}
+          {onChangeExamMode && (
+            <div className="flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded-xl border border-slate-800 text-xs">
+              <span className="text-slate-400 text-[11px] font-bold mr-0.5 hidden sm:inline">모드:</span>
+              <button
+                type="button"
+                onClick={() => onChangeExamMode('regular')}
+                className={`px-2 py-0.5 rounded-lg text-[11px] font-black transition cursor-pointer flex items-center gap-1 ${
+                  examMode === 'regular' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <BookOpen className="w-3 h-3" />
+                <span>정기고사</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onChangeExamMode('mock')}
+                className={`px-2 py-0.5 rounded-lg text-[11px] font-black transition cursor-pointer flex items-center gap-1 ${
+                  examMode === 'mock' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Award className="w-3 h-3" />
+                <span>모의고사</span>
+              </button>
+            </div>
+          )}
+
           {/* Screen Mode Quick Switcher in Clock Bar */}
           <div className="flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded-xl border border-slate-800 text-xs">
             <span className="text-slate-400 text-[11px] font-bold mr-0.5 hidden sm:inline">화면:</span>
@@ -3094,7 +3683,31 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             {/* 전자칠판 화면 밝기 조절 스크롤바 (아이들 눈부심 방지) */}
             {renderBrightnessController('compact')}
 
-            {/* Fullscreen Date Switcher */}
+            {/* Fullscreen Exam Mode / Date Switcher */}
+            {onChangeExamMode && (
+              <>
+                <span className="text-slate-600 hidden sm:inline">|</span>
+                <div className="flex items-center gap-1 shrink-0 bg-slate-900/90 p-0.5 rounded-lg border border-slate-700/80">
+                  <button
+                    onClick={() => onChangeExamMode('regular')}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
+                      examMode === 'regular' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    정기고사
+                  </button>
+                  <button
+                    onClick={() => onChangeExamMode('mock')}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
+                      examMode === 'mock' ? 'bg-purple-600 text-white' : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    모의고사
+                  </button>
+                </div>
+              </>
+            )}
+
             {allDays && allDays.length > 1 && onSelectDay && (
               <>
                 <span className="text-slate-600 hidden sm:inline">|</span>
@@ -3103,6 +3716,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                   {allDays.map((d) => {
                     const isSelected = daySchedule.id === d.id || daySchedule.date === d.date;
                     const isToday = isTodayScheduleDay(d);
+                    const isMk = isMockSchedule(d);
+                    const isReg = isRegularSchedule(d);
+
                     return (
                       <button
                         key={d.id || d.date}
@@ -3114,9 +3730,19 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                             ? 'bg-amber-950/80 text-yellow-300 border border-yellow-500/50 hover:bg-amber-900'
                             : 'text-slate-300 hover:text-white hover:bg-slate-800'
                         }`}
-                        title={isToday ? '오늘 시험 시간표' : undefined}
+                        title={d.fullTitle || `${d.date} 시간표`}
                       >
-                        <span>{d.date}</span>
+                        <span>{isMk ? '모의고사' : d.date}</span>
+                        {isMk && (
+                          <span className="text-[9px] bg-purple-400 text-white px-1 rounded-xs font-black">
+                            모의
+                          </span>
+                        )}
+                        {isReg && (
+                          <span className="text-[9px] bg-emerald-500/30 text-emerald-300 px-1 rounded-xs font-black">
+                            정기
+                          </span>
+                        )}
                         {isToday && (
                           <span className="text-[9px] bg-yellow-400 text-slate-950 font-black px-1 rounded-xs">
                             오늘
@@ -3129,35 +3755,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               </>
             )}
 
-            <span className="text-slate-600 hidden sm:inline">|</span>
 
-            {/* Fullscreen Aspect Ratio Selector: 첨부 비율 vs 가로 전체 확장 */}
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                onClick={() => handleUpdateFullscreenAspectMode('photo')}
-                className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
-                  fullscreenAspectMode === 'photo'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                }`}
-                title="첨부 사진 속 칠판 표준 황금비율 (~1.63:1) 유지"
-              >
-                <span>첨부 비율 (1.6:1)</span>
-              </button>
-              <button
-                onClick={() => handleUpdateFullscreenAspectMode('wide')}
-                className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
-                  fullscreenAspectMode === 'wide'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                }`}
-                title="화면 가로 전체로 칠판 확장"
-              >
-                <span>가로 전체 확장</span>
-              </button>
-            </div>
-
-            <span className="text-slate-600 hidden sm:inline">|</span>
 
             {/* Simulation / Test Mode Switcher in Fullscreen */}
             <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-lg border border-slate-700/80 text-xs shrink-0">

@@ -1,11 +1,16 @@
 export interface SubjectItem {
   id?: string;
-  name: string;          // 예: "기하", "세계시민과 지리", "자습"
-  subjectCode?: string;  // 예: "03", "07", "02" (과목코드)
-  entryTime?: string;    // 예: "09:10", "09:20", "10:50" (입실시간)
-  time: string;          // 예: "09:20~10:20" (시험시간)
-  duration: number;      // 예: 60, 50, 40 (분)
-  targetClass: string;   // 예: "1~3반", "A206", "지정반", "행정학급"
+  name: string;             // 예: "기하", "세계시민과 지리", "국어"
+  subjectCode?: string;     // 예: "03", "07", "02" (과목코드)
+  entryTime?: string;       // 예: "08:30", "10:25" (입실시간 / 준비령 시각)
+  preliminaryBell?: string; // 예: "08:25" (예비령 시각)
+  prepTimeRange?: string;   // 예: "08:35" 또는 "08:35 ~ 08:40" (준비령 시각/구간)
+  time: string;             // 예: "08:40 ~ 10:00" (본령 / 진행시간)
+  duration: number;         // 예: 80, 100, 70, 30, 40 (분)
+  endBell?: string;         // 예: "10:00" (종료령 시각)
+  targetClass: string;      // 예: "1~3반", "A206", "전체"
+  proceedGuide?: string;    // 예: "문제풀이, 답안작성 (준비령: 답안지·문제지배부)"
+  supervisorInfo?: string;  // 예: "1교시 08:30-09:15(45분) / 2교시 09:15-10:00(45분)"
 }
 
 export interface PeriodSchedule {
@@ -25,8 +30,8 @@ export interface ClassAttendance {
 
 export interface DayExamSchedule {
   id?: string;
-  date: string;          // 예: "10/12", "10/13", "10/14", "10/15", "10/16"
-  fullTitle?: string;    // 예: "2026학년도 2학기 1차 고사 시간표(10/12)"
+  date: string;          // 예: "10/20", "11/13", "10/12"
+  fullTitle?: string;    // 예: "2026년 10월 고1, 2 전국연합학력평가 시험 시간표 - 10월 20일(화) (코드 12156)"
   notice: string;        // 고정: "최선을 다하기! 부정행위 금지! 책상 서랍 비우기! 수정테이프 불가!"
   bottomNotice?: string; // 하단 안내 멘트: "※ 시험 시작 10분 전까지 입실을 완료하여 주시기 바랍니다 ※"
   schedule: PeriodSchedule[];

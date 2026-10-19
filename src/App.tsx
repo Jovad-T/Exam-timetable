@@ -1,5 +1,20 @@
 import React, { useState } from 'react';
-import { defaultScheduleData, FIXED_NOTICE, DEFAULT_BOTTOM_NOTICE, cleanScheduleData, cleanNoticeText, isUnwantedBulkyNotice } from './data/scheduleData';
+import {
+  defaultScheduleData,
+  allComprehensiveScheduleData,
+  regularScheduleData,
+  mockScheduleData,
+  mockDaySchedule,
+  isSuneungOrMockSchedule,
+  isMockSchedule,
+  isSuneungSchedule,
+  isRegularSchedule,
+  FIXED_NOTICE,
+  DEFAULT_BOTTOM_NOTICE,
+  cleanScheduleData,
+  cleanNoticeText,
+  isUnwantedBulkyNotice
+} from './data/scheduleData';
 import { ScheduleData, DayExamSchedule, SubjectItem, ExamAlertSettings } from './types/schedule';
 import { Header } from './components/Header';
 import { NoticeBanner } from './components/NoticeBanner';
@@ -18,13 +33,15 @@ import { InitialClassSetupModal } from './components/InitialClassSetupModal';
 import { ScheduleUploadCard } from './components/ScheduleUploadCard';
 import { SchoolSettingsCard } from './components/SchoolSettingsCard';
 import { ShareSchoolModal } from './components/ShareSchoolModal';
-import { Sparkles, Calendar, BookOpen, Monitor, Code, RefreshCw, CheckCircle2, Palette, Hash, Grid, Cloud, Trash2, Sliders, Eye, EyeOff, Layers, Filter, Plus, Home } from 'lucide-react';
+import { Sparkles, Calendar, BookOpen, Monitor, Code, RefreshCw, CheckCircle2, Palette, Hash, Grid, Cloud, Trash2, Sliders, Eye, EyeOff, Layers, Filter, Plus, Home, GraduationCap, Award } from 'lucide-react';
 import { cleanSlug, generateSchoolSlug } from './utils/slugUtils';
 import { getTodayActiveTabId, findTodayScheduleDay, isTodayScheduleDay } from './utils/dateUtils';
 import {
   saveSchoolScheduleToCloud,
   subscribeSchoolSchedule,
   fetchSchoolScheduleFromCloud,
+  isFirestoreQuotaExceeded,
+  FIRESTORE_UPGRADE_URL,
 } from './services/firebase';
 
 export default function App() {
@@ -98,7 +115,7 @@ export default function App() {
   const initialSchedule: ScheduleData = Array.isArray(parsedSchedule) && parsedSchedule.length > 0 ? parsedSchedule : defaultScheduleData;
   const [scheduleData, setScheduleData] = useState<ScheduleData>(initialSchedule);
 
-  // Auto-clean any unwanted bulky notice on load and sync clean version
+  // Auto-clean any unwanted bulky notice on load and sync clean version to localStorage
   React.useEffect(() => {
     setScheduleData((prev) => {
       const cleaned = cleanScheduleData(prev);
@@ -106,32 +123,86 @@ export default function App() {
         try {
           localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cleaned));
         } catch {}
-        if (schoolSlug) {
-          saveSchoolScheduleToCloud(schoolSlug, cleaned, schoolName, schoolLogo, alertSettings).catch(() => {});
-        }
         return cleaned;
       }
       return prev;
     });
   }, [schoolSlug]);
 
-  // Automatically initialize activeTab to today's date (prioritizes today: 10/14, 10/15, etc.)
-  const [activeTab, setActiveTab] = useState<string>(() => {
-    return getTodayActiveTabId(initialSchedule);
+  // Track selected exam mode ('regular' | 'mock') so each mode exclusively shows its own schedule
+  const [examMode, setExamMode] = useState<'regular' | 'mock'>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('selected_exam_mode');
+        if (saved === 'regular' || saved === 'mock') {
+          return saved;
+        }
+      } catch {}
+    }
+    return 'mock';
   });
 
-  // Automatically set active tab to today's date on load and when scheduleData updates
+  // Automatically initialize activeTab matching examMode
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedMode = localStorage.getItem('selected_exam_mode');
+        if (savedMode === 'regular') {
+          const regDays = initialSchedule.filter((d) => isRegularSchedule(d));
+          return getTodayActiveTabId(regDays.length > 0 ? regDays : regularScheduleData);
+        }
+      } catch {}
+    }
+    return 'day-mock-g12';
+  });
+
+  // Keep activeTab strictly synchronized with examMode so Firestore/storage updates never revert to old dates
   React.useEffect(() => {
-    try {
-      const todayTab = getTodayActiveTabId(scheduleData);
-      setActiveTab(todayTab);
-    } catch {}
-  }, [scheduleData]);
+    if (examMode === 'mock') {
+      setActiveTab('day-mock-g12');
+    } else if (examMode === 'regular') {
+      const regDays = (Array.isArray(scheduleData) ? scheduleData : []).filter((d) => isRegularSchedule(d));
+      const existsInReg = activeTab === 'ALL' || regDays.some((d) => d.id === activeTab || d.date === activeTab);
+      if (!existsInReg) {
+        const fallbackReg = regDays.length > 0 ? regDays : regularScheduleData;
+        setActiveTab(getTodayActiveTabId(fallbackReg));
+      }
+    }
+  }, [examMode, scheduleData]);
+
   const [selectedGrade, setSelectedGrade] = useState<string>('2학년');
+
+  const handleSelectExamMode = (mode: 'regular' | 'mock') => {
+    setExamMode(mode);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('selected_exam_mode', mode);
+      } catch {}
+    }
+
+    const cleaned = cleanScheduleData(scheduleData);
+    if (JSON.stringify(cleaned) !== JSON.stringify(scheduleData)) {
+      setScheduleData(cleaned);
+    }
+
+    if (mode === 'mock') {
+      setActiveTab('day-mock-g12');
+      setSelectedGrade('2학년');
+    } else {
+      const regDays = cleaned.filter((d) => isRegularSchedule(d));
+      const targetList = regDays.length > 0 ? regDays : regularScheduleData;
+      if (regDays.length === 0) {
+        setScheduleData(allComprehensiveScheduleData);
+      }
+      setActiveTab(getTodayActiveTabId(targetList));
+    }
+  };
   const [copied, setCopied] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'board' | 'developer'>('board'); // "board" = Electronic Chalkboard, "developer" = Code/Grid
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'offline'>(() => {
+    return isFirestoreQuotaExceeded() ? 'offline' : 'synced';
+  });
   const [isSettingsExpanded, setIsSettingsExpanded] = useState<boolean>(false);
 
   // Exam end warning alert & sound settings (소리 켜기/끄기, 5분전/10분전 셋팅, TTS 음성 방송)
@@ -216,15 +287,6 @@ export default function App() {
           try {
             localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cleanedCloudData));
           } catch {}
-          if (JSON.stringify(cleanedCloudData) !== JSON.stringify(cloudData)) {
-            saveSchoolScheduleToCloud(
-              schoolSlug,
-              cleanedCloudData,
-              cloudName || schoolName,
-              logoUrl || schoolLogo,
-              cloudAlertSettings || alertSettings
-            ).catch(() => {});
-          }
         }
         if (cloudName) {
           setSchoolName(cloudName);
@@ -263,15 +325,6 @@ export default function App() {
           try {
             localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cleaned));
           } catch {}
-          if (JSON.stringify(cleaned) !== JSON.stringify(newScheduleData)) {
-            saveSchoolScheduleToCloud(
-              schoolSlug,
-              cleaned,
-              cloudName || schoolName,
-              schoolLogo,
-              cloudAlertSettings || alertSettings
-            ).catch(() => {});
-          }
         }
         
         if (cloudName) {
@@ -360,7 +413,7 @@ export default function App() {
     } catch {}
 
     // When in admin role, push updates to Cloud Firestore with debouncing (3s), skipping if offline/quota exceeded
-    if (appRole === 'admin' && cloudSyncStatus !== 'offline' && typeof window !== 'undefined' && localStorage.getItem('firestore_quota_exceeded') !== 'true') {
+    if (appRole === 'admin' && cloudSyncStatus !== 'offline' && !isFirestoreQuotaExceeded()) {
       const timer = setTimeout(() => {
         setCloudSyncStatus('syncing');
         saveSchoolScheduleToCloud(schoolSlug, scheduleData, schoolName, schoolLogo, alertSettings)
@@ -459,9 +512,20 @@ export default function App() {
     subject: SubjectItem | null;
   } | null>(null);
 
-  // Statistics
-  const totalDays = scheduleData.length;
-  const totalSubjects = (Array.isArray(scheduleData) ? scheduleData : []).reduce(
+  // Schedules filtered strictly by active examMode ('mock' -> 상시 모의고사, 'regular' -> 정기고사)
+  const modeFilteredSchedules: ScheduleData = React.useMemo(() => {
+    const all = Array.isArray(scheduleData) && scheduleData.length > 0 ? scheduleData : allComprehensiveScheduleData;
+    if (examMode === 'mock') {
+      const found = all.filter((d) => isMockSchedule(d));
+      return found.length > 0 ? found : [mockDaySchedule];
+    }
+    const foundReg = all.filter((d) => isRegularSchedule(d));
+    return foundReg.length > 0 ? foundReg : regularScheduleData;
+  }, [scheduleData, examMode]);
+
+  // Statistics for current mode
+  const totalDays = modeFilteredSchedules.length;
+  const totalSubjects = modeFilteredSchedules.reduce(
     (accDay, day) =>
       accDay +
       (Array.isArray(day?.schedule) ? day.schedule : []).reduce(
@@ -471,17 +535,13 @@ export default function App() {
     0
   );
 
-  // Selected single day object
+  // Selected single day object strictly matching current examMode
   const currentDaySchedule: DayExamSchedule =
-    (Array.isArray(scheduleData) ? scheduleData : []).find((d) => d.id === activeTab || d.date === activeTab) ||
-    (Array.isArray(scheduleData) ? scheduleData[0] : undefined) || {
-      id: 'empty-day',
-      date: '시간표 등록 대기',
-      fullTitle: `${schoolName} 시험 시간표 (등록 대기중)`,
-      notice: FIXED_NOTICE,
-      bottomNotice: DEFAULT_BOTTOM_NOTICE,
-      schedule: [],
-    };
+    modeFilteredSchedules.find((d) => d.id === activeTab || d.date === activeTab) ||
+    modeFilteredSchedules[0] ||
+    (examMode === 'mock'
+      ? mockDaySchedule
+      : regularScheduleData[0]);
 
   // Copy scheduleData code
   const handleCopyCode = () => {
@@ -561,9 +621,9 @@ export default function App() {
 
   // Reset sample
   const handleResetSample = () => {
-    if (confirm('기본 10/12 ~ 10/16 시험 시간표 샘플 데이터로 복원하시겠습니까?')) {
-      setScheduleData(defaultScheduleData);
-      setActiveTab('day-1012');
+    if (confirm('전체 표준 시험 시간표(모의고사 타종, 정기고사) 샘플 데이터로 복원하시겠습니까?')) {
+      setScheduleData(allComprehensiveScheduleData);
+      setActiveTab('day-mock-g12');
     }
   };
 
@@ -829,8 +889,8 @@ export default function App() {
   // Filtered schedules for developer view
   const displayedSchedules =
     activeTab === 'ALL'
-      ? (Array.isArray(scheduleData) ? scheduleData : [])
-      : (Array.isArray(scheduleData) ? scheduleData : []).filter((d) => d.id === activeTab || d.date === activeTab);
+      ? modeFilteredSchedules
+      : modeFilteredSchedules.filter((d) => d.id === activeTab || d.date === activeTab);
 
   // 1. Selector Mode (when no mode chosen yet)
   if (appRole === 'selector') {
@@ -838,21 +898,7 @@ export default function App() {
       <>
         <AppModeSelector
           onSelectClassroomMode={(examType) => {
-            if (examType === 'suneung') {
-              // Switch activeTab to Suneung / Mock exam day if available
-              const suneungDay = scheduleData.find((d) => d.id === 'day-suneung' || d.id === 'day-mock-12' || d.date.includes('11/'));
-              if (suneungDay && suneungDay.id) {
-                setActiveTab(suneungDay.id);
-              } else if (scheduleData.length > 0) {
-                setActiveTab(scheduleData[0].id || scheduleData[0].date);
-              }
-            } else {
-              // Regular exam day
-              const regDay = scheduleData.find((d) => d.id !== 'day-suneung' && d.id !== 'day-mock-12');
-              if (regDay && regDay.id) {
-                setActiveTab(regDay.id);
-              }
-            }
+            handleSelectExamMode(examType);
             setIsInitialClassSetupOpen(true);
           }}
           onSelectAdminMode={() => {
@@ -897,8 +943,10 @@ export default function App() {
       <div className={`min-h-screen bg-slate-950 text-white font-sans ${isFullscreen ? 'p-0 m-0' : 'pb-10'}`}>
         <ElectronicBoard
           daySchedule={currentDaySchedule}
-          allDays={scheduleData}
+          allDays={modeFilteredSchedules}
           onSelectDay={(dayId) => setActiveTab(dayId)}
+          examMode={examMode}
+          onChangeExamMode={handleSelectExamMode}
           onOpenUploadModal={() => setIsUploadModalOpen(true)}
           isFullscreen={isFullscreen}
           onToggleFullscreen={handleToggleFullscreen}
@@ -1003,12 +1051,32 @@ export default function App() {
             onOpenShareModal={() => setIsShareModalOpen(true)}
           />
 
+          {/* Quota Exceeded Notification Banner */}
+          {isFirestoreQuotaExceeded() && (
+            <div className="bg-amber-950/90 border-b border-amber-500/60 px-4 py-2 text-amber-200 text-xs font-bold flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-base">ℹ️</span>
+                <span>
+                  [안내] Firebase 무료 일일 쓰기 한도(Quota)가 소진되어 <strong>로컬 저장소(LocalStorage) 모드</strong>로 안전하게 자동 전환되었습니다. 시간표와 전자칠판 기능은 정상 작동합니다.
+                </span>
+              </div>
+              <a
+                href={FIRESTORE_UPGRADE_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="text-amber-300 hover:text-white underline font-black shrink-0 px-2.5 py-1 rounded-lg bg-amber-900/80 border border-amber-400/50"
+              >
+                Firebase 콘솔 확인 ➔
+              </a>
+            </div>
+          )}
+
           {/* Unified 1-Line Navigation & Control Bar (스크롤 발생 없이 1줄로 완전 정리 & 미리보기 활성/비활성화 토글) */}
           <div className="bg-slate-900 border-b border-slate-800 text-white sticky top-[65px] z-20 shadow-md">
             <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-2">
               <div className="flex items-center justify-between gap-2 overflow-x-hidden whitespace-nowrap">
                 
-                {/* Left: Mode Shortcuts & Date Tabs (스크롤 없이 1줄 콤팩트 표시) */}
+                {/* Left: Mode Shortcuts, Quick Exam Switcher & Date Tabs (스크롤 없이 1줄 콤팩트 표시) */}
                 <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                   <button
                     onClick={() => changeAppRole('selector')}
@@ -1033,24 +1101,61 @@ export default function App() {
 
                   <div className="h-4 w-px bg-slate-700 mx-0.5"></div>
 
-                  {/* Date Tabs (1줄 정렬, 스크롤 없는 콤팩트 버튼) */}
-                  <div className="flex items-center gap-1 shrink-0">
+                  {/* 시험 구분 퀵 전환 버튼 (정기고사 / 모의고사) */}
+                  <div className="flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-slate-700/80 shrink-0">
                     <button
-                      onClick={() => setActiveTab('ALL')}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer shrink-0 ${
-                        activeTab === 'ALL'
-                          ? 'bg-indigo-600 text-white shadow-xs'
-                          : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700/60'
+                      type="button"
+                      onClick={() => handleSelectExamMode('regular')}
+                      className={`px-2 py-0.5 rounded-md text-[11px] font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${
+                        examMode === 'regular'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200'
                       }`}
-                      title="전체 시험 일정 보기"
+                      title="정기고사(중간/기말고사) 시간표로 즉시 전환"
                     >
-                      <Layers className="w-3 h-3" />
-                      <span>전체</span>
+                      <BookOpen className="w-3 h-3 text-emerald-300" />
+                      <span>정기고사</span>
                     </button>
 
-                    {(Array.isArray(scheduleData) ? scheduleData : []).map((day) => {
-                      const isSelected = activeTab === day.id || activeTab === day.date;
+                    <button
+                      type="button"
+                      onClick={() => handleSelectExamMode('mock')}
+                      className={`px-2 py-0.5 rounded-md text-[11px] font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${
+                        examMode === 'mock'
+                          ? 'bg-purple-600 text-white shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title="전국연합학력평가 타종 시간표로 즉시 전환 (상시 운용)"
+                    >
+                      <Award className="w-3 h-3 text-purple-300" />
+                      <span>모의고사</span>
+                    </button>
+                  </div>
+
+                  <div className="h-4 w-px bg-slate-700 mx-0.5"></div>
+
+                  {/* Date Tabs (선택된 모드에 해당하는 시험 일자만 표시) */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {modeFilteredSchedules.length > 1 && (
+                      <button
+                        onClick={() => setActiveTab('ALL')}
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer shrink-0 ${
+                          activeTab === 'ALL'
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700/60'
+                        }`}
+                        title="전체 시험 일정 보기"
+                      >
+                        <Layers className="w-3 h-3" />
+                        <span>전체</span>
+                      </button>
+                    )}
+
+                    {modeFilteredSchedules.map((day) => {
+                      const isSelected = activeTab === day.id || activeTab === day.date || modeFilteredSchedules.length === 1;
                       const isToday = isTodayScheduleDay(day);
+                      const isMk = isMockSchedule(day);
+                      const isReg = isRegularSchedule(day);
 
                       return (
                         <button
@@ -1063,10 +1168,20 @@ export default function App() {
                               ? 'bg-amber-950/70 text-yellow-300 border border-yellow-500/50 hover:bg-amber-900/80'
                               : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700/60'
                           }`}
-                          title={isToday ? `${day.date} (오늘 시험)` : `${day.date} 시험 시간표`}
+                          title={day.fullTitle || `${day.date} 시험 시간표`}
                         >
                           <Calendar className={`w-3 h-3 ${isSelected ? 'text-indigo-200' : isToday ? 'text-yellow-400' : 'text-slate-400'}`} />
-                          <span>{day.date}</span>
+                          <span>{isMk ? '모의고사' : day.date}</span>
+                          {isMk && (
+                            <span className="text-[9px] bg-purple-400 text-white px-1 rounded-xs font-black">
+                              상시 모드
+                            </span>
+                          )}
+                          {isReg && (
+                            <span className="text-[9px] bg-emerald-500/30 text-emerald-300 px-1 rounded-xs font-black">
+                              정기
+                            </span>
+                          )}
                           {isToday && (
                             <span className="text-[9px] bg-yellow-400 text-slate-950 px-1 rounded font-black">
                               오늘
@@ -1192,8 +1307,10 @@ export default function App() {
           /* Electronic Blackboard View */
           <ElectronicBoard
             daySchedule={currentDaySchedule}
-            allDays={scheduleData}
+            allDays={modeFilteredSchedules}
             onSelectDay={(dayId) => setActiveTab(dayId)}
+            examMode={examMode}
+            onChangeExamMode={handleSelectExamMode}
             onOpenUploadModal={() => setIsUploadModalOpen(true)}
             isFullscreen={isFullscreen}
             onToggleFullscreen={handleToggleFullscreen}

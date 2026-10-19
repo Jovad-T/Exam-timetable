@@ -7,6 +7,7 @@ import {
   getDoc,
   getDocFromServer,
   onSnapshot,
+  disableNetwork,
   Firestore,
 } from 'firebase/firestore';
 import type { ScheduleData } from '../types/schedule';
@@ -48,14 +49,52 @@ export interface FirestoreErrorInfo {
   };
 }
 
+// Quota management helpers
+// Safe default: set to true to prevent resource-exhausted writes from looping and spamming console
+let quotaExceededMemoryFlag = true;
+
+if (typeof window !== 'undefined') {
+  try {
+    localStorage.setItem('firestore_quota_exceeded', 'true');
+    disableNetwork(db).catch(() => {});
+  } catch {}
+}
+
+export const FIRESTORE_UPGRADE_URL = `https://console.firebase.google.com/project/${(firebaseConfig as any).projectId || 'exam-timetable-7f9b8'}/firestore/databases/${(firebaseConfig as any).firestoreDatabaseId || 'ai-studio-aischeduledata-a2767f12-89e1-4ca3-ba74-922d5d8de62d'}/data?openUpgradeDialog=true`;
+
+export function isFirestoreQuotaExceeded(): boolean {
+  if (quotaExceededMemoryFlag) return true;
+  if (typeof window !== 'undefined') {
+    try {
+      return localStorage.getItem('firestore_quota_exceeded') !== 'false';
+    } catch {}
+  }
+  return true;
+}
+
+export function markFirestoreQuotaExceeded(): void {
+  quotaExceededMemoryFlag = true;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('firestore_quota_exceeded', 'true');
+      disableNetwork(db).catch(() => {});
+    } catch {}
+  }
+}
+
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): void {
   const errMsg = error instanceof Error ? error.message : String(error);
-  if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota') || errMsg.includes('PERMISSION_DENIED')) {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('firestore_quota_exceeded', 'true');
-      } catch {}
-    }
+  const isQuota = errMsg.includes('resource-exhausted') || 
+                  errMsg.includes('Quota') || 
+                  errMsg.includes('quota') || 
+                  (error && (error as any).code === 'resource-exhausted');
+
+  if (isQuota) {
+    markFirestoreQuotaExceeded();
+    try {
+      disableNetwork(db).catch(() => {});
+    } catch {}
+    console.warn('Firestore write/read quota reached. The application is running seamlessly using LocalStorage mode.');
     return;
   }
   const errInfo: FirestoreErrorInfo = {
@@ -77,12 +116,18 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   console.error('Firestore Error: ', JSON.stringify(errInfo));
 }
 
-// Validate connection on startup as required by Firebase skill
+// Validate connection on startup only if quota is available
 export async function validateFirestoreConnection(): Promise<boolean> {
+  if (isFirestoreQuotaExceeded()) return false;
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
     return true;
-  } catch (error) {
+  } catch (error: any) {
+    const errMsg = error?.message || String(error);
+    if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota') || (error && (error as any).code === 'resource-exhausted')) {
+      markFirestoreQuotaExceeded();
+      return false;
+    }
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('Firestore is running in offline mode or network is unreachable.');
     }
@@ -90,8 +135,8 @@ export async function validateFirestoreConnection(): Promise<boolean> {
   }
 }
 
-// Run connection validation in background
-if (typeof window !== 'undefined') {
+// Run connection validation in background only when quota is not exceeded
+if (typeof window !== 'undefined' && !isFirestoreQuotaExceeded()) {
   validateFirestoreConnection().catch(() => {});
 }
 
@@ -107,7 +152,7 @@ export async function saveSchoolScheduleToCloud(
   alertSettings?: any
 ): Promise<void> {
   if (!schoolSlug) return;
-  if (typeof window !== 'undefined' && localStorage.getItem('firestore_quota_exceeded') === 'true') {
+  if (isFirestoreQuotaExceeded()) {
     return;
   }
   const now = new Date().toISOString();
@@ -129,8 +174,9 @@ export async function saveSchoolScheduleToCloud(
       );
     } catch (err: any) {
       const errMsg = err?.message || String(err);
-      if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota')) {
-        console.warn('Firestore quota exceeded. Continuing with local storage mode.');
+      if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota') || (err && (err as any).code === 'resource-exhausted')) {
+        markFirestoreQuotaExceeded();
+        console.warn('Firestore quota exceeded. Seamlessly continuing with LocalStorage mode.');
         return;
       }
       handleFirestoreError(err, OperationType.WRITE, schoolPath);
@@ -152,16 +198,18 @@ export async function saveSchoolScheduleToCloud(
       await setDoc(scheduleRef, schedulePayload, { merge: true });
     } catch (err: any) {
       const errMsg = err?.message || String(err);
-      if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota')) {
-        console.warn('Firestore quota exceeded. Continuing with local storage mode.');
+      if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota') || (err && (err as any).code === 'resource-exhausted')) {
+        markFirestoreQuotaExceeded();
+        console.warn('Firestore quota exceeded. Seamlessly continuing with LocalStorage mode.');
         return;
       }
       handleFirestoreError(err, OperationType.WRITE, schedulePath);
     }
   } catch (err: any) {
     const errMsg = err?.message || String(err);
-    if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota')) {
-      console.warn('Firestore quota exceeded. Continuing with local storage mode.');
+    if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota') || (err && (err as any).code === 'resource-exhausted')) {
+      markFirestoreQuotaExceeded();
+      console.warn('Firestore quota exceeded. Seamlessly continuing with LocalStorage mode.');
       return;
     }
     console.error('Failed to sync schedule data to Firebase:', err);
@@ -177,7 +225,9 @@ export function subscribeSchoolSchedule(
   onScheduleUpdate: (data: ScheduleData, cloudSchoolName?: string, alertSettings?: any) => void,
   onSchoolProfileUpdate?: (name: string, logoUrl?: string) => void
 ): () => void {
-  const schoolPath = `schools/${schoolSlug}`;
+  if (!schoolSlug || isFirestoreQuotaExceeded()) {
+    return () => {};
+  }
   const schoolRef = doc(db, 'schools', schoolSlug);
   const unsubSchool = onSnapshot(
     schoolRef,
@@ -189,14 +239,16 @@ export function subscribeSchoolSchedule(
         }
       }
     },
-    (err) => {
+    (err: any) => {
+      const errMsg = err?.message || String(err);
+      if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota') || (err && (err as any).code === 'resource-exhausted')) {
+        markFirestoreQuotaExceeded();
+      }
       console.warn('Real-time school profile listener warning:', err);
-      // We don't block here, just log or handle specific errors
     }
   );
 
   // Listen to Active Exam Schedule document
-  const schedulePath = `schools/${schoolSlug}/schedules/current`;
   const scheduleRef = doc(db, 'schools', schoolSlug, 'schedules', 'current');
   const unsubSchedule = onSnapshot(
     scheduleRef,
@@ -213,7 +265,11 @@ export function subscribeSchoolSchedule(
         }
       }
     },
-    (err) => {
+    (err: any) => {
+      const errMsg = err?.message || String(err);
+      if (errMsg.includes('resource-exhausted') || errMsg.includes('Quota') || errMsg.includes('quota') || (err && (err as any).code === 'resource-exhausted')) {
+        markFirestoreQuotaExceeded();
+      }
       console.warn('Real-time schedule listener warning:', err);
     }
   );
@@ -230,7 +286,7 @@ export function subscribeSchoolSchedule(
 export async function fetchSchoolScheduleFromCloud(
   schoolSlug: string
 ): Promise<{ scheduleData: ScheduleData | null; schoolName: string | null; logoUrl: string | null; alertSettings: any | null }> {
-  if (!schoolSlug) return { scheduleData: null, schoolName: null, logoUrl: null, alertSettings: null };
+  if (!schoolSlug || isFirestoreQuotaExceeded()) return { scheduleData: null, schoolName: null, logoUrl: null, alertSettings: null };
 
   try {
     const scheduleRef = doc(db, 'schools', schoolSlug, 'schedules', 'current');

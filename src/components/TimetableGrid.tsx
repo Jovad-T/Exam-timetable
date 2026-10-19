@@ -13,10 +13,14 @@ import {
   Hash,
   AlertTriangle,
   X,
+  Coffee,
+  Sun,
+  GraduationCap,
+  Award,
 } from 'lucide-react';
 import { DayExamSchedule, SubjectItem } from '../types/schedule';
 import { DaySettingsModal } from './DaySettingsModal';
-import { cleanNoticeText } from '../data/scheduleData';
+import { cleanNoticeText, isSuneungOrMockSchedule, isMockSchedule, isSuneungSchedule } from '../data/scheduleData';
 
 interface TimetableGridProps {
   daySchedules: DayExamSchedule[];
@@ -75,6 +79,9 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
     dayIdx: number;
     date: string;
   } | null>(null);
+
+  // 모의고사 모드에서 교시 표시 (기본값: 'all' -> 1~4교시 전체 동시 표시)
+  const [selectedMockPeriodId, setSelectedMockPeriodId] = useState<string>('all');
 
   if (daySchedules.length === 0) {
     return (
@@ -201,11 +208,11 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="bg-indigo-600 text-white text-base sm:text-lg font-black px-4 py-1.5 rounded-xl shadow-sm tracking-wide flex items-center gap-1.5">
                   <Calendar className="w-4 h-4" />
-                  <span>{day.date}</span>
+                  <span>{isMockSchedule(day) ? '모의고사' : day.date}</span>
                 </span>
 
                 <span className="text-xs sm:text-sm text-slate-300 font-bold">
-                  {day.fullTitle || `2026학년도 2학기 1차 고사 시간표(${day.date})`}
+                  {isMockSchedule(day) ? '전국연합학력평가' : (day.fullTitle || `2026학년도 2학기 1차 고사 시간표(${day.date})`)}
                 </span>
 
                 {/* 날짜/제목 수정 버튼 (클릭 시 전용 모달 오픈, window.prompt 완전 대체) */}
@@ -302,21 +309,222 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
 
             {/* Schedule Content */}
             <div className="p-6 space-y-6">
-              {day.schedule.map((period, periodIdx) => {
-                const filteredSubjects = period.subjects.filter((sub) => {
-                  if (sub.targetClass.includes(selectedGrade)) return true;
-                  if (sub.targetClass.includes('전체') || sub.targetClass.includes('공통')) return true;
-                  const otherGrades = ['1학년', '2학년', '3학년'].filter((g) => g !== selectedGrade);
-                  const mentionsOtherGrade = otherGrades.some((g) => sub.targetClass.includes(g));
-                  if (!mentionsOtherGrade) return true;
-                  return false;
-                });
+              {/* 모의고사 모드 전용 교시 선택 탭 바 (1교시부터 4교시 중 선택한 교시만 집중 표시) */}
+              {isMockSchedule(day) && (
+                <div className="bg-slate-900 text-white p-3.5 rounded-2xl border border-slate-700 shadow-md space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-xs sm:text-sm font-black text-purple-300 flex items-center gap-1.5">
+                      <Award className="w-4 h-4 text-yellow-300" />
+                      <span>교시 선택 (예비령 · 준비령 · 본령 집중 보기):</span>
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      원하는 교시를 선택하면 해당 교시의 타종 정보만 깔끔하게 표시됩니다
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMockPeriodId('all')}
+                      className={`py-2 px-3 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                        selectedMockPeriodId === 'all'
+                          ? 'bg-purple-600 text-white shadow-xs font-black ring-2 ring-yellow-400'
+                          : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700'
+                      }`}
+                    >
+                      <span>전체 (1~4교시)</span>
+                    </button>
+                    {day.schedule.map((p) => {
+                      const isCurrent = selectedMockPeriodId === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => setSelectedMockPeriodId(p.id || 'p-mk-1')}
+                          className={`py-2 px-3 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                            isCurrent
+                              ? 'bg-purple-600 text-white shadow-xs font-black ring-2 ring-yellow-400'
+                              : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700'
+                          }`}
+                        >
+                          <span>{p.period}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {(isMockSchedule(day)
+                ? (selectedMockPeriodId === 'all'
+                    ? day.schedule
+                    : day.schedule.filter((p) => p.id === selectedMockPeriodId))
+                : day.schedule
+              ).map((period, periodIdx) => {
+                const filteredSubjects = isSuneungOrMockSchedule(day)
+                  ? period.subjects
+                  : period.subjects.filter((sub) => {
+                      if (sub.targetClass.includes(selectedGrade)) return true;
+                      if (sub.targetClass.includes('전체') || sub.targetClass.includes('공통')) return true;
+                      const otherGrades = ['1학년', '2학년', '3학년'].filter((g) => g !== selectedGrade);
+                      const mentionsOtherGrade = otherGrades.some((g) => sub.targetClass.includes(g));
+                      if (!mentionsOtherGrade) return true;
+                      return false;
+                    });
+
+                const isBreak = period.period.includes('휴식') || period.period.includes('쉬는');
+                const isLunch = period.period.includes('점심') || period.period.includes('중식');
+                const isMorningAssembly = period.period.includes('입실') || period.period.includes('조례');
+                const isCleanup = period.period.includes('채점') || period.period.includes('청소');
+                const isEnglish = period.period.includes('3교시') && (isSuneungOrMockSchedule(day) || period.subjects.some((s) => s.name.includes('영어')));
+
+                if (isMorningAssembly || isCleanup) {
+                  const sub0 = period.subjects[0];
+                  return (
+                    <div
+                      key={period.id || period.period || periodIdx}
+                      className={`rounded-2xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs ${
+                        isMorningAssembly
+                          ? 'bg-indigo-50/90 border-indigo-200'
+                          : 'bg-purple-50/90 border-purple-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-xl text-white flex items-center justify-center font-black shadow-xs shrink-0 ${
+                          isMorningAssembly ? 'bg-indigo-600' : 'bg-purple-600'
+                        }`}>
+                          <Clock className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-xs font-black text-white px-2.5 py-0.5 rounded-full ${
+                              isMorningAssembly ? 'bg-indigo-600' : 'bg-purple-600'
+                            }`}>
+                              {period.period} ({sub0?.duration || 10}분)
+                            </span>
+                            <span className="text-xs sm:text-sm font-black text-slate-900">
+                              {sub0?.name}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-700 font-bold mt-1 flex items-center gap-3 flex-wrap">
+                            {sub0?.proceedGuide && (
+                              <span>진행요령: <strong className="text-indigo-900">{sub0.proceedGuide}</strong></span>
+                            )}
+                            {sub0?.supervisorInfo && (
+                              <span>감독교사: <strong className="text-purple-900">{sub0.supervisorInfo}</strong></span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <span className="text-xs font-mono font-black text-slate-900 bg-white px-3 py-1 rounded-lg border border-slate-300">
+                          {sub0?.time}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (isBreak) {
+                  return (
+                    <div
+                      key={period.id || period.period || periodIdx}
+                      className="bg-emerald-50/80 rounded-2xl border border-emerald-200/90 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black shadow-xs shrink-0">
+                          <Coffee className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black bg-emerald-600 text-white px-2 py-0.5 rounded-full">
+                              ☕ 휴식시간 ({period.subjects[0]?.duration || 20}분)
+                            </span>
+                            <span className="text-xs font-bold text-emerald-800">
+                              {period.subjects[0]?.name}
+                            </span>
+                          </div>
+                          <div className="text-xs text-emerald-950 font-medium mt-0.5">
+                            다음 교시 준비령/입실: <strong className="font-bold text-indigo-900">{period.subjects[0]?.entryTime || '10:20'}</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <span className="text-xs font-mono font-black text-emerald-900 bg-white px-3 py-1 rounded-lg border border-emerald-300">
+                          {period.subjects[0]?.time}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onAddSubject(dayIdx, periodIdx)}
+                          className="px-2.5 py-1 text-xs font-black text-emerald-700 bg-white hover:bg-emerald-100 rounded-lg border border-emerald-300 cursor-pointer"
+                        >
+                          수정
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (isLunch) {
+                  return (
+                    <div
+                      key={period.id || period.period || periodIdx}
+                      className="bg-amber-50/80 rounded-2xl border border-amber-200/90 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-xs shrink-0">
+                          <Sun className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full">
+                              🍱 점심시간 ({period.subjects[0]?.duration || 50}분)
+                            </span>
+                            <span className="text-xs font-bold text-amber-900">
+                              {period.subjects[0]?.name}
+                            </span>
+                          </div>
+                          <div className="text-xs text-amber-950 font-medium mt-0.5">
+                            🚨 3교시 영어 준비령/입실 완료: <strong className="font-bold text-rose-700">13:00 정각</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <span className="text-xs font-mono font-black text-amber-950 bg-white px-3 py-1 rounded-lg border border-amber-300">
+                          {period.subjects[0]?.time}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onAddSubject(dayIdx, periodIdx)}
+                          className="px-2.5 py-1 text-xs font-black text-amber-800 bg-white hover:bg-amber-100 rounded-lg border border-amber-300 cursor-pointer"
+                        >
+                          수정
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
 
                 return (
                   <div
                     key={period.id || period.period || periodIdx}
                     className="bg-slate-50/80 rounded-2xl border border-slate-200 p-5 space-y-4"
                   >
+                    {/* 3교시 영어 영역 타종 금지 안내 배너 */}
+                    {isEnglish && (
+                      <div className="bg-rose-50 border border-rose-300 text-rose-950 p-2.5 rounded-xl text-xs font-black flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">🚫</span>
+                          <span>3교시 영어 영역 특수 지침: 13:10 정각 본령(타종) 절대 금지 및 교내 정숙 (듣기평가 방송 송출)</span>
+                        </div>
+                        <span className="bg-rose-600 text-white px-2 py-0.5 rounded text-[10px] font-black shrink-0">
+                          무타종 원칙
+                        </span>
+                      </div>
+                    )}
+
                     {/* Period Header */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
                       <div className="flex items-center gap-2.5">
@@ -325,7 +533,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                         </span>
                         <h4 className="text-base font-black text-slate-900">{period.period}</h4>
                         <span className="text-xs bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded-full">
-                          {period.subjects.length}개 과목 등록됨
+                          {isMockSchedule(day) ? '모의고사 타종 모드' : `${period.subjects.length}개 항목 등록됨`}
                         </span>
                       </div>
 
@@ -343,20 +551,31 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
                         <table className="w-full text-xs text-left">
                           <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                            <tr>
-                              <th className="py-2.5 px-3">과목명</th>
-                              <th className="py-2.5 px-3">과목코드</th>
-                              <th className="py-2.5 px-3">입실 시간</th>
-                              <th className="py-2.5 px-3">시험 시간</th>
-                              <th className="py-2.5 px-3">소요 시간</th>
-                              <th className="py-2.5 px-3">대상 반/장소</th>
-                              <th className="py-2.5 px-3 text-right">관리</th>
-                            </tr>
+                            {isMockSchedule(day) ? (
+                              <tr>
+                                <th className="py-2.5 px-3">과목 / 영역</th>
+                                <th className="py-2.5 px-3">예비령 (입실)</th>
+                                <th className="py-2.5 px-3">준비령 (문답지 배부)</th>
+                                <th className="py-2.5 px-3">본령 (시험시간)</th>
+                                <th className="py-2.5 px-3">소요 시간</th>
+                                <th className="py-2.5 px-3 text-right">관리</th>
+                              </tr>
+                            ) : (
+                              <tr>
+                                <th className="py-2.5 px-3">과목명 / 단계</th>
+                                <th className="py-2.5 px-3">과목코드</th>
+                                <th className="py-2.5 px-3">준비령 / 입실</th>
+                                <th className="py-2.5 px-3">본령 / 시험시간</th>
+                                <th className="py-2.5 px-3">소요 시간</th>
+                                <th className="py-2.5 px-3">진행요령 / 감독교사 / 대상반</th>
+                                <th className="py-2.5 px-3 text-right">관리</th>
+                              </tr>
+                            )}
                           </thead>
                           <tbody className="divide-y divide-slate-100">
                             {filteredSubjects.length === 0 ? (
                               <tr>
-                                <td colSpan={7} className="py-6 text-center text-slate-400 font-medium">
+                                <td colSpan={isMockSchedule(day) ? 6 : 7} className="py-6 text-center text-slate-400 font-medium">
                                   선택된 학년({selectedGrade})에 해당하는 과목이 없습니다.
                                 </td>
                               </tr>
@@ -365,6 +584,55 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                                 const actualSubIdx = period.subjects.findIndex(
                                   (s) => s.name === sub.name && s.time === sub.time
                                 );
+
+                                if (isMockSchedule(day)) {
+                                  return (
+                                    <tr
+                                      key={sub.id || `${sub.name}-${sub.time}`}
+                                      className="hover:bg-purple-50/40 transition"
+                                    >
+                                      <td className="py-3 px-3 font-black text-slate-900 text-sm">
+                                        {sub.name}
+                                      </td>
+                                      <td className="py-3 px-3 font-mono font-bold text-blue-700">
+                                        {sub.preliminaryBell || sub.entryTime || '08:25'}
+                                      </td>
+                                      <td className="py-3 px-3 font-mono font-bold text-amber-700">
+                                        {sub.prepTimeRange ? sub.prepTimeRange.replace(/\s+/g, '') : '08:35'}
+                                      </td>
+                                      <td className="py-3 px-3 font-extrabold text-slate-900 font-mono">
+                                        {sub.time}
+                                      </td>
+                                      <td className="py-3 px-3">
+                                        <span className="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-md">
+                                          {sub.duration}분
+                                        </span>
+                                      </td>
+                                      <td className="py-3 px-3 text-right">
+                                        <div className="flex items-center justify-end gap-1">
+                                          <button
+                                            onClick={() =>
+                                              onEditSubject(dayIdx, periodIdx, actualSubIdx, sub)
+                                            }
+                                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                                            title="과목 수정"
+                                          >
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            onClick={() =>
+                                              onDeleteSubject(dayIdx, periodIdx, actualSubIdx)
+                                            }
+                                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                            title="과목 삭제"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                }
 
                                 return (
                                   <tr
@@ -384,16 +652,23 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                                       )}
                                     </td>
                                     <td className="py-3 px-3 font-bold text-slate-600 leading-tight">
-                                      {sub.entryTime ? (
+                                      {sub.prepTimeRange ? (
                                         <div className="flex flex-col">
-                                          <span>{sub.entryTime.replace('입실', '').trim()}</span>
-                                          <span className="text-xs text-slate-500 font-normal">입실</span>
+                                          <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded w-fit border border-indigo-200">
+                                            준비령
+                                          </span>
+                                          <span className="font-mono font-black text-slate-900 mt-0.5">{sub.prepTimeRange}</span>
+                                        </div>
+                                      ) : sub.entryTime ? (
+                                        <div className="flex flex-col">
+                                          <span className="font-mono font-black text-slate-900">{sub.entryTime.replace('입실', '').trim()}</span>
+                                          <span className="text-[11px] text-slate-500 font-normal">입실/시작</span>
                                         </div>
                                       ) : (
                                         '-'
                                       )}
                                     </td>
-                                    <td className="py-3 px-3 font-extrabold text-slate-900">
+                                    <td className="py-3 px-3 font-extrabold text-slate-900 font-mono">
                                       {sub.time}
                                     </td>
                                     <td className="py-3 px-3">
@@ -405,13 +680,28 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                                       <button
                                         type="button"
                                         onClick={() => onEditSubject(dayIdx, periodIdx, actualSubIdx, sub)}
-                                        className={`group/tc inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-black transition cursor-pointer hover:shadow-2xs hover:border-indigo-400 ${getGradeBadgeStyle(
+                                        className={`group/tc inline-flex flex-col items-start gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-black transition cursor-pointer hover:shadow-2xs hover:border-indigo-400 text-left ${getGradeBadgeStyle(
                                           sub.targetClass
                                         )}`}
                                         title="클릭하여 과목 및 대상 반 상세 수정"
                                       >
-                                        <span>{sub.targetClass}</span>
-                                        <Edit2 className="w-3 h-3 opacity-40 group-hover/tc:opacity-100 transition text-slate-700" />
+                                        {sub.proceedGuide || sub.supervisorInfo ? (
+                                          <>
+                                            {sub.proceedGuide && (
+                                              <span className="text-slate-900 font-bold">{sub.proceedGuide}</span>
+                                            )}
+                                            {sub.supervisorInfo && (
+                                              <span className="text-indigo-800 bg-white/80 px-1.5 py-0.5 rounded border border-indigo-200 text-[11px]">
+                                                감독: {sub.supervisorInfo}
+                                              </span>
+                                            )}
+                                          </>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1.5">
+                                            <span>{sub.targetClass}</span>
+                                            <Edit2 className="w-3 h-3 opacity-40 group-hover/tc:opacity-100 transition text-slate-700" />
+                                          </span>
+                                        )}
                                       </button>
                                     </td>
                                     <td className="py-3 px-3 text-right">
@@ -450,6 +740,59 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                           const actualSubIdx = period.subjects.findIndex(
                             (s) => s.name === subject.name && s.time === subject.time
                           );
+                          const isEngSub = subject.name.includes('영어');
+
+                          if (isMockSchedule(day)) {
+                            return (
+                              <div
+                                key={subject.id || `${subject.name}-${subject.time}`}
+                                className="bg-white rounded-2xl border-2 border-slate-200 p-4 shadow-sm hover:border-purple-300 transition flex flex-col justify-between space-y-3"
+                              >
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                  <h5 className="font-black text-base text-slate-900">
+                                    {subject.name}
+                                  </h5>
+                                  <span className="bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded text-xs border border-indigo-200">
+                                    {subject.duration}분
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 text-center text-xs font-bold">
+                                  <div className="bg-blue-50 border border-blue-200 p-2 rounded-xl">
+                                    <span className="text-[10px] text-blue-700 block font-black">🔔 예비령</span>
+                                    <strong className="text-blue-950 font-mono text-sm">{subject.preliminaryBell || subject.entryTime || '08:25'}</strong>
+                                  </div>
+                                  <div className="bg-amber-50 border border-amber-200 p-2 rounded-xl">
+                                    <span className="text-[10px] text-amber-700 block font-black">🔔 준비령</span>
+                                    <strong className="text-amber-950 font-mono text-sm">{subject.prepTimeRange ? subject.prepTimeRange.replace(/\s+/g, '') : '08:35'}</strong>
+                                  </div>
+                                  <div className="bg-rose-50 border border-rose-200 p-2 rounded-xl col-span-2">
+                                    <span className="text-[10px] text-rose-700 block font-black">
+                                      {isEngSub ? '📻 본령 (무타종 듣기평가)' : '🔔 본령 (시험 시작)'}
+                                    </span>
+                                    <strong className="text-rose-950 font-mono text-sm">{subject.time}</strong>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-end gap-1 pt-1 border-t border-slate-100">
+                                  <button
+                                    onClick={() => onEditSubject(dayIdx, periodIdx, actualSubIdx, subject)}
+                                    className="p-1 text-slate-400 hover:text-indigo-600 rounded cursor-pointer"
+                                    title="수정"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => onDeleteSubject(dayIdx, periodIdx, actualSubIdx)}
+                                    className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
+                                    title="삭제"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
 
                           return (
                             <div
