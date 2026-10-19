@@ -3568,7 +3568,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   if (isFullscreen) {
     return (
       <div
-        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center overflow-auto select-none pt-7 pb-6 px-4 transition-colors duration-500`}
+        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center overflow-auto select-none pt-2 pb-2 px-2 transition-colors duration-500`}
         onMouseMove={(e) => {
           // 화면 최상단 55px 이내로 마우스가 올라오면 해상도 및 컨트롤러 노출
           if (e.clientY <= 55) {

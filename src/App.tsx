@@ -45,7 +45,6 @@ import {
 } from './services/firebase';
 
 export default function App() {
-  // Helper for safe JSON parsing from localStorage
   const safeParse = <T,>(key: string, defaultValue: T): T => {
     if (typeof window === 'undefined') return defaultValue;
     try {
@@ -59,7 +58,6 @@ export default function App() {
     }
   };
 
-  // School Slug & Name state
   const [schoolSlug, setSchoolSlug] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -85,7 +83,6 @@ export default function App() {
     return '한국고등학교';
   });
 
-  // School logo emblem state (관리자 모드에서 첨부된 학교 마크)
   const [schoolLogo, setSchoolLogo] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -115,7 +112,6 @@ export default function App() {
   const initialSchedule: ScheduleData = Array.isArray(parsedSchedule) && parsedSchedule.length > 0 ? parsedSchedule : defaultScheduleData;
   const [scheduleData, setScheduleData] = useState<ScheduleData>(initialSchedule);
 
-  // Auto-clean any unwanted bulky notice on load and sync clean version to localStorage
   React.useEffect(() => {
     setScheduleData((prev) => {
       const cleaned = cleanScheduleData(prev);
@@ -129,7 +125,6 @@ export default function App() {
     });
   }, [schoolSlug]);
 
-  // Track selected exam mode ('regular' | 'mock') so each mode exclusively shows its own schedule
   const [examMode, setExamMode] = useState<'regular' | 'mock'>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -142,7 +137,6 @@ export default function App() {
     return 'mock';
   });
 
-  // Automatically initialize activeTab matching examMode
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -156,7 +150,6 @@ export default function App() {
     return 'day-mock-g12';
   });
 
-  // Keep activeTab strictly synchronized with examMode so Firestore/storage updates never revert to old dates
   React.useEffect(() => {
     if (examMode === 'mock') {
       setActiveTab('day-mock-g12');
@@ -197,15 +190,15 @@ export default function App() {
       setActiveTab(getTodayActiveTabId(targetList));
     }
   };
+
   const [copied, setCopied] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<'board' | 'developer'>('board'); // "board" = Electronic Chalkboard, "developer" = Code/Grid
+  const [viewMode, setViewMode] = useState<'board' | 'developer'>('board');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'offline'>(() => {
     return isFirestoreQuotaExceeded() ? 'offline' : 'synced';
   });
   const [isSettingsExpanded, setIsSettingsExpanded] = useState<boolean>(false);
 
-  // Exam end warning alert & sound settings (소리 켜기/끄기, 5분전/10분전 셋팅, TTS 음성 방송)
   const [alertSettings, setAlertSettings] = useState<ExamAlertSettings>(() => {
     return safeParse<ExamAlertSettings>('exam_alert_settings', {
       enabled: true,
@@ -214,8 +207,7 @@ export default function App() {
       soundType: 'chime',
       volume: 0.7,
       ttsEnabled: true,
-      ttsMessage:
-        '시험 종료 10분 전입니다. 학생들은 답안지 OMR 카드를 점검하고 마킹 실수가 없는지 확인해 주시기 바랍니다.',
+      ttsMessage: '시험 종료 10분 전입니다. 학생들은 답안지 OMR 카드를 점검하고 마킹 실수가 없는지 확인해 주시기 바랍니다.',
       ttsVoiceSpeed: 1.0,
       startAlertEnabled: true,
       startTtsMessage: '곧 시험이 시작됩니다. 학생들은 입실을 완료하고 자리에 착석해 주시기 바랍니다.',
@@ -227,18 +219,14 @@ export default function App() {
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem('exam_alert_settings', JSON.stringify(newSettings));
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
-    // 관리자 모드인 경우 Firebase로 동기화
     if (appRole === 'admin' && schoolSlug) {
       const dataToSave = scheduleData || defaultScheduleData;
       saveSchoolScheduleToCloud(schoolSlug, dataToSave, schoolName, schoolLogo, newSettings);
     }
   };
 
-  // App Deployment Mode Role ('selector' | 'classroom' | 'admin') strictly tied to URL hash & localStorage
   const [appRole, setAppRole] = useState<'selector' | 'classroom' | 'admin'>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -270,92 +258,57 @@ export default function App() {
     }
   };
 
-  // Hash sync removed completely to prevent app reloads/bouncing.
-
-  // URL hash sync removed to prevent app reloads/bouncing.
-
-  // Real-time synchronization across all classrooms in the school via Cloud Firestore
   React.useEffect(() => {
     if (!schoolSlug) return;
-
-    // 1. Initial fetch from Firestore
     fetchSchoolScheduleFromCloud(schoolSlug)
       .then(({ scheduleData: cloudData, schoolName: cloudName, logoUrl, alertSettings: cloudAlertSettings }) => {
         if (cloudData && Array.isArray(cloudData) && cloudData.length > 0) {
           const cleanedCloudData = cleanScheduleData(cloudData);
           setScheduleData(cleanedCloudData);
-          try {
-            localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cleanedCloudData));
-          } catch {}
+          try { localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cleanedCloudData)); } catch {}
         }
         if (cloudName) {
           setSchoolName(cloudName);
-          try {
-            localStorage.setItem(`school_name_${schoolSlug}`, cloudName);
-          } catch {}
+          try { localStorage.setItem(`school_name_${schoolSlug}`, cloudName); } catch {}
         }
         if (logoUrl) {
           setSchoolLogo(logoUrl);
-          try {
-            localStorage.setItem('school_logo', logoUrl);
-          } catch {}
+          try { localStorage.setItem('school_logo', logoUrl); } catch {}
         }
         if (cloudAlertSettings) {
           setAlertSettings(cloudAlertSettings);
-          try {
-            localStorage.setItem('exam_alert_settings', JSON.stringify(cloudAlertSettings));
-          } catch {}
+          try { localStorage.setItem('exam_alert_settings', JSON.stringify(cloudAlertSettings)); } catch {}
         }
       })
-      .catch((err) => {
-        console.error('Failed to fetch initial data from cloud:', err);
-      })
-      .finally(() => {
-        setCloudSyncStatus('synced');
-      });
+      .catch((err) => { console.error('Failed to fetch initial data from cloud:', err); })
+      .finally(() => { setCloudSyncStatus('synced'); });
 
-    // 2. Real-time onSnapshot listener: updates made in admin immediately reflect across all classroom displays
     const unsubscribe = subscribeSchoolSchedule(
       schoolSlug,
       (newScheduleData, cloudName, cloudAlertSettings) => {
-        // [강제 동기화] 클라우드에서 받은 최신 데이터로 로컬 상태 및 저장소 무조건 갱신
         if (newScheduleData && Array.isArray(newScheduleData) && newScheduleData.length > 0) {
           const cleaned = cleanScheduleData(newScheduleData);
           setScheduleData(cleaned);
-          try {
-            localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cleaned));
-          } catch {}
+          try { localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cleaned)); } catch {}
         }
-        
         if (cloudName) {
           setSchoolName(cloudName);
-          try {
-            localStorage.setItem(`school_name_${schoolSlug}`, cloudName);
-          } catch {}
+          try { localStorage.setItem(`school_name_${schoolSlug}`, cloudName); } catch {}
         }
-        
-        // 클라우드 설정 반영
         if (cloudAlertSettings) {
           setAlertSettings(cloudAlertSettings);
-          try {
-            localStorage.setItem('exam_alert_settings', JSON.stringify(cloudAlertSettings));
-          } catch {}
+          try { localStorage.setItem('exam_alert_settings', JSON.stringify(cloudAlertSettings)); } catch {}
         }
-        
         setCloudSyncStatus('synced');
       },
       (name, logo) => {
         if (name) {
           setSchoolName(name);
-          try {
-            localStorage.setItem(`school_name_${schoolSlug}`, name);
-          } catch {}
+          try { localStorage.setItem(`school_name_${schoolSlug}`, name); } catch {}
         }
         if (logo) {
           setSchoolLogo(logo);
-          try {
-            localStorage.setItem('school_logo', logo);
-          } catch {}
+          try { localStorage.setItem('school_logo', logo); } catch {}
         }
       }
     );
@@ -363,15 +316,12 @@ export default function App() {
     return () => unsubscribe();
   }, [schoolSlug]);
 
-  // Update school name and slug from Admin mode or modal
   const handleUpdateSchoolInfo = async (newName: string, newSlug: string) => {
     const cleanName = newName.trim() || '한국고등학교';
     let processedSlug = cleanSlug(newSlug, true);
     if (!processedSlug) {
       processedSlug = generateSchoolSlug(cleanName);
     }
-
-    // 1. Update State synchronously for immediate UI feedback
     setSchoolName(cleanName);
     const prevSlug = schoolSlug;
     setSchoolSlug(processedSlug);
@@ -379,9 +329,7 @@ export default function App() {
     const currentRole = appRole === 'classroom' ? 'classroom' : 'admin';
     setAppRole(currentRole);
 
-    // 2. Perform side effects (Storage/Cloud) asynchronously
     setTimeout(() => {
-      // Save to Cloud Firestore
       setCloudSyncStatus('syncing');
       saveSchoolScheduleToCloud(processedSlug, scheduleData, cleanName, schoolLogo, alertSettings)
         .then(() => setCloudSyncStatus('synced'))
@@ -391,7 +339,6 @@ export default function App() {
         try {
           localStorage.setItem('current_school_slug', processedSlug);
           localStorage.setItem(`school_name_${processedSlug}`, cleanName);
-          // Persist schedule data for this school slug as well
           const currentScheduleStr = localStorage.getItem(`schedule_data_${prevSlug}`);
           if (currentScheduleStr) {
             localStorage.setItem(`schedule_data_${processedSlug}`, currentScheduleStr);
@@ -405,14 +352,12 @@ export default function App() {
     }, 0);
   };
 
-  // Auto-persist scheduleData under current school slug to localStorage & Firebase
   React.useEffect(() => {
     if (!schoolSlug) return;
     try {
       localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(scheduleData));
     } catch {}
 
-    // When in admin role, push updates to Cloud Firestore with debouncing (3s), skipping if offline/quota exceeded
     if (appRole === 'admin' && cloudSyncStatus !== 'offline' && !isFirestoreQuotaExceeded()) {
       const timer = setTimeout(() => {
         setCloudSyncStatus('syncing');
@@ -424,7 +369,6 @@ export default function App() {
     }
   }, [scheduleData, schoolSlug, schoolName, schoolLogo, appRole, alertSettings]);
 
-  // Auto fullscreen on entering classroom electronic board mode
   React.useEffect(() => {
     if (appRole === 'classroom') {
       setIsFullscreen(true);
@@ -448,13 +392,10 @@ export default function App() {
   const handleUpdateMaxClasses = (newMax: number) => {
     setMaxClasses(newMax);
     if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('max_classes', String(newMax));
-      } catch {}
+      try { localStorage.setItem('max_classes', String(newMax)); } catch {}
     }
   };
 
-  // Track browser fullscreen state
   React.useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
@@ -473,8 +414,6 @@ export default function App() {
     }
   };
 
-
-  // Electronic Blackboard Texture Theme State (사용자 요청: 고급 다크 모드 텍스처)
   const [boardTheme, setBoardTheme] = useState<BoardTheme>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -482,9 +421,7 @@ export default function App() {
         if (saved === 'obsidian' || saved === 'emerald' || saved === 'midnight') {
           return saved;
         }
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
     return 'obsidian';
   });
@@ -492,15 +429,10 @@ export default function App() {
   const handleUpdateBoardTheme = (theme: BoardTheme) => {
     setBoardTheme(theme);
     if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('electronic_board_theme', theme);
-      } catch {
-        // ignore
-      }
+      try { localStorage.setItem('electronic_board_theme', theme); } catch {}
     }
   };
 
-  // Modals state
   const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [isAddDayModalOpen, setIsAddDayModalOpen] = useState<boolean>(false);
@@ -512,7 +444,6 @@ export default function App() {
     subject: SubjectItem | null;
   } | null>(null);
 
-  // Schedules filtered strictly by active examMode ('mock' -> 상시 모의고사, 'regular' -> 정기고사)
   const modeFilteredSchedules: ScheduleData = React.useMemo(() => {
     const all = Array.isArray(scheduleData) && scheduleData.length > 0 ? scheduleData : allComprehensiveScheduleData;
     if (examMode === 'mock') {
@@ -523,80 +454,39 @@ export default function App() {
     return foundReg.length > 0 ? foundReg : regularScheduleData;
   }, [scheduleData, examMode]);
 
-  // Statistics for current mode
   const totalDays = modeFilteredSchedules.length;
   const totalSubjects = modeFilteredSchedules.reduce(
-    (accDay, day) =>
-      accDay +
-      (Array.isArray(day?.schedule) ? day.schedule : []).reduce(
-        (accPeriod, p) => accPeriod + (Array.isArray(p?.subjects) ? p.subjects.length : 0),
-        0
-      ),
-    0
+    (accDay, day) => accDay + (Array.isArray(day?.schedule) ? day.schedule : []).reduce((accPeriod, p) => accPeriod + (Array.isArray(p?.subjects) ? p.subjects.length : 0), 0), 0
   );
 
-  // Selected single day object strictly matching current examMode
   const currentDaySchedule: DayExamSchedule =
-    modeFilteredSchedules.find((d) => d.id === activeTab || d.date === activeTab) ||
-    modeFilteredSchedules[0] ||
-    (examMode === 'mock'
-      ? mockDaySchedule
-      : regularScheduleData[0]);
+    modeFilteredSchedules.find((d) => d.id === activeTab || d.date === activeTab) || modeFilteredSchedules[0] || (examMode === 'mock' ? mockDaySchedule : regularScheduleData[0]);
 
-  // Copy scheduleData code
   const handleCopyCode = () => {
     const cleanData = scheduleData.map((day) => ({
-      date: day.date,
-      fullTitle: day.fullTitle,
-      notice: day.notice,
-      bottomNotice: day.bottomNotice || DEFAULT_BOTTOM_NOTICE,
+      date: day.date, fullTitle: day.fullTitle, notice: day.notice, bottomNotice: day.bottomNotice || DEFAULT_BOTTOM_NOTICE,
       schedule: day.schedule.map((p) => ({
-        period: p.period,
-        subjects: p.subjects.map((s) => ({
-          name: s.name,
-          subjectCode: s.subjectCode,
-          entryTime: s.entryTime,
-          time: s.time,
-          duration: s.duration,
-          targetClass: s.targetClass,
+        period: p.period, subjects: p.subjects.map((s) => ({
+          name: s.name, subjectCode: s.subjectCode, entryTime: s.entryTime, time: s.time, duration: s.duration, targetClass: s.targetClass,
         })),
       })),
     }));
-
-    const codeStr = `// 고등학교 시험 시간표 scheduleData 배열\nexport const scheduleData = ${JSON.stringify(
-      cleanData,
-      null,
-      2
-    )};`;
-
+    const codeStr = `// 고등학교 시험 시간표 scheduleData 배열\nexport const scheduleData = ${JSON.stringify(cleanData, null, 2)};`;
     navigator.clipboard.writeText(codeStr);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
 
-  // Export JSON helper
   const handleExportJson = () => {
     const cleanData = scheduleData.map((day) => ({
-      date: day.date,
-      fullTitle: day.fullTitle,
-      notice: day.notice,
-      bottomNotice: day.bottomNotice || DEFAULT_BOTTOM_NOTICE,
+      date: day.date, fullTitle: day.fullTitle, notice: day.notice, bottomNotice: day.bottomNotice || DEFAULT_BOTTOM_NOTICE,
       schedule: day.schedule.map((p) => ({
-        period: p.period,
-        subjects: p.subjects.map((s) => ({
-          name: s.name,
-          subjectCode: s.subjectCode,
-          entryTime: s.entryTime,
-          time: s.time,
-          duration: s.duration,
-          targetClass: s.targetClass,
+        period: p.period, subjects: p.subjects.map((s) => ({
+          name: s.name, subjectCode: s.subjectCode, entryTime: s.entryTime, time: s.time, duration: s.duration, targetClass: s.targetClass,
         })),
       })),
     }));
-
-    const blob = new Blob([JSON.stringify(cleanData, null, 2)], {
-      type: 'application/json',
-    });
+    const blob = new Blob([JSON.stringify(cleanData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -605,21 +495,14 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  // Print helper
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => { window.print(); };
 
-  // AI Extract callback
   const handleExtractSuccess = (extractedData: ScheduleData) => {
     const cleaned = cleanScheduleData(extractedData);
     setScheduleData(cleaned);
-    if (cleaned.length > 0) {
-      setActiveTab(cleaned[0].id || cleaned[0].date);
-    }
+    if (cleaned.length > 0) setActiveTab(cleaned[0].id || cleaned[0].date);
   };
 
-  // Reset sample
   const handleResetSample = () => {
     if (confirm('전체 표준 시험 시간표(모의고사 타종, 정기고사) 샘플 데이터로 복원하시겠습니까?')) {
       setScheduleData(allComprehensiveScheduleData);
@@ -627,108 +510,54 @@ export default function App() {
     }
   };
 
-  // Clear all schedule data
   const handleClearAllSchedule = () => {
-    if (
-      confirm(
-        '현재 등록된 시험 시간표 데이터를 모두 비우시겠습니까?\n\n- 빈 상태로 시작하여 새 시간표 파일을 업로드하거나 직접 추가할 수 있습니다.\n- 언제든 [샘플 복원] 버튼으로 예시 시간표를 다시 불러올 수 있습니다.'
-      )
-    ) {
+    if (confirm('현재 등록된 시험 시간표 데이터를 모두 비우시겠습니까?\n\n- 빈 상태로 시작하여 새 시간표 파일을 업로드하거나 직접 추가할 수 있습니다.\n- 언제든 [샘플 복원] 버튼으로 예시 시간표를 다시 불러올 수 있습니다.')) {
       setScheduleData([]);
       setActiveTab('');
     }
   };
 
-  // Edit day date and title
   const handleEditDay = (dayIdx: number, newDate: string, newTitle: string) => {
     setScheduleData((prev) => {
       const updated = [...prev];
-      updated[dayIdx] = {
-        ...updated[dayIdx],
-        date: newDate,
-        fullTitle: newTitle,
-      };
+      updated[dayIdx] = { ...updated[dayIdx], date: newDate, fullTitle: newTitle };
       return updated;
     });
   };
 
-  // Update bottom notice for current day
   const handleUpdateBottomNotice = (newNotice: string) => {
     setScheduleData((prev) =>
-      prev.map((d) =>
-        d.id === currentDaySchedule.id || d.date === currentDaySchedule.date
-          ? { ...d, bottomNotice: newNotice }
-          : d
-      )
+      prev.map((d) => d.id === currentDaySchedule.id || d.date === currentDaySchedule.date ? { ...d, bottomNotice: newNotice } : d)
     );
   };
 
-  // Update all bottom notices
   const handleUpdateAllBottomNotices = (newNotice: string) => {
-    setScheduleData((prev) =>
-      prev.map((d) => ({ ...d, bottomNotice: newNotice }))
-    );
+    setScheduleData((prev) => prev.map((d) => ({ ...d, bottomNotice: newNotice })));
   };
 
-  // Update top notice for current day
   const handleUpdateTopNotice = (newNotice: string) => {
     const cleaned = cleanNoticeText(newNotice);
     setScheduleData((prev) =>
-      prev.map((d) =>
-        d.id === currentDaySchedule.id || d.date === currentDaySchedule.date
-          ? { ...d, notice: cleaned }
-          : d
-      )
+      prev.map((d) => d.id === currentDaySchedule.id || d.date === currentDaySchedule.date ? { ...d, notice: cleaned } : d)
     );
   };
 
-  // Update all top notices
   const handleUpdateAllTopNotices = (newNotice: string) => {
     const cleaned = cleanNoticeText(newNotice);
-    setScheduleData((prev) =>
-      prev.map((d) => ({ ...d, notice: cleaned }))
-    );
+    setScheduleData((prev) => prev.map((d) => ({ ...d, notice: cleaned })));
   };
 
-  // Add new day schedule (모달 열기)
-  const handleAddDay = () => {
-    setIsAddDayModalOpen(true);
-  };
+  const handleAddDay = () => setIsAddDayModalOpen(true);
 
-  const handleSaveNewDay = (
-    newDateStr: string,
-    newTitleStr: string,
-    newBottomNotice?: string,
-    newTopNotice?: string
-  ) => {
+  const handleSaveNewDay = (newDateStr: string, newTitleStr: string, newBottomNotice?: string, newTopNotice?: string) => {
     const newDay: DayExamSchedule = {
-      id: `day-${Date.now()}`,
-      date: newDateStr,
-      fullTitle: newTitleStr || `2026학년도 2학기 1차 고사 시간표(${newDateStr})`,
-      notice: newTopNotice || FIXED_NOTICE,
-      bottomNotice: newBottomNotice || DEFAULT_BOTTOM_NOTICE,
-      schedule: [
-        {
-          id: `p-${Date.now()}-1`,
-          period: '1교시',
-          subjects: [
-            {
-              id: `s-${Date.now()}-1`,
-              name: '자습',
-              time: '08:30 ~ 09:00',
-              duration: 30,
-              targetClass: '전체',
-            },
-          ],
-        },
-      ],
+      id: `day-${Date.now()}`, date: newDateStr, fullTitle: newTitleStr || `2026학년도 2학기 1차 고사 시간표(${newDateStr})`, notice: newTopNotice || FIXED_NOTICE, bottomNotice: newBottomNotice || DEFAULT_BOTTOM_NOTICE,
+      schedule: [{ id: `p-${Date.now()}-1`, period: '1교시', subjects: [{ id: `s-${Date.now()}-1`, name: '자습', time: '08:30 ~ 09:00', duration: 30, targetClass: '전체' }] }]
     };
-
     setScheduleData((prev) => [...prev, newDay]);
     setActiveTab(newDay.id!);
   };
 
-  // Delete day
   const handleDeleteDay = (dayIdx: number) => {
     if (confirm(`'${scheduleData[dayIdx].date}' 시간표 전체를 삭제하시겠습니까?`)) {
       setScheduleData((prev) => prev.filter((_, idx) => idx !== dayIdx));
@@ -736,163 +565,71 @@ export default function App() {
     }
   };
 
-  // Add new period
   const handleAddPeriod = (dayIdx: number) => {
     const periodNum = scheduleData[dayIdx].schedule.length + 1;
-    const periodName = `${periodNum}교시`;
-
-    const newPeriod = {
-      id: `p-${Date.now()}`,
-      period: periodName,
-      subjects: [
-        {
-          id: `s-${Date.now()}`,
-          name: '새 과목',
-          entryTime: '09:10',
-          time: '09:20~10:20',
-          duration: 60,
-          targetClass: '행정학급',
-        },
-      ],
-    };
-
+    const newPeriod = { id: `p-${Date.now()}`, period: `${periodNum}교시`, subjects: [{ id: `s-${Date.now()}`, name: '새 과목', entryTime: '09:10', time: '09:20~10:20', duration: 60, targetClass: '행정학급' }] };
     setScheduleData((prev) => {
       const updated = [...prev];
-      updated[dayIdx] = {
-        ...updated[dayIdx],
-        schedule: [...updated[dayIdx].schedule, newPeriod],
-      };
+      updated[dayIdx] = { ...updated[dayIdx], schedule: [...updated[dayIdx].schedule, newPeriod] };
       return updated;
     });
   };
 
-  // Edit subject
-  const handleOpenEditSubject = (
-    dayIdx: number,
-    periodIdx: number,
-    subIdx: number,
-    subject: SubjectItem
-  ) => {
-    setEditingContext({
-      dayIdx,
-      periodIdx,
-      subIdx,
-      subject,
-    });
+  const handleOpenEditSubject = (dayIdx: number, periodIdx: number, subIdx: number, subject: SubjectItem) => {
+    setEditingContext({ dayIdx, periodIdx, subIdx, subject });
     setIsEditModalOpen(true);
   };
 
-  // Add subject
   const handleOpenAddSubject = (dayIdx: number, periodIdx: number) => {
-    setEditingContext({
-      dayIdx,
-      periodIdx,
-      subIdx: null,
-      subject: null,
-    });
+    setEditingContext({ dayIdx, periodIdx, subIdx: null, subject: null });
     setIsEditModalOpen(true);
   };
 
-  // Delete subject
-  const handleDeleteSubject = (
-    dayIdx: number,
-    periodIdx: number,
-    subIdx: number
-  ) => {
+  const handleDeleteSubject = (dayIdx: number, periodIdx: number, subIdx: number) => {
     setScheduleData((prev) => {
       const updated = [...prev];
       const period = updated[dayIdx].schedule[periodIdx];
       const newSubjects = period.subjects.filter((_, idx) => idx !== subIdx);
-
       const newSchedule = [...updated[dayIdx].schedule];
-      newSchedule[periodIdx] = {
-        ...period,
-        subjects: newSubjects,
-      };
-
-      updated[dayIdx] = {
-        ...updated[dayIdx],
-        schedule: newSchedule,
-      };
+      newSchedule[periodIdx] = { ...period, subjects: newSubjects };
+      updated[dayIdx] = { ...updated[dayIdx], schedule: newSchedule };
       return updated;
     });
   };
 
-  // Save subject
   const handleSaveSubject = (subject: SubjectItem) => {
     if (!editingContext) return;
-
     const { dayIdx, periodIdx, subIdx } = editingContext;
-
     setScheduleData((prev) => {
       const updated = [...prev];
       const period = updated[dayIdx].schedule[periodIdx];
-
       let newSubjects = [...period.subjects];
-      if (subIdx !== null) {
-        newSubjects[subIdx] = subject;
-      } else {
-        newSubjects.push(subject);
-      }
-
+      if (subIdx !== null) { newSubjects[subIdx] = subject; } else { newSubjects.push(subject); }
       const newSchedule = [...updated[dayIdx].schedule];
-      newSchedule[periodIdx] = {
-        ...period,
-        subjects: newSubjects,
-      };
-
-      updated[dayIdx] = {
-        ...updated[dayIdx],
-        schedule: newSchedule,
-      };
-
+      newSchedule[periodIdx] = { ...period, subjects: newSubjects };
+      updated[dayIdx] = { ...updated[dayIdx], schedule: newSchedule };
       return updated;
     });
   };
 
-  // Quick edit targetClass for a specific subject
-  const handleQuickEditTargetClass = (
-    dayIdx: number,
-    periodIdx: number,
-    subIdx: number,
-    newTargetClass: string
-  ) => {
+  const handleQuickEditTargetClass = (dayIdx: number, periodIdx: number, subIdx: number, newTargetClass: string) => {
     setScheduleData((prev) => {
       const updated = [...prev];
       if (!updated[dayIdx] || !updated[dayIdx].schedule[periodIdx]) return prev;
-
       const period = updated[dayIdx].schedule[periodIdx];
       const subject = period.subjects[subIdx];
       if (!subject) return prev;
-
       const newSubjects = [...period.subjects];
-      newSubjects[subIdx] = {
-        ...subject,
-        targetClass: newTargetClass,
-      };
-
+      newSubjects[subIdx] = { ...subject, targetClass: newTargetClass };
       const newSchedule = [...updated[dayIdx].schedule];
-      newSchedule[periodIdx] = {
-        ...period,
-        subjects: newSubjects,
-      };
-
-      updated[dayIdx] = {
-        ...updated[dayIdx],
-        schedule: newSchedule,
-      };
-
+      newSchedule[periodIdx] = { ...period, subjects: newSubjects };
+      updated[dayIdx] = { ...updated[dayIdx], schedule: newSchedule };
       return updated;
     });
   };
 
-  // Filtered schedules for developer view
-  const displayedSchedules =
-    activeTab === 'ALL'
-      ? modeFilteredSchedules
-      : modeFilteredSchedules.filter((d) => d.id === activeTab || d.date === activeTab);
+  const displayedSchedules = activeTab === 'ALL' ? modeFilteredSchedules : modeFilteredSchedules.filter((d) => d.id === activeTab || d.date === activeTab);
 
-  // 1. Selector Mode (when no mode chosen yet)
   if (appRole === 'selector') {
     return (
       <>
@@ -922,10 +659,7 @@ export default function App() {
                 localStorage.setItem(`school_name_${sSlug}`, sName);
                 const existing = localStorage.getItem(`class_attendance_settings_${sSlug}`);
                 const parsed = existing ? JSON.parse(existing) : {};
-                localStorage.setItem(
-                  `class_attendance_settings_${sSlug}`,
-                  JSON.stringify({ ...parsed, grade, classNum })
-                );
+                localStorage.setItem(`class_attendance_settings_${sSlug}`, JSON.stringify({ ...parsed, grade, classNum }));
               } catch {}
             }
             changeAppRole('classroom', sSlug);
@@ -937,760 +671,244 @@ export default function App() {
     );
   }
 
-  // 2. Classroom Electronic Board Mode (Direct classroom deployment with initial grade/class setup)
   if (appRole === 'classroom') {
     return (
       <div className={`min-h-screen bg-slate-950 text-white font-sans ${isFullscreen ? 'p-0 m-0' : 'pb-10'}`}>
         <ElectronicBoard
-          daySchedule={currentDaySchedule}
-          allDays={modeFilteredSchedules}
-          onSelectDay={(dayId) => setActiveTab(dayId)}
-          examMode={examMode}
-          onChangeExamMode={handleSelectExamMode}
-          onOpenUploadModal={() => setIsUploadModalOpen(true)}
-          isFullscreen={isFullscreen}
-          onToggleFullscreen={handleToggleFullscreen}
-          onUpdateBottomNotice={handleUpdateBottomNotice}
-          onUpdateTopNotice={handleUpdateTopNotice}
-          alertSettings={alertSettings}
-          onChangeAlertSettings={handleUpdateAlertSettings}
-          selectedGrade={selectedGrade}
-          onSelectGrade={setSelectedGrade}
-          schoolLogo={schoolLogo}
-          onUpdateSchoolLogo={handleUpdateSchoolLogo}
-          schoolName={schoolName}
-          boardTheme={boardTheme}
-          onUpdateBoardTheme={handleUpdateBoardTheme}
-          maxClasses={maxClasses}
-          onSwitchToAdmin={() => {
-            changeAppRole('admin');
-            setViewMode('developer');
-          }}
-          onSwitchToSelector={() => {
-            changeAppRole('selector');
-          }}
+          daySchedule={currentDaySchedule} allDays={modeFilteredSchedules} onSelectDay={(dayId) => setActiveTab(dayId)} examMode={examMode} onChangeExamMode={handleSelectExamMode} onOpenUploadModal={() => setIsUploadModalOpen(true)} isFullscreen={isFullscreen} onToggleFullscreen={handleToggleFullscreen} onUpdateBottomNotice={handleUpdateBottomNotice} onUpdateTopNotice={handleUpdateTopNotice} alertSettings={alertSettings} onChangeAlertSettings={handleUpdateAlertSettings} selectedGrade={selectedGrade} onSelectGrade={setSelectedGrade} schoolLogo={schoolLogo} onUpdateSchoolLogo={handleUpdateSchoolLogo} schoolName={schoolName} boardTheme={boardTheme} onUpdateBoardTheme={handleUpdateBoardTheme} maxClasses={maxClasses}
+          onSwitchToAdmin={() => { changeAppRole('admin'); setViewMode('developer'); }}
+          onSwitchToSelector={() => { changeAppRole('selector'); }}
           onUpdateTargetClass={(periodIdx, subIdx, newTargetClass) => {
-            const dayIdx = scheduleData.findIndex(
-              (d) => d.id === currentDaySchedule.id || d.date === currentDaySchedule.date
-            );
-            if (dayIdx !== -1) {
-              handleQuickEditTargetClass(dayIdx, periodIdx, subIdx, newTargetClass);
-            }
+            const dayIdx = scheduleData.findIndex((d) => d.id === currentDaySchedule.id || d.date === currentDaySchedule.date);
+            if (dayIdx !== -1) handleQuickEditTargetClass(dayIdx, periodIdx, subIdx, newTargetClass);
           }}
         />
-
         {isInitialClassSetupOpen && (
-          <InitialClassSetupModal
-            isOpen={isInitialClassSetupOpen}
-            onClose={() => setIsInitialClassSetupOpen(false)}
-            maxClasses={maxClasses}
-            initialSchoolName={schoolName}
-            initialSchoolSlug={schoolSlug}
-            onSave={(grade, classNum, sName, sSlug) => {
-              if (sName) setSchoolName(sName);
-              if (sSlug) setSchoolSlug(sSlug);
-              setSelectedGrade(`${grade}학년`);
-              if (typeof window !== 'undefined') {
-                try {
-                  if (sSlug) localStorage.setItem('current_school_slug', sSlug);
-                  if (sName && sSlug) localStorage.setItem(`school_name_${sSlug}`, sName);
-                  const existing = localStorage.getItem(`class_attendance_settings_${sSlug || schoolSlug}`);
-                  const parsed = existing ? JSON.parse(existing) : {};
-                  localStorage.setItem(
-                    `class_attendance_settings_${sSlug || schoolSlug}`,
-                    JSON.stringify({ ...parsed, grade, classNum })
-                  );
-                } catch {}
-              }
-              changeAppRole('classroom', sSlug);
-              setIsInitialClassSetupOpen(false);
-            }}
-          />
+          <InitialClassSetupModal isOpen={isInitialClassSetupOpen} onClose={() => setIsInitialClassSetupOpen(false)} maxClasses={maxClasses} initialSchoolName={schoolName} initialSchoolSlug={schoolSlug} onSave={(grade, classNum, sName, sSlug) => {
+            if (sName) setSchoolName(sName);
+            if (sSlug) setSchoolSlug(sSlug);
+            setSelectedGrade(`${grade}학년`);
+            if (typeof window !== 'undefined') {
+              try {
+                if (sSlug) localStorage.setItem('current_school_slug', sSlug);
+                if (sName && sSlug) localStorage.setItem(`school_name_${sSlug}`, sName);
+                const existing = localStorage.getItem(`class_attendance_settings_${sSlug || schoolSlug}`);
+                const parsed = existing ? JSON.parse(existing) : {};
+                localStorage.setItem(`class_attendance_settings_${sSlug || schoolSlug}`, JSON.stringify({ ...parsed, grade, classNum }));
+              } catch {}
+            }
+            changeAppRole('classroom', sSlug);
+            setIsInitialClassSetupOpen(false);
+          }} />
         )}
-
-        <ImageUploaderModal
-          isOpen={isUploadModalOpen}
-          onClose={() => setIsUploadModalOpen(false)}
-          onExtractSuccess={handleExtractSuccess}
-        />
+        <ImageUploaderModal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} onExtractSuccess={handleExtractSuccess} />
       </div>
     );
   }
 
-  // 3. Admin / Teacher Mode Dashboard
+  // ★★★ [해결된 부분] 3. Admin / Teacher Mode Dashboard 영역 ★★★
+  // 미리보기(viewMode === 'board')일 때는 여백을 없애고 배경을 다크그린(#071a12)으로 강제 고정합니다.
   return (
-    <div className={`min-h-screen bg-slate-100 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white print:bg-white print:p-0 ${
-      isFullscreen ? 'pb-2' : 'pb-16'
-    }`}>
+    <div className={`min-h-screen font-sans selection:bg-indigo-500 selection:text-white print:bg-white print:p-0 flex flex-col ${
+      viewMode === 'board'
+        ? 'bg-[#071a12] text-white overflow-hidden' 
+        : 'bg-slate-100 text-slate-800 pb-16'
+    } ${isFullscreen ? 'pb-0' : ''}`}>
       
-      {/* Header Bar: Only shown when NOT in fullscreen mode */}
       {!isFullscreen && (
         <div className="print:hidden">
-          <Header
-            onOpenUpload={() => setIsUploadModalOpen(true)}
-            onCopyCode={handleCopyCode}
-            copied={copied}
-            onExportJson={handleExportJson}
-            onPrint={handlePrint}
-            totalDays={totalDays}
-            totalSubjects={totalSubjects}
-            schoolName={schoolName}
-            schoolSlug={schoolSlug}
-            onSwitchToSelector={() => changeAppRole('selector')}
-            onOpenSchoolSettings={() => {
-              if (viewMode !== 'developer') {
-                setViewMode('developer');
-              }
-              setTimeout(() => {
-                const el = document.getElementById('school-settings-section');
-                if (el) {
-                  el.scrollIntoView({ behavior: 'smooth' });
-                }
-              }, 100);
-            }}
-            onOpenShareModal={() => setIsShareModalOpen(true)}
-          />
-
-          {/* Quota Exceeded Notification Banner */}
+          <Header onOpenUpload={() => setIsUploadModalOpen(true)} onCopyCode={handleCopyCode} copied={copied} onExportJson={handleExportJson} onPrint={handlePrint} totalDays={totalDays} totalSubjects={totalSubjects} schoolName={schoolName} schoolSlug={schoolSlug} onSwitchToSelector={() => changeAppRole('selector')} onOpenSchoolSettings={() => { if (viewMode !== 'developer') setViewMode('developer'); setTimeout(() => { const el = document.getElementById('school-settings-section'); if (el) el.scrollIntoView({ behavior: 'smooth' }); }, 100); }} onOpenShareModal={() => setIsShareModalOpen(true)} />
           {isFirestoreQuotaExceeded() && (
             <div className="bg-amber-950/90 border-b border-amber-500/60 px-4 py-2 text-amber-200 text-xs font-bold flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-base">ℹ️</span>
-                <span>
-                  [안내] Firebase 무료 일일 쓰기 한도(Quota)가 소진되어 <strong>로컬 저장소(LocalStorage) 모드</strong>로 안전하게 자동 전환되었습니다. 시간표와 전자칠판 기능은 정상 작동합니다.
-                </span>
-              </div>
-              <a
-                href={FIRESTORE_UPGRADE_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="text-amber-300 hover:text-white underline font-black shrink-0 px-2.5 py-1 rounded-lg bg-amber-900/80 border border-amber-400/50"
-              >
-                Firebase 콘솔 확인 ➔
-              </a>
+              <div className="flex items-center gap-2"><span className="text-base">ℹ️</span><span>[안내] Firebase 무료 일일 쓰기 한도(Quota)가 소진되어 <strong>로컬 저장소(LocalStorage) 모드</strong>로 안전하게 자동 전환되었습니다. 시간표와 전자칠판 기능은 정상 작동합니다.</span></div>
+              <a href={FIRESTORE_UPGRADE_URL} target="_blank" rel="noreferrer" className="text-amber-300 hover:text-white underline font-black shrink-0 px-2.5 py-1 rounded-lg bg-amber-900/80 border border-amber-400/50">Firebase 콘솔 확인 ➔</a>
             </div>
           )}
-
-          {/* Unified 1-Line Navigation & Control Bar (스크롤 발생 없이 1줄로 완전 정리 & 미리보기 활성/비활성화 토글) */}
+          
           <div className="bg-slate-900 border-b border-slate-800 text-white sticky top-[65px] z-20 shadow-md">
             <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-2">
               <div className="flex items-center justify-between gap-2 overflow-x-hidden whitespace-nowrap">
-                
-                {/* Left: Mode Shortcuts, Quick Exam Switcher & Date Tabs (스크롤 없이 1줄 콤팩트 표시) */}
                 <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                  <button
-                    onClick={() => changeAppRole('selector')}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer border border-slate-700/80 shrink-0"
-                    title="모드 선택 화면으로 돌아가기"
-                  >
-                    <span>🏠</span>
-                    <span className="hidden md:inline">모드 선택</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      changeAppRole('classroom');
-                      setViewMode('board');
-                    }}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600/90 hover:bg-emerald-500 text-white transition cursor-pointer shadow-xs shrink-0"
-                    title="교실 배포용 전자칠판 전체 모드로 즉시 전환"
-                  >
-                    <Monitor className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">교실 모드</span>
-                  </button>
-
+                  <button onClick={() => changeAppRole('selector')} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer border border-slate-700/80 shrink-0" title="모드 선택 화면으로 돌아가기"><span>🏠</span><span className="hidden md:inline">모드 선택</span></button>
+                  <button onClick={() => { changeAppRole('classroom'); setViewMode('board'); }} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600/90 hover:bg-emerald-500 text-white transition cursor-pointer shadow-xs shrink-0" title="교실 배포용 전자칠판 전체 모드로 즉시 전환"><Monitor className="w-3.5 h-3.5" /><span className="hidden sm:inline">교실 모드</span></button>
                   <div className="h-4 w-px bg-slate-700 mx-0.5"></div>
-
-                  {/* 시험 구분 퀵 전환 버튼 (정기고사 / 모의고사) */}
                   <div className="flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-slate-700/80 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleSelectExamMode('regular')}
-                      className={`px-2 py-0.5 rounded-md text-[11px] font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${
-                        examMode === 'regular'
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                      title="정기고사(중간/기말고사) 시간표로 즉시 전환"
-                    >
-                      <BookOpen className="w-3 h-3 text-emerald-300" />
-                      <span>정기고사</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSelectExamMode('mock')}
-                      className={`px-2 py-0.5 rounded-md text-[11px] font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${
-                        examMode === 'mock'
-                          ? 'bg-purple-600 text-white shadow-xs'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                      title="전국연합학력평가 타종 시간표로 즉시 전환 (상시 운용)"
-                    >
-                      <Award className="w-3 h-3 text-purple-300" />
-                      <span>모의고사</span>
-                    </button>
+                    <button type="button" onClick={() => handleSelectExamMode('regular')} className={`px-2 py-0.5 rounded-md text-[11px] font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${examMode === 'regular' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'}`}><BookOpen className="w-3 h-3 text-emerald-300" /><span>정기고사</span></button>
+                    <button type="button" onClick={() => handleSelectExamMode('mock')} className={`px-2 py-0.5 rounded-md text-[11px] font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${examMode === 'mock' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'}`}><Award className="w-3 h-3 text-purple-300" /><span>모의고사</span></button>
                   </div>
-
                   <div className="h-4 w-px bg-slate-700 mx-0.5"></div>
-
-                  {/* Date Tabs (선택된 모드에 해당하는 시험 일자만 표시) */}
                   <div className="flex items-center gap-1 shrink-0">
-                    {modeFilteredSchedules.length > 1 && (
-                      <button
-                        onClick={() => setActiveTab('ALL')}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer shrink-0 ${
-                          activeTab === 'ALL'
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700/60'
-                        }`}
-                        title="전체 시험 일정 보기"
-                      >
-                        <Layers className="w-3 h-3" />
-                        <span>전체</span>
-                      </button>
-                    )}
-
+                    {modeFilteredSchedules.length > 1 && (<button onClick={() => setActiveTab('ALL')} className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer shrink-0 ${activeTab === 'ALL' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700/60'}`}><Layers className="w-3 h-3" /><span>전체</span></button>)}
                     {modeFilteredSchedules.map((day) => {
                       const isSelected = activeTab === day.id || activeTab === day.date || modeFilteredSchedules.length === 1;
                       const isToday = isTodayScheduleDay(day);
-                      const isMk = isMockSchedule(day);
-                      const isReg = isRegularSchedule(day);
-
                       return (
-                        <button
-                          key={day.id || day.date}
-                          onClick={() => setActiveTab(day.id || day.date)}
-                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer shrink-0 ${
-                            isSelected
-                              ? 'bg-indigo-600 text-white shadow-xs'
-                              : isToday
-                              ? 'bg-amber-950/70 text-yellow-300 border border-yellow-500/50 hover:bg-amber-900/80'
-                              : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700/60'
-                          }`}
-                          title={day.fullTitle || `${day.date} 시험 시간표`}
-                        >
-                          <Calendar className={`w-3 h-3 ${isSelected ? 'text-indigo-200' : isToday ? 'text-yellow-400' : 'text-slate-400'}`} />
-                          <span>{isMk ? '모의고사' : day.date}</span>
-                          {isMk && (
-                            <span className="text-[9px] bg-purple-400 text-white px-1 rounded-xs font-black">
-                              상시 모드
-                            </span>
-                          )}
-                          {isReg && (
-                            <span className="text-[9px] bg-emerald-500/30 text-emerald-300 px-1 rounded-xs font-black">
-                              정기
-                            </span>
-                          )}
-                          {isToday && (
-                            <span className="text-[9px] bg-yellow-400 text-slate-950 px-1 rounded font-black">
-                              오늘
-                            </span>
-                          )}
-                        </button>
+                        <button key={day.id || day.date} onClick={() => setActiveTab(day.id || day.date)} className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer shrink-0 ${isSelected ? 'bg-indigo-600 text-white shadow-xs' : isToday ? 'bg-amber-950/70 text-yellow-300 border border-yellow-500/50 hover:bg-amber-900/80' : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700/60'}`}><Calendar className={`w-3 h-3 ${isSelected ? 'text-indigo-200' : isToday ? 'text-yellow-400' : 'text-slate-400'}`} /><span>{isMockSchedule(day) ? '모의고사' : day.date}</span></button>
                       );
                     })}
-
-                    <button
-                      onClick={handleAddDay}
-                      className="flex items-center justify-center w-6 h-6 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/80 hover:text-white transition cursor-pointer shrink-0"
-                      title="새 시험 일자 추가"
-                    >
-                      <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                    </button>
+                    <button onClick={handleAddDay} className="flex items-center justify-center w-6 h-6 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/80 hover:text-white transition cursor-pointer shrink-0"><Plus className="w-3.5 h-3.5 stroke-[2.5]" /></button>
                   </div>
                 </div>
 
-                {/* Right: Grade Filter + ⭐ 미리보기 토글(활성/비활성화) + Quick Actions */}
                 <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                  {/* Grade Filter */}
                   <div className="flex items-center gap-0.5 bg-slate-800/90 p-0.5 rounded-lg border border-slate-700/80 text-xs font-black shrink-0">
-                    <span className="text-[10px] text-slate-400 px-1.5 flex items-center gap-1 hidden lg:flex">
-                      <Filter className="w-3 h-3 text-indigo-400" />
-                      학년:
-                    </span>
-                    {['1학년', '2학년', '3학년'].map((grade) => {
-                      const isGradeActive = selectedGrade === grade;
-                      return (
-                        <button
-                          key={grade}
-                          onClick={() => setSelectedGrade(grade)}
-                          className={`px-2 py-0.5 rounded-md text-xs font-black transition cursor-pointer ${
-                            isGradeActive
-                              ? 'bg-indigo-600 text-white shadow-xs'
-                              : 'text-slate-300 hover:text-white hover:bg-slate-700'
-                          }`}
-                        >
-                          {grade}
-                        </button>
-                      );
-                    })}
+                    <span className="text-[10px] text-slate-400 px-1.5 flex items-center gap-1 hidden lg:flex"><Filter className="w-3 h-3 text-indigo-400" />학년:</span>
+                    {['1학년', '2학년', '3학년'].map((grade) => (
+                      <button key={grade} onClick={() => setSelectedGrade(grade)} className={`px-2 py-0.5 rounded-md text-xs font-black transition cursor-pointer ${selectedGrade === grade ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}>{grade}</button>
+                    ))}
                   </div>
-
                   <div className="h-4 w-px bg-slate-700 mx-0.5"></div>
-
-                  {/* ⭐ 미리보기 버튼 (활성 / 비활성화를 시켜서 아래 시간표가 보이고 안 보이게 제어) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setViewMode((prev) => (prev === 'board' ? 'developer' : 'board'));
-                    }}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-black transition cursor-pointer shrink-0 shadow-xs ${
-                      viewMode === 'board'
-                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 ring-2 ring-emerald-300/80 shadow-emerald-500/20'
-                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700'
-                    }`}
-                    title={
-                      viewMode === 'board'
-                        ? '미리보기 활성화 중입니다. 클릭하면 비활성화되어 아래 시간표 편집 화면이 표시됩니다.'
-                        : '미리보기 비활성화 중입니다. 클릭하면 활성화되어 전자칠판 실제 화면 미리보기가 켜집니다.'
-                    }
-                  >
-                    {viewMode === 'board' ? (
-                      <>
-                        <Eye className="w-3.5 h-3.5 text-slate-950 stroke-[2.5]" />
-                        <span>미리보기</span>
-                        <span className="bg-slate-950 text-emerald-300 text-[10px] px-1.5 py-0.2 rounded-full font-black ml-0.5">
-                          활성
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <EyeOff className="w-3.5 h-3.5 text-slate-400" />
-                        <span>미리보기</span>
-                        <span className="bg-slate-700 text-slate-300 text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-0.5">
-                          비활성
-                        </span>
-                      </>
-                    )}
+                  <button type="button" onClick={() => setViewMode((prev) => (prev === 'board' ? 'developer' : 'board'))} className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-black transition cursor-pointer shrink-0 shadow-xs ${viewMode === 'board' ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 ring-2 ring-emerald-300/80 shadow-emerald-500/20' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700'}`}>
+                    {viewMode === 'board' ? (<><Eye className="w-3.5 h-3.5 text-slate-950 stroke-[2.5]" /><span>미리보기</span><span className="bg-slate-950 text-emerald-300 text-[10px] px-1.5 py-0.2 rounded-full font-black ml-0.5">활성</span></>) : (<><EyeOff className="w-3.5 h-3.5 text-slate-400" /><span>미리보기</span><span className="bg-slate-700 text-slate-300 text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-0.5">비활성</span></>)}
                   </button>
-
                   <div className="h-4 w-px bg-slate-700 mx-0.5 hidden sm:block"></div>
-
-                  {/* Secondary Quick Actions */}
                   <div className="flex items-center gap-1 hidden sm:flex shrink-0">
-                    <button
-                      type="button"
-                      onClick={handleClearAllSchedule}
-                      className="text-xs text-rose-300 hover:text-white hover:bg-rose-500/20 border border-rose-400/30 px-2 py-1 rounded-lg flex items-center gap-1 font-semibold transition cursor-pointer"
-                      title="등록된 시험 시간표(더미 데이터 포함)를 모두 비우고 빈 상태로 만듭니다"
-                    >
-                      <Trash2 className="w-3 h-3 text-rose-400" />
-                      <span className="hidden xl:inline">시간표 비우기</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleResetSample}
-                      className="text-xs text-slate-300 hover:text-white hover:bg-slate-700/60 border border-slate-600/50 px-2 py-1 rounded-lg flex items-center gap-1 font-semibold transition cursor-pointer"
-                      title="체험용 기본 샘플 시간표로 다시 복원합니다"
-                    >
-                      <RefreshCw className="w-3 h-3 text-indigo-400" />
-                      <span className="hidden xl:inline">샘플 복원</span>
-                    </button>
+                    <button type="button" onClick={handleClearAllSchedule} className="text-xs text-rose-300 hover:text-white hover:bg-rose-500/20 border border-rose-400/30 px-2 py-1 rounded-lg flex items-center gap-1 font-semibold transition cursor-pointer"><Trash2 className="w-3 h-3 text-rose-400" /><span className="hidden xl:inline">시간표 비우기</span></button>
+                    <button type="button" onClick={handleResetSample} className="text-xs text-slate-300 hover:text-white hover:bg-slate-700/60 border border-slate-600/50 px-2 py-1 rounded-lg flex items-center gap-1 font-semibold transition cursor-pointer"><RefreshCw className="w-3 h-3 text-indigo-400" /><span className="hidden xl:inline">샘플 복원</span></button>
                   </div>
                 </div>
-
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Main Container */}
+      {/* ★★★ [해결된 부분] Main Container ★★★ */}
+      {/* 칠판 미리보기(viewMode === 'board')일 때 px, pt 등의 패딩(여백)을 모두 제거하여 흰 테두리를 차단합니다 */}
       <main className={
-        isFullscreen
-          ? "w-full p-0 m-0 space-y-0 overflow-x-hidden"
-          : "w-full px-3 sm:px-5 lg:px-8 pt-6 space-y-6 overflow-x-hidden"
+        viewMode === 'board' || isFullscreen
+          ? "w-full p-0 m-0 flex-1 overflow-hidden flex flex-col" 
+          : "w-full px-3 sm:px-5 lg:px-8 pt-6 space-y-6 overflow-x-hidden flex-1"
       }>
         
         {viewMode === 'board' ? (
-          /* Electronic Blackboard View */
           <ElectronicBoard
-            daySchedule={currentDaySchedule}
-            allDays={modeFilteredSchedules}
-            onSelectDay={(dayId) => setActiveTab(dayId)}
-            examMode={examMode}
-            onChangeExamMode={handleSelectExamMode}
-            onOpenUploadModal={() => setIsUploadModalOpen(true)}
-            isFullscreen={isFullscreen}
-            onToggleFullscreen={handleToggleFullscreen}
-            onUpdateBottomNotice={handleUpdateBottomNotice}
-            onUpdateTopNotice={handleUpdateTopNotice}
-            alertSettings={alertSettings}
-            onChangeAlertSettings={handleUpdateAlertSettings}
-            selectedGrade={selectedGrade}
-            onSelectGrade={setSelectedGrade}
-            schoolLogo={schoolLogo}
-            onUpdateSchoolLogo={handleUpdateSchoolLogo}
-            schoolName={schoolName}
-            boardTheme={boardTheme}
-            onUpdateBoardTheme={handleUpdateBoardTheme}
+            daySchedule={currentDaySchedule} allDays={modeFilteredSchedules} onSelectDay={(dayId) => setActiveTab(dayId)} examMode={examMode} onChangeExamMode={handleSelectExamMode} onOpenUploadModal={() => setIsUploadModalOpen(true)} isFullscreen={isFullscreen} onToggleFullscreen={handleToggleFullscreen} onUpdateBottomNotice={handleUpdateBottomNotice} onUpdateTopNotice={handleUpdateTopNotice} alertSettings={alertSettings} onChangeAlertSettings={handleUpdateAlertSettings} selectedGrade={selectedGrade} onSelectGrade={setSelectedGrade} schoolLogo={schoolLogo} onUpdateSchoolLogo={handleUpdateSchoolLogo} schoolName={schoolName} boardTheme={boardTheme} onUpdateBoardTheme={handleUpdateBoardTheme}
             onUpdateTargetClass={(periodIdx, subIdx, newTargetClass) => {
-              const dayIdx = scheduleData.findIndex(
-                (d) => d.id === currentDaySchedule.id || d.date === currentDaySchedule.date
-              );
-              if (dayIdx !== -1) {
-                handleQuickEditTargetClass(dayIdx, periodIdx, subIdx, newTargetClass);
-              }
+              const dayIdx = scheduleData.findIndex((d) => d.id === currentDaySchedule.id || d.date === currentDaySchedule.date);
+              if (dayIdx !== -1) handleQuickEditTargetClass(dayIdx, periodIdx, subIdx, newTargetClass);
             }}
           />
         ) : (
-          /* Admin Mode & Developer View: Timetable Grid first at top, followed by collapsible settings/tools toolbox */
           <>
             <TimetableGrid
-              daySchedules={displayedSchedules}
-              selectedGrade={selectedGrade}
-              setSelectedGrade={setSelectedGrade}
+              daySchedules={displayedSchedules} selectedGrade={selectedGrade} setSelectedGrade={setSelectedGrade}
               onEditSubject={(dayIdx, periodIdx, subIdx, subject) => {
                 const targetDay = displayedSchedules[dayIdx];
-                const realIdx = scheduleData.findIndex(
-                  (d) => d.id === targetDay.id || d.date === targetDay.date
-                );
+                const realIdx = scheduleData.findIndex((d) => d.id === targetDay.id || d.date === targetDay.date);
                 handleOpenEditSubject(realIdx !== -1 ? realIdx : dayIdx, periodIdx, subIdx, subject);
               }}
               onDeleteSubject={(dayIdx, periodIdx, subIdx) => {
                 const targetDay = displayedSchedules[dayIdx];
-                const realIdx = scheduleData.findIndex(
-                  (d) => d.id === targetDay.id || d.date === targetDay.date
-                );
+                const realIdx = scheduleData.findIndex((d) => d.id === targetDay.id || d.date === targetDay.date);
                 handleDeleteSubject(realIdx !== -1 ? realIdx : dayIdx, periodIdx, subIdx);
               }}
               onAddSubject={(dayIdx, periodIdx) => {
                 const targetDay = displayedSchedules[dayIdx];
-                const realIdx = scheduleData.findIndex(
-                  (d) => d.id === targetDay.id || d.date === targetDay.date
-                );
+                const realIdx = scheduleData.findIndex((d) => d.id === targetDay.id || d.date === targetDay.date);
                 handleOpenAddSubject(realIdx !== -1 ? realIdx : dayIdx, periodIdx);
               }}
               onAddPeriod={(dayIdx) => {
                 const targetDay = displayedSchedules[dayIdx];
-                const realIdx = scheduleData.findIndex(
-                  (d) => d.id === targetDay.id || d.date === targetDay.date
-                );
+                const realIdx = scheduleData.findIndex((d) => d.id === targetDay.id || d.date === targetDay.date);
                 handleAddPeriod(realIdx !== -1 ? realIdx : dayIdx);
               }}
               onDeleteDay={(dayIdx) => {
                 const targetDay = displayedSchedules[dayIdx];
-                const realIdx = scheduleData.findIndex(
-                  (d) => d.id === targetDay.id || d.date === targetDay.date
-                );
+                const realIdx = scheduleData.findIndex((d) => d.id === targetDay.id || d.date === targetDay.date);
                 handleDeleteDay(realIdx !== -1 ? realIdx : dayIdx);
               }}
               onEditDay={(dayIdx, newDate, newTitle) => {
                 const targetDay = displayedSchedules[dayIdx];
-                const realIdx = scheduleData.findIndex(
-                  (d) => d.id === targetDay.id || d.date === targetDay.date
-                );
+                const realIdx = scheduleData.findIndex((d) => d.id === targetDay.id || d.date === targetDay.date);
                 handleEditDay(realIdx !== -1 ? realIdx : dayIdx, newDate, newTitle);
               }}
               onEditDayBottomNotice={(dayIdx, newBottomNotice) => {
                 const targetDay = displayedSchedules[dayIdx];
-                const realIdx = scheduleData.findIndex(
-                  (d) => d.id === targetDay.id || d.date === targetDay.date
-                );
+                const realIdx = scheduleData.findIndex((d) => d.id === targetDay.id || d.date === targetDay.date);
                 const actualIdx = realIdx !== -1 ? realIdx : dayIdx;
-                setScheduleData((prev) => {
-                  const updated = [...prev];
-                  updated[actualIdx] = {
-                    ...updated[actualIdx],
-                    bottomNotice: newBottomNotice,
-                  };
-                  return updated;
-                });
+                setScheduleData((prev) => { const updated = [...prev]; updated[actualIdx] = { ...updated[actualIdx], bottomNotice: newBottomNotice }; return updated; });
               }}
               onEditDayTopNotice={(dayIdx, newTopNotice) => {
                 const targetDay = displayedSchedules[dayIdx];
-                const realIdx = scheduleData.findIndex(
-                  (d) => d.id === targetDay.id || d.date === targetDay.date
-                );
+                const realIdx = scheduleData.findIndex((d) => d.id === targetDay.id || d.date === targetDay.date);
                 const actualIdx = realIdx !== -1 ? realIdx : dayIdx;
-                setScheduleData((prev) => {
-                  const updated = [...prev];
-                  updated[actualIdx] = {
-                    ...updated[actualIdx],
-                    notice: newTopNotice,
-                  };
-                  return updated;
-                });
+                setScheduleData((prev) => { const updated = [...prev]; updated[actualIdx] = { ...updated[actualIdx], notice: newTopNotice }; return updated; });
               }}
               onQuickEditTargetClass={(dayIdx, periodIdx, subIdx, newTargetClass) => {
                 const targetDay = displayedSchedules[dayIdx];
-                const realIdx = scheduleData.findIndex(
-                  (d) => d.id === targetDay.id || d.date === targetDay.date
-                );
+                const realIdx = scheduleData.findIndex((d) => d.id === targetDay.id || d.date === targetDay.date);
                 handleQuickEditTargetClass(realIdx !== -1 ? realIdx : dayIdx, periodIdx, subIdx, newTargetClass);
               }}
               onAddDay={handleAddDay}
             />
 
-            {/* 학교 설정 및 환경설정 툴박스 (접이식 아코디언) */}
             <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex items-center justify-between print:hidden mt-6">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs">
-                  <Sliders className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900">학교 설정 및 AI 업로드·환경설정 툴박스</h3>
-                  <p className="text-xs text-slate-500">학교명, 고유 링크, AI 자동 파싱, 학교 로고, 최대 반 개수, 테마 설정</p>
-                </div>
+                <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs"><Sliders className="w-5 h-5" /></div>
+                <div><h3 className="text-sm font-black text-slate-900">학교 설정 및 AI 업로드·환경설정 툴박스</h3><p className="text-xs text-slate-500">학교명, 고유 링크, AI 자동 파싱, 학교 로고, 최대 반 개수, 테마 설정</p></div>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsSettingsExpanded(!isSettingsExpanded)}
-                className="px-4 py-2 rounded-xl text-xs font-black bg-slate-900 hover:bg-slate-800 text-white transition flex items-center gap-1.5 cursor-pointer shadow-sm"
-              >
+              <button type="button" onClick={() => setIsSettingsExpanded(!isSettingsExpanded)} className="px-4 py-2 rounded-xl text-xs font-black bg-slate-900 hover:bg-slate-800 text-white transition flex items-center gap-1.5 cursor-pointer shadow-sm">
                 <span>{isSettingsExpanded ? '설정 접기 🔼' : '설정 펼치기 🔽'}</span>
               </button>
             </div>
 
             {isSettingsExpanded && (
               <div className="space-y-6 pt-4 animate-fadeIn print:block">
-                {/* 학교명 및 고유 링크 주소 설정 */}
-                <SchoolSettingsCard
-                  schoolName={schoolName}
-                  schoolSlug={schoolSlug}
-                  onSaveSchoolInfo={handleUpdateSchoolInfo}
-                  cloudSyncStatus={cloudSyncStatus}
-                  onOpenShareModal={() => setIsShareModalOpen(true)}
-                  onOpenClassroomMode={() => {
-                    changeAppRole('classroom');
-                    setViewMode('board');
-                  }}
-                />
-
-                {/* 시험 시간표 PDF 및 이미지 AI 자동 파싱 업로드 카드 */}
-                <ScheduleUploadCard
-                  onOpenUpload={() => setIsUploadModalOpen(true)}
-                  onSwitchToBoard={() => {
-                    changeAppRole('classroom');
-                    setViewMode('board');
-                  }}
-                />
-
-                {/* 학교 마크(로고) 첨부 및 칠판 연동 */}
-                <SchoolLogoCard
-                  schoolLogo={schoolLogo}
-                  onChangeLogo={handleUpdateSchoolLogo}
-                  fullTitle={currentDaySchedule?.fullTitle}
-                />
-
+                <SchoolSettingsCard schoolName={schoolName} schoolSlug={schoolSlug} onSaveSchoolInfo={handleUpdateSchoolInfo} cloudSyncStatus={cloudSyncStatus} onOpenShareModal={() => setIsShareModalOpen(true)} onOpenClassroomMode={() => { changeAppRole('classroom'); setViewMode('board'); }} />
+                <ScheduleUploadCard onOpenUpload={() => setIsUploadModalOpen(true)} onSwitchToBoard={() => { changeAppRole('classroom'); setViewMode('board'); }} />
+                <SchoolLogoCard schoolLogo={schoolLogo} onChangeLogo={handleUpdateSchoolLogo} fullTitle={currentDaySchedule?.fullTitle} />
                 <GeminiSettingsCard />
 
-
-                {/* 총 반 개수 설정 */}
                 <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
-                        <Grid className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                          <span>최대 학급 반 개수 설정</span>
-                        </h3>
-                        <p className="text-xs text-slate-500 font-medium">
-                          전자칠판 및 초기 설정에서 선택 가능한 최대 반 번호(예: 10반, 15반, 20반)를 설정합니다.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-200">
-                      현재 설정: <strong className="text-indigo-900">{maxClasses}반까지</strong>
-                    </div>
+                    <div className="flex items-center gap-2.5"><div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs"><Grid className="w-5 h-5" /></div><div><h3 className="text-base font-black text-slate-900 flex items-center gap-2"><span>최대 학급 반 개수 설정</span></h3><p className="text-xs text-slate-500 font-medium">전자칠판 및 초기 설정에서 선택 가능한 최대 반 번호를 설정합니다.</p></div></div>
+                    <div className="text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-200">현재 설정: <strong className="text-indigo-900">{maxClasses}반까지</strong></div>
                   </div>
-
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {Array.from({ length: 15 }, (_, i) => i + 1).map((cnt) => {
-                      const isSelected = maxClasses === cnt;
-                      return (
-                        <button
-                          key={cnt}
-                          type="button"
-                          onClick={() => handleUpdateMaxClasses(cnt)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border ${
-                            isSelected
-                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-md ring-2 ring-indigo-500/30'
-                              : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                          }`}
-                        >
-                          {cnt}반까지
-                        </button>
-                      );
-                    })}
+                    {Array.from({ length: 15 }, (_, i) => i + 1).map((cnt) => (
+                      <button key={cnt} type="button" onClick={() => handleUpdateMaxClasses(cnt)} className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border ${maxClasses === cnt ? 'bg-indigo-600 text-white border-indigo-600 shadow-md ring-2 ring-indigo-500/30' : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'}`}>{cnt}반까지</button>
+                    ))}
                   </div>
-
                   <div className="flex items-center justify-between pt-3 border-t border-slate-100 flex-wrap gap-2">
-                    <span className="text-xs text-slate-500 font-bold">
-                      설정하신 최대 반 개수({maxClasses}반까지)가 전자칠판 반 선택 목록에 적용됩니다.
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleUpdateMaxClasses(maxClasses);
-                        alert(`최대 학급 반 개수가 [${maxClasses}반까지]로 안전하게 저장되었습니다!`);
-                      }}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md transition cursor-pointer flex items-center gap-1.5"
-                    >
-                      <span>설정 저장하기</span>
-                    </button>
+                    <span className="text-xs text-slate-500 font-bold">설정하신 최대 반 개수({maxClasses}반까지)가 전자칠판 반 선택 목록에 적용됩니다.</span>
+                    <button type="button" onClick={() => { handleUpdateMaxClasses(maxClasses); alert(`최대 학급 반 개수가 [${maxClasses}반까지]로 안전하게 저장되었습니다!`); }} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md transition cursor-pointer flex items-center gap-1.5"><span>설정 저장하기</span></button>
                   </div>
                 </div>
 
-                {/* 전자칠판 고급 다크 모드 텍스처 & 글자 가독성 설정 */}
                 <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-slate-900 text-yellow-300 flex items-center justify-center shadow-xs">
-                        <Palette className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                          <span>전자칠판 다크 모드 텍스처 & 글자 가독성 설정</span>
-                          <span className="text-xs bg-yellow-100 text-yellow-800 font-bold px-2 py-0.5 rounded-full border border-yellow-200">
-                            기본 다크 모드 적용
-                          </span>
-                        </h3>
-                        <p className="text-xs text-slate-500 font-medium">
-                          고급스러운 다크 모드 칠판 질감과 원거리에서도 선명한 고대비 볼드 폰트가 적용됩니다.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
-                      현재 질감: <strong className="text-slate-900">{THEME_CONFIGS[boardTheme].name}</strong>
-                    </div>
+                    <div className="flex items-center gap-2.5"><div className="w-9 h-9 rounded-xl bg-slate-900 text-yellow-300 flex items-center justify-center shadow-xs"><Palette className="w-5 h-5" /></div><div><h3 className="text-base font-black text-slate-900 flex items-center gap-2"><span>전자칠판 다크 모드 텍스처 설정</span></h3><p className="text-xs text-slate-500 font-medium">고급스러운 다크 모드 칠판 질감이 적용됩니다.</p></div></div>
+                    <div className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">현재 질감: <strong className="text-slate-900">{THEME_CONFIGS[boardTheme].name}</strong></div>
                   </div>
-
-                  {/* 3 Themes Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                     {(['obsidian', 'emerald', 'midnight'] as BoardTheme[]).map((tKey) => {
                       const cfg = THEME_CONFIGS[tKey];
                       const isSelected = boardTheme === tKey;
                       return (
-                        <button
-                          key={tKey}
-                          type="button"
-                          onClick={() => handleUpdateBoardTheme(tKey)}
-                          className={`text-left p-3.5 rounded-xl border-2 transition cursor-pointer flex flex-col justify-between space-y-2.5 ${
-                            isSelected
-                              ? 'border-yellow-400 bg-slate-950 text-white shadow-md ring-2 ring-yellow-400/30'
-                              : 'border-slate-200 hover:border-slate-400 bg-slate-50/80 text-slate-800'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-black flex items-center gap-1.5">
-                              {tKey === 'obsidian' && '🌌'}
-                              {tKey === 'emerald' && '🌲'}
-                              {tKey === 'midnight' && '🌑'}
-                              <span className={isSelected ? 'text-yellow-300' : 'text-slate-900'}>
-                                {cfg.name}
-                              </span>
-                            </span>
-                            {isSelected && (
-                              <span className="text-[10px] bg-yellow-400 text-slate-950 font-black px-1.5 py-0.5 rounded-md">
-                                적용 중
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Mini Texture Preview swatch */}
-                          <div
-                            className={`h-10 rounded-lg p-2 flex items-center justify-between border ${
-                              tKey === 'obsidian'
-                                ? 'bg-gradient-to-b from-[#111925] via-[#0c121c] to-[#070b12] border-slate-700'
-                                : tKey === 'emerald'
-                                ? 'bg-gradient-to-b from-[#0e251b] via-[#091a13] to-[#050f0b] border-emerald-800'
-                                : 'bg-gradient-to-b from-[#0e182c] via-[#091020] to-[#050a14] border-indigo-800'
-                            }`}
-                          >
-                            <span className="text-[11px] font-black text-white">가독성 테스트</span>
-                            <span className="text-[11px] font-black text-yellow-300 font-mono">08:50 ~ 09:40</span>
-                          </div>
-
-                          <p className={`text-[11px] leading-relaxed ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
-                            {cfg.desc}
-                          </p>
+                        <button key={tKey} type="button" onClick={() => handleUpdateBoardTheme(tKey)} className={`text-left p-3.5 rounded-xl border-2 transition cursor-pointer flex flex-col justify-between space-y-2.5 ${isSelected ? 'border-yellow-400 bg-slate-950 text-white shadow-md ring-2 ring-yellow-400/30' : 'border-slate-200 hover:border-slate-400 bg-slate-50/80 text-slate-800'}`}>
+                          <div className="flex items-center justify-between"><span className="text-xs font-black flex items-center gap-1.5">{tKey === 'obsidian' && '🌌'}{tKey === 'emerald' && '🌲'}{tKey === 'midnight' && '🌑'}<span className={isSelected ? 'text-yellow-300' : 'text-slate-900'}>{cfg.name}</span></span>{isSelected && (<span className="text-[10px] bg-yellow-400 text-slate-950 font-black px-1.5 py-0.5 rounded-md">적용 중</span>)}</div>
+                          <div className={`h-10 rounded-lg p-2 flex items-center justify-between border ${tKey === 'obsidian' ? 'bg-gradient-to-b from-[#111925] via-[#0c121c] to-[#070b12] border-slate-700' : tKey === 'emerald' ? 'bg-gradient-to-b from-[#0e251b] via-[#091a13] to-[#050f0b] border-emerald-800' : 'bg-gradient-to-b from-[#0e182c] via-[#091020] to-[#050a14] border-indigo-800'}`}><span className="text-[11px] font-black text-white">가독성 테스트</span><span className="text-[11px] font-black text-yellow-300 font-mono">08:50 ~ 09:40</span></div>
+                          <p className={`text-[11px] leading-relaxed ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>{cfg.desc}</p>
                         </button>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* 시험 종료 전 경고 알림 & 음향 설정 */}
-                <AlertSettingsCard
-                  settings={alertSettings}
-                  onChangeSettings={handleUpdateAlertSettings}
-                />
-
-                <NoticeBanner
-                  notice={currentDaySchedule?.notice || FIXED_NOTICE}
-                  bottomNotice={currentDaySchedule?.bottomNotice || DEFAULT_BOTTOM_NOTICE}
-                  onEditTopNotice={handleUpdateAllTopNotices}
-                  onEditBottomNotice={handleUpdateAllBottomNotices}
-                />
-
-                <div className="print:hidden pt-4">
-                  <CodeOutputViewer
-                    scheduleData={scheduleData}
-                    onCopyCode={handleCopyCode}
-                    copied={copied}
-                  />
-                </div>
+                <AlertSettingsCard settings={alertSettings} onChangeSettings={handleUpdateAlertSettings} />
+                <NoticeBanner notice={currentDaySchedule?.notice || FIXED_NOTICE} bottomNotice={currentDaySchedule?.bottomNotice || DEFAULT_BOTTOM_NOTICE} onEditTopNotice={handleUpdateAllTopNotices} onEditBottomNotice={handleUpdateAllBottomNotices} />
+                <div className="print:hidden pt-4"><CodeOutputViewer scheduleData={scheduleData} onCopyCode={handleCopyCode} copied={copied} /></div>
               </div>
             )}
           </>
         )}
-
       </main>
 
-      {/* Upload AI Modal */}
-      <ImageUploaderModal
-        isOpen={isUploadModalOpen}
-        onClose={() => setIsUploadModalOpen(false)}
-        onExtractSuccess={handleExtractSuccess}
-      />
-
-      {/* Edit Subject Modal */}
-      <EditScheduleModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        onSave={handleSaveSubject}
-        initialSubject={editingContext?.subject}
-        periodName={
-          editingContext !== null && scheduleData[editingContext.dayIdx]
-            ? scheduleData[editingContext.dayIdx].schedule[editingContext.periodIdx]?.period || ''
-            : ''
-        }
-        prevPeriodEndTime={(() => {
-          if (!editingContext) return null;
-          const { dayIdx, periodIdx } = editingContext;
-          if (periodIdx <= 0) return null;
-          const prevPeriod = scheduleData[dayIdx]?.schedule[periodIdx - 1];
-          if (!prevPeriod || !prevPeriod.subjects.length) return null;
-          const lastSub = prevPeriod.subjects[prevPeriod.subjects.length - 1];
-          const matches = lastSub.time?.match(/(\d{1,2}:\d{2})\s*~\s*(\d{1,2}:\d{2})/);
-          return matches ? matches[2] : null;
-        })()}
-        selectedGrade={selectedGrade}
-      />
-
-      {/* Add New Day Modal (새 시험 일자 추가 모달) */}
-      <DaySettingsModal
-        isOpen={isAddDayModalOpen}
-        onClose={() => setIsAddDayModalOpen(false)}
-        mode="add"
-        onSave={handleSaveNewDay}
-      />
-
-      {/* Share School Links Modal (학교 고유 주소 및 메신저용 공유 모달) */}
-      <ShareSchoolModal
-        isOpen={isShareModalOpen}
-        onClose={() => setIsShareModalOpen(false)}
-        schoolName={schoolName}
-        schoolSlug={schoolSlug}
-        schoolLogo={schoolLogo}
-      />
-
+      <ImageUploaderModal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} onExtractSuccess={handleExtractSuccess} />
+      <EditScheduleModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} onSave={handleSaveSubject} initialSubject={editingContext?.subject} periodName={editingContext !== null && scheduleData[editingContext.dayIdx] ? scheduleData[editingContext.dayIdx].schedule[editingContext.periodIdx]?.period || '' : ''} prevPeriodEndTime={(() => { if (!editingContext) return null; const { dayIdx, periodIdx } = editingContext; if (periodIdx <= 0) return null; const prevPeriod = scheduleData[dayIdx]?.schedule[periodIdx - 1]; if (!prevPeriod || !prevPeriod.subjects.length) return null; const lastSub = prevPeriod.subjects[prevPeriod.subjects.length - 1]; const matches = lastSub.time?.match(/(\d{1,2}:\d{2})\s*~\s*(\d{1,2}:\d{2})/); return matches ? matches[2] : null; })()} selectedGrade={selectedGrade} />
+      <DaySettingsModal isOpen={isAddDayModalOpen} onClose={() => setIsAddDayModalOpen(false)} mode="add" onSave={handleSaveNewDay} />
+      <ShareSchoolModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} schoolName={schoolName} schoolSlug={schoolSlug} schoolLogo={schoolLogo} />
     </div>
   );
 }
