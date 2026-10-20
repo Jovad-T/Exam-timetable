@@ -1438,7 +1438,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   // Render the core chalkboard content
   const renderChalkboardContent = () => (
     <div
-      className={`relative rounded-3xl ${isMockAll ? 'p-2 sm:p-3 md:p-3.5' : 'p-3 sm:p-4 md:p-5'} ${currentTheme.frameBg} ${currentTheme.frameBorder} border-4 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.92),inset_0_1px_2px_rgba(255,255,255,0.18)] flex flex-col justify-between scale-95 origin-center`}
+      className={`relative rounded-3xl ${isMockAll ? 'p-2 sm:p-3 md:p-3.5' : 'p-3 sm:p-4 md:p-5'} ${currentTheme.frameBg} ${currentTheme.frameBorder} border-4 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.92),inset_0_1px_2px_rgba(255,255,255,0.18)] flex flex-col justify-between aspect-[16/9] w-full scale-95 origin-center`}
     >
       {/* Metallic Frame Corner Accents */}
       <div
@@ -2666,7 +2666,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
     return (
       <div
-        className={`relative rounded-3xl ${isMockAll ? 'p-2 sm:p-3 md:p-3.5' : 'p-3 sm:p-4 md:p-5'} ${currentTheme.frameBg} ${currentTheme.frameBorder} border-4 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.92),inset_0_1px_2px_rgba(255,255,255,0.18)] flex flex-col justify-between scale-95 origin-center`}
+        className={`relative rounded-3xl ${isMockAll ? 'p-2 sm:p-3 md:p-3.5' : 'p-3 sm:p-4 md:p-5'} ${currentTheme.frameBg} ${currentTheme.frameBorder} border-4 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.92),inset_0_1px_2px_rgba(255,255,255,0.18)] flex flex-col justify-between aspect-[16/9] w-full scale-95 origin-center`}
       >
         {/* Metallic Frame Corner Accents */}
         <div
@@ -3714,7 +3714,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               filter: brightness < 100 ? `brightness(${brightness}%)` : undefined,
               transition: 'filter 0.2s ease',
             }}
-            className="flex flex-col space-y-2 select-none"
+            className="flex flex-col space-y-2 select-none -mt-[5px] mb-[2px]"
           >
             {effectiveScreen === 'break_view' ? renderChalkboardContent() : renderFocusedExamScreen()}
           </div>
