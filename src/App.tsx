@@ -174,7 +174,7 @@ export default function App() {
 
   const [selectedGrade, setSelectedGrade] = useState<string>('2학년');
 
-  const handleSelectExamMode = (mode: 'regular' | 'mock') => {
+  const handleSelectExamMode = React.useCallback((mode: 'regular' | 'mock') => {
     setExamMode(mode);
     if (typeof window !== 'undefined') {
       try {
@@ -198,7 +198,7 @@ export default function App() {
       }
       setActiveTab(getTodayActiveTabId(targetList));
     }
-  };
+  }, [scheduleData, schoolSlug]);
 
   const [copied, setCopied] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'board' | 'developer'>('developer');
@@ -246,18 +246,7 @@ export default function App() {
     });
   });
 
-  const handleUpdateAlertSettings = (newSettings: ExamAlertSettings) => {
-    setAlertSettings(newSettings);
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('exam_alert_settings', JSON.stringify(newSettings));
-      } catch {}
-    }
-    if (appRole === 'admin' && schoolSlug) {
-      const dataToSave = scheduleData || defaultScheduleData;
-      saveSchoolScheduleToCloud(schoolSlug, dataToSave, schoolName, schoolLogo, newSettings, classTotals, maxClasses);
-    }
-  };
+
 
   const [appRole, setAppRole] = useState<'selector' | 'classroom' | 'admin'>(() => {
     if (typeof window !== 'undefined') {
@@ -542,6 +531,20 @@ export default function App() {
   const [classTotals, setClassTotals] = useState<Record<string, string>>(() => {
     return safeParse<Record<string, string>>(`class_totals_${schoolSlug}`, {});
   });
+
+  const handleUpdateAlertSettings = React.useCallback((newSettings: ExamAlertSettings) => {
+    setAlertSettings(newSettings);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('exam_alert_settings', JSON.stringify(newSettings));
+      } catch {}
+    }
+    if (appRole === 'admin' && schoolSlug) {
+      const dataToSave = scheduleData || defaultScheduleData;
+      saveSchoolScheduleToCloud(schoolSlug, dataToSave, schoolName, schoolLogo, newSettings, classTotals, maxClasses);
+    }
+  }, [appRole, schoolSlug, scheduleData, schoolName, schoolLogo, classTotals, maxClasses]);
+
   const [totalSettingGradeTab, setTotalSettingGradeTab] = useState<'1' | '2' | '3'>('2');
   const [bulkTotalInput, setBulkTotalInput] = useState<string>('');
   const [saveSuccessToast, setSaveSuccessToast] = useState<boolean>(false);
@@ -766,7 +769,7 @@ export default function App() {
 
   const currentDaySchedule: DayExamSchedule =
     modeFilteredSchedules.find((d) => d.id === activeTab || d.date === activeTab) ||
-    modeFilteredSchedules.find((d) => isTodayScheduleDay(d.date)) ||
+    modeFilteredSchedules.find((d) => isTodayScheduleDay(d)) ||
     modeFilteredSchedules[0] ||
     (examMode === 'mock' ? mockDaySchedule : regularScheduleData[0]);
 
@@ -1000,7 +1003,7 @@ export default function App() {
 
   if (appRole === 'classroom') {
     return (
-      <div className="w-screen h-screen overflow-hidden bg-[#071a12] text-white font-sans p-0 m-0">
+      <div className="w-screen h-screen overflow-hidden bg-[#071a12] text-white font-sans p-0 m-0 box-border">
         <ElectronicBoard
           daySchedule={currentDaySchedule} allDays={modeFilteredSchedules} onSelectDay={(dayId) => setActiveTab(dayId)} examMode={examMode} onChangeExamMode={handleSelectExamMode} onOpenUploadModal={() => setIsUploadModalOpen(true)} isFullscreen={true} onToggleFullscreen={handleToggleFullscreen} onUpdateBottomNotice={handleUpdateBottomNotice} onUpdateTopNotice={handleUpdateTopNotice} alertSettings={alertSettings} onChangeAlertSettings={handleUpdateAlertSettings} selectedGrade={selectedGrade} onSelectGrade={setSelectedGrade} schoolLogo={schoolLogo} onUpdateSchoolLogo={handleUpdateSchoolLogo} schoolName={schoolName} boardTheme={boardTheme} onUpdateBoardTheme={handleUpdateBoardTheme} maxClasses={maxClasses} classTotals={classTotals} schoolSlug={schoolSlug}
           onSwitchToAdmin={() => { changeAppRole('admin'); setViewMode('developer'); }}

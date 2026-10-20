@@ -358,7 +358,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   const boardTheme: BoardTheme = externalBoardTheme || internalBoardTheme;
   const currentTheme = THEME_CONFIGS[boardTheme] || THEME_CONFIGS.obsidian;
 
-  const handleUpdateBoardTheme = (theme: BoardTheme) => {
+  const handleUpdateBoardTheme = React.useCallback((theme: BoardTheme) => {
     setInternalBoardTheme(theme);
     externalUpdateBoardTheme?.(theme);
     if (typeof window !== 'undefined') {
@@ -366,7 +366,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
         localStorage.setItem('electronic_board_theme', theme);
       } catch {}
     }
-  };
+  }, [externalUpdateBoardTheme]);
 
   // Screen brightness control (아이들 눈부심 방지를 위한 화면 밝기 조절: 30% ~ 100%)
   const [brightness, setBrightness] = useState<number>(() => {
@@ -1438,7 +1438,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   // Render the core chalkboard content
   const renderChalkboardContent = () => (
     <div
-      className={`relative rounded-3xl ${isMockAll ? 'p-2 sm:p-3 md:p-3.5' : 'p-3 sm:p-4 md:p-5'} ${currentTheme.frameBg} ${currentTheme.frameBorder} border-4 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.92),inset_0_1px_2px_rgba(255,255,255,0.18)] flex flex-col justify-between`}
+      className={`relative rounded-3xl ${isMockAll ? 'p-2 sm:p-3 md:p-3.5' : 'p-3 sm:p-4 md:p-5'} ${currentTheme.frameBg} ${currentTheme.frameBorder} border-4 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.92),inset_0_1px_2px_rgba(255,255,255,0.18)] flex flex-col justify-between scale-95 origin-center`}
     >
       {/* Metallic Frame Corner Accents */}
       <div
@@ -2224,6 +2224,13 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                               <span className="text-xs font-black uppercase tracking-wider bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full">
                                 ☕ 휴식시간 ({period.subjects[0]?.duration || 20}분)
                               </span>
+                              <button
+                                type="button"
+                                onClick={() => setScreenMode('exam_view')}
+                                className="text-[10px] font-black bg-amber-600 text-white px-2 py-0.5 rounded-full hover:bg-amber-500 cursor-pointer shadow-xs"
+                              >
+                                시험 화면으로
+                              </button>
                               {isCurrentActivePeriod && (
                                 <span className="text-xs font-black text-yellow-300 flex items-center gap-1">
                                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
@@ -2278,6 +2285,13 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                               <span className="text-xs font-black uppercase tracking-wider bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full">
                                 🍱 중식 및 점심시간 ({period.subjects[0]?.duration || 50}분)
                               </span>
+                              <button
+                                type="button"
+                                onClick={() => setScreenMode('exam_view')}
+                                className="text-[10px] font-black bg-amber-600 text-white px-2 py-0.5 rounded-full hover:bg-amber-500 cursor-pointer shadow-xs"
+                              >
+                                시험 화면으로
+                              </button>
                               {isCurrentActivePeriod && (
                                 <span className="text-xs font-black text-yellow-300 flex items-center gap-1">
                                   <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
@@ -2652,7 +2666,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
     return (
       <div
-        className={`relative rounded-3xl p-3 sm:p-4 md:p-5 ${currentTheme.frameBg} ${currentTheme.frameBorder} border-4 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.92),inset_0_1px_2px_rgba(255,255,255,0.18)] flex flex-col justify-between`}
+        className={`relative rounded-3xl ${isMockAll ? 'p-2 sm:p-3 md:p-3.5' : 'p-3 sm:p-4 md:p-5'} ${currentTheme.frameBg} ${currentTheme.frameBorder} border-4 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.92),inset_0_1px_2px_rgba(255,255,255,0.18)] flex flex-col justify-between scale-95 origin-center`}
       >
         {/* Metallic Frame Corner Accents */}
         <div
@@ -2670,7 +2684,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
         {/* Luxurious Dark Mode Chalkboard Canvas */}
         <div
-          className={`${currentTheme.canvasBg} rounded-2xl p-2 sm:p-3.5 md:p-5 border-4 ${currentTheme.canvasBorder} shadow-[inset_0_4px_30px_rgba(0,0,0,0.92)] text-white relative flex flex-col justify-between select-none`}
+          className={`${currentTheme.canvasBg} rounded-2xl ${isMockAll ? 'p-2.5 sm:p-3 md:p-3.5' : 'p-3.5 sm:p-4.5 md:p-5'} border-4 ${currentTheme.canvasBorder} shadow-[inset_0_4px_30px_rgba(0,0,0,0.92)] text-white relative flex flex-col justify-between select-none`}
         >
           {/* Direct Electronic Board Drawing Layer */}
           <ChalkCanvas
@@ -2687,7 +2701,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
           {/* Top Banner Header */}
           <div
-            className={`relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-3.5 border-b-2 ${currentTheme.headerBorder}`}
+            className={`relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 ${isMockAll ? 'pb-2' : 'pb-3'} border-b-2 ${currentTheme.headerBorder}`}
           >
             {/* School Emblem & Title */}
             <div className="flex items-center gap-3 shrink-0 flex-wrap">
@@ -3801,8 +3815,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       <div
         style={{
           filter: brightness < 100 ? `brightness(${brightness}%)` : undefined,
-          transition: 'filter 0.2s ease',
+          transition: 'filter 0.2s ease, opacity 0.3s ease',
+          transform: 'translateZ(0)',
         }}
+        className="aspect-[16/9] w-full object-contain transition-opacity duration-300 ease-in-out"
       >
         {effectiveScreen === 'break_view' ? renderChalkboardContent() : renderFocusedExamScreen()}
       </div>
