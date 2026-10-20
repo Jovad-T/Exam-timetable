@@ -1,9 +1,12 @@
 import * as XLSX from 'xlsx';
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.js?url';
 import { GoogleGenAI, Type } from '@google/genai';
 import { getGeminiApiKey } from './apiKeyStorage';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+if (typeof window !== 'undefined' && (pdfjsLib as any).GlobalWorkerOptions) {
+  (pdfjsLib as any).GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+}
 
 export interface RosterParseResult {
   classTotals: Record<string, string>;
@@ -31,12 +34,13 @@ function normalizeKoreanSpacedText(raw: any): string {
   for (let i = 0; i < 3; i++) {
     s = s.replace(/([가-힣])\s+([가-힣])/g, '$1$2');
   }
-  s = s.replace(/(\d)\s+(학년|반|번|명)/g, '$1$2');
+  s = s.replace(/(\d)\s+(학년도|학년|반|번|명)/g, '$1$2');
   return s.trim();
 }
 
 /**
  * Parse grade ("1"|"2"|"3") and class ("1"~"15") from a label.
+ * Handles merged PDF sub-headers like "번호 1반", "번호 2반 비고", etc.
  * Strictly avoids matching date strings ("2026.3.2"), class ranges ("1~8반"), or 3-part student IDs ("1-2-15").
  */
 function parseStrictGradeClass(
@@ -44,13 +48,20 @@ function parseStrictGradeClass(
   defaultGrade?: string | null,
   allowBareHyphen = false
 ): { grade: string; classNum: string; isExplicitGrade: boolean } | null {
-  const clean = normalizeKoreanSpacedText(text);
+  let clean = normalizeKoreanSpacedText(text);
   if (!clean) return null;
 
   // Reject ranges like "1~8반", "1반~8반", "1-8반(전체)", dates like "2026-03-02", or 3-part numbers "1-2-15"
   if (/~\s*\d+\s*반/.test(clean) || /\d+\s*반\s*[~-]/.test(clean)) return null;
   if (/^\d{4}[-./]\d{1,2}[-./]\d{1,2}/.test(clean)) return null;
   if (/^\d{1,2}[-./]\d{1,2}[-./]\d{1,2}$/.test(clean)) return null;
+
+  // Strip auxiliary sub-column header tokens merged with class headers in PDF tables (e.g. "번호 1반")
+  clean = clean
+    .replace(/(?:출석번호|학생번호|학급번호|번호|학번|순번|연번|학생명|성명|이름|성별|비고|구분|담임교사|담임)/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!clean) return null;
 
   const compact = clean.replace(/\s+/g, '');
 
@@ -112,20 +123,13 @@ function parseStrictGradeClass(
 
 /**
  * Extracts a single explicit grade ("1" | "2" | "3") if a text line/title mentions a grade.
- * Returns null if multiple grades (e.g. "1, 2, 3학년") are mentioned on the same line.
+ * Strips "2026학년도" first so "2021~2023학년도" is never mistaken for 1~3학년.
  */
 function extractSingleGradeFromTitle(text: string): string | null {
-  const norm = normalizeKoreanSpacedText(text);
-  const matches = norm.match(/([1-3])\s*학년/g);
-  if (matches && matches.length >= 1) {
-    const uniqueGrades = new Set(
-      matches
-        .map((m) => {
-          const d = m.match(/([1-3])/);
-          return d ? d[1] : '';
-        })
-        .filter(Boolean)
-    );
+  const norm = normalizeKoreanSpacedText(text).replace(/\d{2,4}\s*학년도/g, ' ');
+  const matches = Array.from(norm.matchAll(/(?:^|[^\d])([1-3])\s*학년(?!도)/g)).map((m) => m[1]);
+  if (matches.length >= 1) {
+    const uniqueGrades = new Set(matches.filter(Boolean));
     if (uniqueGrades.size === 1) {
       return Array.from(uniqueGrades)[0];
     }
@@ -671,15 +675,27 @@ export function parseSpreadsheetRowsHeuristically(
             continue;
           }
 
+          const sliceJoined = sliceStrs.join(' ');
+          // Ignore grade-wide grand total rows like "총원 : 184"
+          if (/(?:총원|총계|전체|전교|합계)\s*[:：]?\s*\d{3}/.test(sliceJoined)) {
+            continue;
+          }
+
           const inlineTotalMatch =
-            sliceStrs.join(' ').match(/(?:총원|재적|합계|소계|계|인원)\s*[:：]?\s*(\d{2})\s*명?/) ||
-            sliceStrs.join(' ').match(/^(\d{2})\s*명$/);
+            sliceJoined.match(
+              /(?:총원|재적|재적인원|현원|현재원|합계|소계|계|인원)\s*[:：]?\s*(\d{1,3})(?!\d)\s*명?/
+            ) || sliceJoined.match(/^(\d{2})(?!\d)\s*명$/);
           if (inlineTotalMatch) {
             const tVal = parseInt(inlineTotalMatch[1], 10);
             if (tVal >= 10 && tVal <= 55) {
               explicitTotalInBlock = tVal;
-              continue;
             }
+            continue;
+          }
+
+          // Exclude rows explicitly marked as transferred out / dropped out / inactive (전출, 자퇴, 제적, 휴학, 유예, 면제, 결번)
+          if (/(?:^|\s)(?:전출|자퇴|제적|휴학|유예|면제|결번)(?:\s|$)/.test(sliceJoined)) {
+            continue;
           }
 
           let studentName: string | null = null;
@@ -720,7 +736,9 @@ export function parseSpreadsheetRowsHeuristically(
         }
 
         const finalCount =
-          uniqueStudentsInBlock.size >= 5
+          explicitTotalInBlock >= 10 && explicitTotalInBlock <= 55
+            ? explicitTotalInBlock
+            : uniqueStudentsInBlock.size >= 5
             ? uniqueStudentsInBlock.size
             : explicitTotalInBlock >= 5
             ? explicitTotalInBlock
@@ -731,6 +749,9 @@ export function parseSpreadsheetRowsHeuristically(
           if (sectionHasExplicitGrade) {
             const g = block.isExplicitGrade ? block.grade : (currentSectionGrade || block.grade);
             const key = `${g}-${block.classNum}`;
+            if (explicitTotalInBlock >= 10 && explicitTotalInBlock <= 55) {
+              summaryCountPerClass[key] = explicitTotalInBlock;
+            }
             if (!rosterStudentsPerClass[key]) rosterStudentsPerClass[key] = new Set();
             if (uniqueStudentsInBlock.size >= 5) {
               for (const item of uniqueStudentsInBlock) rosterStudentsPerClass[key].add(item);

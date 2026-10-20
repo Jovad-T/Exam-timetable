@@ -288,15 +288,17 @@ app.post('/api/parse-roster', async (req, res) => {
     });
 
     const systemInstruction = `
-당신은 고등학교 전교 학생 명렬표(출석부, 학급별 인원 현황표, 학번 명단 등) PDF, 엑셀 텍스트, 이미지를 정밀 분석하여 **학년별·반별 학급 총원(학생 수)**을 정확히 산출하는 전문가입니다.
+당신은 대한민국 고등학교의 '전교 학생 명렬표' 또는 '학급 인원 현황표' 문서(PDF, 엑셀, 이미지 등)를 분석하여 각 학년·반별 총 학생 수(재적 인원)를 정확하게 집계하는 데이터 분석 전문가입니다.
 
-[분석 규칙]
-1. 문서가 **개별 학생 명렬표(출석부/명단)**인 경우:
-   - 학년(1~3학년), 반(1~15반), 번호(또는 학번 5자리 예: 10101 -> 1학년 1반 1번, 20828 -> 2학년 8반 28번, 혹은 4자리 예: 1101 -> 1학년 1반 1번)를 식별하여 각 학급에 속한 실제 학생 수를 카운트하거나, 해당 학급의 가장 마지막 학생 수(재적 인원)를 정확히 산출하십시오.
-2. 문서가 **학급별 인원 현황표/집계표**인 경우:
-   - 표에서 각 학년(1, 2, 3학년)과 반(1반, 2반...)에 해당하는 재적 인원 / 총원 / 학생 수 숫자를 정확히 추출하십시오.
-3. 만약 문서에 특정 학년(예: 2학년)만 있고 학년 표시가 생략된 채 "1반, 2반..."만 있는 경우, 문맥상 학년을 추정하되 불명확하면 기본 "2"학년으로 매핑하십시오.
-4. 출력은 학년(grade: "1" | "2" | "3"), 반(classNum: "1" ~ "15" 숫자 문자열), 총원(count: 숫자) 배열과 발견된 최대 반 번호(maxClassNum)를 반환하십시오.
+[분석 및 집계 규칙]
+1. 문서 상단 제목(예: "2026학년도 2학년 전체 명렬")에서 학년 정보를 정확히 파악하십시오. ("2026학년도"의 숫자를 학년으로 혼동하지 마십시오.)
+2. 표 하단이나 상단에 각 반별 '인원', '재적', '현원', '계', '소계', '합계' 행(예: "인원 22 | 인원 22 | 인원 23 ...")이 명시되어 있다면 반드시 해당 숫자를 최우선으로 그대로 추출하십시오.
+3. 우측 하단의 "총원 : 184" 같은 학년 전체 합계(총원/총계)를 마지막 반(예: 8반)의 인원으로 잘못 추출하지 마십시오.
+4. 만약 학생 개인별 명단(명렬표)을 직접 세어야 한다면:
+   - 양식 하단에 25번~30번 등 이름이 비어 있는 공란 번호만 인쇄되어 있는 경우, 이름이 없는 빈 번호는 절대 학생 수에 포함하지 마십시오.
+   - '전출', '자퇴', '휴학', '유예', '면제', '제적', '결번'으로 표기되어 이름이 없는 행은 학생 수에서 제외하십시오. (단, 학생 이름과 함께 '전입', '위탁'이 표기된 재적생은 포함합니다.)
+   - 학번이 5자리(예: 10101 = 1학년 01반 01번) 또는 4자리(예: 1101 = 1학년 1반 01번)인 경우 학번 체계를 분석하여 학년과 반을 분류하고 각 반의 실제 학생 수를 정확히 세십시오.
+5. 결과는 반드시 JSON 객체 내 'classes' 배열 및 'maxClassNum'으로 반환하십시오.
 `;
 
     const parts: any[] = [];
@@ -317,40 +319,58 @@ app.post('/api/parse-roster', async (req, res) => {
       });
     }
 
-    const response = await clientAI.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
-      contents: { parts },
-      config: {
-        systemInstruction,
-        responseMimeType: 'application/json',
-        temperature: 0.1,
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            classes: {
-              type: Type.ARRAY,
-              description: '학년별 반별 학생 총원 목록',
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  grade: { type: Type.STRING, description: '학년 숫자 문자열 ("1", "2", "3")' },
-                  classNum: { type: Type.STRING, description: '반 숫자 문자열 ("1" ~ "15")' },
-                  count: { type: Type.INTEGER, description: '해당 학급 총원(학생 수)' },
+    const modelsToTry = ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-3.8-flash'];
+    let response: any = null;
+    let lastErr: any = null;
+
+    for (const modelName of modelsToTry) {
+      try {
+        response = await clientAI.models.generateContent({
+          model: modelName,
+          contents: { parts },
+          config: {
+            systemInstruction,
+            responseMimeType: 'application/json',
+            temperature: 0.0,
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                classes: {
+                  type: Type.ARRAY,
+                  description: '학년별 반별 학생 총원 목록',
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      grade: { type: Type.STRING, description: '학년 숫자 문자열 ("1", "2", "3")' },
+                      classNum: { type: Type.STRING, description: '반 숫자 문자열 ("1" ~ "15")' },
+                      count: { type: Type.INTEGER, description: '해당 학급 총원(학생 수)' },
+                    },
+                    required: ['grade', 'classNum', 'count'],
+                  },
                 },
-                required: ['grade', 'classNum', 'count'],
+                maxClassNum: {
+                  type: Type.INTEGER,
+                  description: '감지된 가장 큰 반 번호 (1~15)',
+                },
               },
-            },
-            maxClassNum: {
-              type: Type.INTEGER,
-              description: '감지된 가장 큰 반 번호 (1~15)',
+              required: ['classes', 'maxClassNum'],
             },
           },
-          required: ['classes', 'maxClassNum'],
-        },
-      },
-    });
+        });
+        if (response?.text) break;
+      } catch (err: any) {
+        lastErr = err;
+        if (err?.message?.includes('429') || err?.message?.includes('RESOURCE_EXHAUSTED')) {
+          break;
+        }
+      }
+    }
 
-    const parsed = JSON.parse(response.text || '{"classes":[],"maxClassNum":0}');
+    if (!response && lastErr) {
+      throw lastErr;
+    }
+
+    const parsed = JSON.parse(response?.text || '{"classes":[],"maxClassNum":0}');
     const classTotals: Record<string, string> = {};
     let maxClassFound = parsed.maxClassNum || 0;
 
