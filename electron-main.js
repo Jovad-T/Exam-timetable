@@ -70,14 +70,27 @@ function startLocalServer(distDir, callback) {
       }
     });
 
-    server.listen(0, '127.0.0.1', () => {
-      const port = server.address().port;
-      callback(null, port, server);
-    });
+    const PREFERRED_PORTS = [45780, 45781, 45782, 0];
+    let portIndex = 0;
+
+    const tryListen = () => {
+      const targetPort = PREFERRED_PORTS[portIndex] ?? 0;
+      server.listen(targetPort, '127.0.0.1', () => {
+        const port = server.address().port;
+        callback(null, port, server);
+      });
+    };
 
     server.on('error', (err) => {
-      callback(err, null, null);
+      if (err && err.code === 'EADDRINUSE' && portIndex < PREFERRED_PORTS.length - 1) {
+        portIndex++;
+        tryListen();
+      } else {
+        callback(err, null, null);
+      }
     });
+
+    tryListen();
   } catch (err) {
     callback(err, null, null);
   }

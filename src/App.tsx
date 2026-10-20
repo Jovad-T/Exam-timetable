@@ -65,31 +65,31 @@ export default function App() {
         const pathParts = window.location.pathname.split('/').filter(Boolean);
         if (pathParts.length >= 2 && (pathParts[pathParts.length - 1] === 'admin' || pathParts[pathParts.length - 1] === 'classroom')) {
           const slugFromPath = cleanSlug(decodeURIComponent(pathParts[pathParts.length - 2]), true);
-          if (slugFromPath) return slugFromPath;
+          if (slugFromPath && slugFromPath !== 'korea-high') return slugFromPath;
         }
         const params = new URLSearchParams(window.location.search);
         const qSchool = params.get('school');
-        if (qSchool) return cleanSlug(qSchool, true) || 'korea-high';
+        if (qSchool) return cleanSlug(qSchool, true) || 'sajik-girls-high';
         const hash = decodeURIComponent(window.location.hash.replace('#', ''));
         if (hash.startsWith('school:')) {
           const parts = hash.split(':');
-          if (parts[1]) return parts[1];
+          if (parts[1] && parts[1] !== 'korea-high') return parts[1];
         }
         const saved = localStorage.getItem('current_school_slug');
-        if (saved) return saved;
+        if (saved && saved !== 'korea-high') return saved;
       } catch {}
     }
-    return 'korea-high';
+    return 'sajik-girls-high';
   });
 
   const [schoolName, setSchoolName] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem(`school_name_${schoolSlug}`);
-        if (saved) return saved;
+        if (saved && saved !== '한국고등학교') return saved;
       } catch {}
     }
-    return '한국고등학교';
+    return '사직여자고등학교';
   });
 
   const [schoolLogo, setSchoolLogo] = useState<string | null>(() => {
@@ -266,9 +266,10 @@ export default function App() {
         const activeSlug = (() => {
           const pathParts = path.split('/').filter(Boolean);
           if (pathParts.length >= 2 && pathParts[pathParts.length - 1] === 'classroom') {
-            return cleanSlug(decodeURIComponent(pathParts[pathParts.length - 2]), true) || 'korea-high';
+            return cleanSlug(decodeURIComponent(pathParts[pathParts.length - 2]), true) || 'sajik-girls-high';
           }
-          return params.get('school') || localStorage.getItem('current_school_slug') || 'korea-high';
+          const savedSlug = localStorage.getItem('current_school_slug');
+          return params.get('school') || (savedSlug && savedSlug !== 'korea-high' ? savedSlug : '') || 'sajik-girls-high';
         })();
         const hasSavedClassroomConfig = Boolean(localStorage.getItem(`class_attendance_settings_${activeSlug}`));
 
@@ -292,7 +293,7 @@ export default function App() {
   });
 
   const changeAppRole = (role: 'selector' | 'classroom' | 'admin', slug: string = schoolSlug) => {
-    const cleanTargetSlug = cleanSlug(slug, true) || 'korea-high';
+    const cleanTargetSlug = cleanSlug(slug, true) || 'sajik-girls-high';
     setAppRole(role);
     setSchoolSlug(cleanTargetSlug);
     if (role === 'admin') {
@@ -348,7 +349,7 @@ export default function App() {
   React.useEffect(() => {
     if (!schoolSlug) return;
     isInitialCloudLoadDoneRef.current = false;
-    fetchSchoolScheduleFromCloud(schoolSlug)
+    fetchSchoolScheduleFromCloud(schoolSlug, schoolName)
       .then(({ scheduleData: cloudData, schoolName: cloudName, logoUrl, alertSettings: cloudAlertSettings, classTotals: cloudClassTotals, maxClasses: cloudMaxClasses }) => {
         if (cloudData && Array.isArray(cloudData) && cloudData.length > 0) {
           const cleanedCloudData = cleanScheduleData(cloudData);
@@ -384,6 +385,7 @@ export default function App() {
             return cloudClassTotals;
           });
           try { localStorage.setItem(`class_totals_${schoolSlug}`, JSON.stringify(cloudClassTotals)); } catch {}
+          syncAttendanceWithTotals(cloudClassTotals, schoolSlug);
         }
         if (typeof cloudMaxClasses === 'number' && cloudMaxClasses > 0) {
           setMaxClasses((prev) => (prev === cloudMaxClasses ? prev : cloudMaxClasses));
@@ -407,7 +409,7 @@ export default function App() {
           });
           try { localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cleaned)); } catch {}
         }
-        if (cloudName) {
+        if (cloudName && cloudName !== '한국고등학교') {
           setSchoolName((prev) => (prev === cloudName ? prev : cloudName));
           try { localStorage.setItem(`school_name_${schoolSlug}`, cloudName); } catch {}
         }
@@ -424,6 +426,7 @@ export default function App() {
             return cloudClassTotals;
           });
           try { localStorage.setItem(`class_totals_${schoolSlug}`, JSON.stringify(cloudClassTotals)); } catch {}
+          syncAttendanceWithTotals(cloudClassTotals, schoolSlug);
         }
         if (typeof cloudMaxClasses === 'number' && cloudMaxClasses > 0) {
           setMaxClasses((prev) => (prev === cloudMaxClasses ? prev : cloudMaxClasses));
@@ -433,7 +436,7 @@ export default function App() {
         setCloudSyncStatus('synced');
       },
       (name, logo) => {
-        if (name) {
+        if (name && name !== '한국고등학교') {
           setSchoolName((prev) => (prev === name ? prev : name));
           try { localStorage.setItem(`school_name_${schoolSlug}`, name); } catch {}
         }
@@ -448,13 +451,12 @@ export default function App() {
   }, [schoolSlug]);
 
   const handleUpdateSchoolInfo = async (newName: string, newSlug: string) => {
-    const cleanName = newName.trim() || '한국고등학교';
+    const cleanName = newName.trim() || '사직여자고등학교';
     let processedSlug = cleanSlug(newSlug, true);
     if (!processedSlug) {
       processedSlug = generateSchoolSlug(cleanName);
     }
     setSchoolName(cleanName);
-    const prevSlug = schoolSlug;
     setSchoolSlug(processedSlug);
 
     const currentRole = appRole === 'classroom' ? 'classroom' : 'admin';
@@ -465,30 +467,37 @@ export default function App() {
       if (window.location.pathname !== newPath) {
         window.history.pushState({}, '', newPath);
       }
+      try {
+        localStorage.setItem('current_school_slug', processedSlug);
+        localStorage.setItem(`school_name_${processedSlug}`, cleanName);
+      } catch {}
     }
 
-    setTimeout(() => {
-      setCloudSyncStatus('syncing');
-      saveSchoolScheduleToCloud(processedSlug, scheduleData, cleanName, schoolLogo, alertSettings, classTotals, maxClasses)
-        .then(() => setCloudSyncStatus('synced'))
-        .catch(() => setCloudSyncStatus('offline'));
-
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem('current_school_slug', processedSlug);
-          localStorage.setItem(`school_name_${processedSlug}`, cleanName);
-          localStorage.setItem(`class_totals_${processedSlug}`, JSON.stringify(classTotals));
-          const currentScheduleStr = localStorage.getItem(`schedule_data_${prevSlug}`);
-          if (currentScheduleStr) {
-            localStorage.setItem(`schedule_data_${processedSlug}`, currentScheduleStr);
-          } else {
-            localStorage.setItem(`schedule_data_${processedSlug}`, JSON.stringify(scheduleData));
-          }
-        } catch (e) {
-          console.error("Storage update error", e);
+    setCloudSyncStatus('syncing');
+    try {
+      // First check if Firebase already has schedule data for this school name or slug
+      const cloudExisting = await fetchSchoolScheduleFromCloud(processedSlug, cleanName);
+      if (cloudExisting.scheduleData && Array.isArray(cloudExisting.scheduleData) && cloudExisting.scheduleData.length > 0) {
+        const cleanedCloud = cleanScheduleData(cloudExisting.scheduleData);
+        setScheduleData(cleanedCloud);
+        try { localStorage.setItem(`schedule_data_${processedSlug}`, JSON.stringify(cleanedCloud)); } catch {}
+        if (cloudExisting.classTotals) {
+          setClassTotals(cloudExisting.classTotals);
+          try { localStorage.setItem(`class_totals_${processedSlug}`, JSON.stringify(cloudExisting.classTotals)); } catch {}
+          syncAttendanceWithTotals(cloudExisting.classTotals, processedSlug);
         }
+        if (typeof cloudExisting.maxClasses === 'number' && cloudExisting.maxClasses > 0) {
+          setMaxClasses(cloudExisting.maxClasses);
+          try { localStorage.setItem('max_classes', String(cloudExisting.maxClasses)); } catch {}
+        }
+        setCloudSyncStatus('synced');
+      } else {
+        await saveSchoolScheduleToCloud(processedSlug, scheduleData, cleanName, schoolLogo, alertSettings, classTotals, maxClasses);
+        setCloudSyncStatus('synced');
       }
-    }, 0);
+    } catch {
+      setCloudSyncStatus('offline');
+    }
   };
 
   // 교실 모드 URL 또는 관련 URL 파라미터/localStorage 감지 시 자동으로 전체화면 활성화 및 상단바 제거

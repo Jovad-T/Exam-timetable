@@ -121,7 +121,7 @@ export const SchoolSettingsCard: React.FC<SchoolSettingsCardProps> = ({
       e.preventDefault();
       e.stopPropagation();
     }
-    const finalName = nameInput.trim() || '한국고등학교';
+    const finalName = nameInput.trim() || '사직여자고등학교';
     let finalSlug = cleanSlug(slugInput, true);
     if (!finalSlug) {
       finalSlug = generateSchoolSlug(finalName);

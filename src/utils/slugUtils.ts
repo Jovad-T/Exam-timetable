@@ -24,8 +24,12 @@ const JONG_SUNG = [
   '', 'k', 'k', 'ks', 'n', 'nj', 'nh', 't', 'l', 'lg', 'lm', 'lb', 'ls', 'lt', 'lp', 'lh', 'm', 'p', 'ps', 't', 't', 'ng', 't', 't', 'k', 't', 'p', 'h',
 ];
 
+export const DEFAULT_SCHOOL_NAME = '사직여자고등학교';
+export const DEFAULT_SCHOOL_SLUG = 'sajik-girls-high';
+
 // Well-known school / regional keywords mapping
 const KNOWN_WORDS: Record<string, string> = {
+  '사직': 'sajik',
   '서울': 'seoul',
   '한국': 'korea',
   '경기': 'gyeonggi',

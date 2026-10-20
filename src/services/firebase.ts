@@ -3,9 +3,11 @@ import { getAuth } from 'firebase/auth';
 import {
   getFirestore,
   initializeFirestore,
+  collection,
   doc,
   setDoc,
   getDoc,
+  getDocs,
   getDocFromServer,
   onSnapshot,
   disableNetwork,
@@ -305,7 +307,7 @@ export async function saveSchoolScheduleToCloud(
   }
 
   const normalizedSlug = schoolSlug.trim().slice(0, 100);
-  const normalizedName = (schoolName || '한국고등학교').trim().slice(0, 100) || '한국고등학교';
+  const normalizedName = (schoolName || '사직여자고등학교').trim().slice(0, 100) || '사직여자고등학교';
   const now = new Date().toISOString();
   const scheduleJson = JSON.stringify(scheduleData || []);
   const startTime = Date.now();
@@ -484,10 +486,34 @@ export function subscribeSchoolSchedule(
 }
 
 /**
- * One-time fetch of school schedule from Cloud Firestore (useful on initial page load)
+ * Lists all schools registered in Cloud Firestore so the UI or Initial Setup can discover existing schools.
+ */
+export async function listCloudSchools(): Promise<Array<{ slug: string; name: string; updatedAt?: string }>> {
+  if (isFirestoreQuotaExceeded()) return [];
+  try {
+    const schoolsSnap = await getDocs(collection(db, 'schools'));
+    return schoolsSnap.docs
+      .map((d) => {
+        const data = d.data() as any;
+        return {
+          slug: d.id,
+          name: data?.name || d.id,
+          updatedAt: data?.updatedAt || '',
+        };
+      })
+      .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+  } catch (err) {
+    console.warn(`${LOG_PREFIX} listCloudSchools failed:`, err);
+    return [];
+  }
+}
+
+/**
+ * One-time fetch of school schedule from Cloud Firestore (useful on initial page load or when linking by school name)
  */
 export async function fetchSchoolScheduleFromCloud(
-  schoolSlug: string
+  schoolSlug: string,
+  targetSchoolName?: string
 ): Promise<{
   scheduleData: ScheduleData | null;
   schoolName: string | null;
@@ -495,25 +521,27 @@ export async function fetchSchoolScheduleFromCloud(
   alertSettings: any | null;
   classTotals?: Record<string, string> | null;
   maxClasses?: number | null;
+  resolvedSlug?: string | null;
 }> {
   if (!schoolSlug || isFirestoreQuotaExceeded()) {
     console.warn(`${LOG_PREFIX} fetchSchoolScheduleFromCloud skipped`, {
       schoolSlug,
       quotaExceeded: isFirestoreQuotaExceeded(),
     });
-    return { scheduleData: null, schoolName: null, logoUrl: null, alertSettings: null };
+    return { scheduleData: null, schoolName: null, logoUrl: null, alertSettings: null, resolvedSlug: null };
   }
 
   const normalizedSlug = schoolSlug.trim().slice(0, 100);
+  const cleanSearchName = (targetSchoolName || '').replace(/\s+/g, '');
   const startTime = Date.now();
-  console.info(`${LOG_PREFIX} Fetching initial schedule from Firestore for "${normalizedSlug}"...`);
+  console.info(`${LOG_PREFIX} Fetching initial schedule from Firestore for "${normalizedSlug}" (schoolName="${targetSchoolName || ''}")...`);
 
   try {
     const scheduleRef = doc(db, 'schools', normalizedSlug, 'schedules', 'current');
     const schoolRef = doc(db, 'schools', normalizedSlug);
 
-    // Fetch directly from server with retry first to avoid stale IndexedDB cache across AI Studio / Vercel
-    const [scheduleSnap, schoolSnap] = await Promise.all([
+    // Fetch directly from server with retry first to avoid stale IndexedDB cache across AI Studio / Vercel / Electron
+    let [scheduleSnap, schoolSnap] = await Promise.all([
       withFirestoreRetry(
         `fetchScheduleFromServer(schools/${normalizedSlug}/schedules/current)`,
         () => getDocFromServer(scheduleRef),
@@ -532,6 +560,95 @@ export async function fetchSchoolScheduleFromCloud(
       }),
     ]);
 
+    let resolvedSlug = normalizedSlug;
+
+    // If the target school slug does not exist yet in Firestore, search existing schools by schoolName or legacy slugs
+    if (!scheduleSnap.exists()) {
+      try {
+        const schoolsSnap = await getDocs(collection(db, 'schools'));
+        const existingDocs = schoolsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+
+        // Also include well-known legacy slugs in case the parent school doc wasn't created or listed
+        const legacySlugs = ['sajik-girls-high', 'korea-high', 'sajik-high', 'school-high'];
+        for (const leg of legacySlugs) {
+          if (leg !== normalizedSlug && !existingDocs.some((d) => d.id === leg)) {
+            existingDocs.push({ id: leg, name: '', updatedAt: '' });
+          }
+        }
+
+        const candidates = existingDocs.filter((d) => d.id !== normalizedSlug);
+
+        // Score candidates: exact name match > partial name match (e.g. '사직') > most recently updated
+        candidates.sort((a, b) => {
+          const aNameClean = String(a.name || '').replace(/\s+/g, '');
+          const bNameClean = String(b.name || '').replace(/\s+/g, '');
+
+          const aExact = cleanSearchName && aNameClean === cleanSearchName ? 1 : 0;
+          const bExact = cleanSearchName && bNameClean === cleanSearchName ? 1 : 0;
+          if (aExact !== bExact) return bExact - aExact;
+
+          const aPartial =
+            (cleanSearchName && aNameClean && (aNameClean.includes(cleanSearchName) || cleanSearchName.includes(aNameClean))) ||
+            String(a.name || '').includes('사직') ||
+            String(a.id).includes('sajik')
+              ? 1
+              : 0;
+          const bPartial =
+            (cleanSearchName && bNameClean && (bNameClean.includes(cleanSearchName) || cleanSearchName.includes(bNameClean))) ||
+            String(b.name || '').includes('사직') ||
+            String(b.id).includes('sajik')
+              ? 1
+              : 0;
+          if (aPartial !== bPartial) return bPartial - aPartial;
+
+          return String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
+        });
+
+        for (const candidate of candidates) {
+          const candSchedRef = doc(db, 'schools', candidate.id, 'schedules', 'current');
+          const candSchedSnap = await getDocFromServer(candSchedRef).catch(() => getDoc(candSchedRef));
+          if (candSchedSnap.exists()) {
+            const candData = candSchedSnap.data();
+            const candSchoolNameClean = String(candData?.schoolName || candidate.name || '').replace(/\s+/g, '');
+            console.info(
+              `${LOG_PREFIX} Found existing schedule in fallback school "${candidate.id}" (${candData?.schoolName || candidate.name}), linking to "${normalizedSlug}"`
+            );
+            scheduleSnap = candSchedSnap;
+            resolvedSlug = candidate.id;
+            if (!schoolSnap.exists()) {
+              const candSchoolRef = doc(db, 'schools', candidate.id);
+              schoolSnap = await getDocFromServer(candSchoolRef).catch(() => getDoc(candSchoolRef));
+            }
+            // If we matched by school name or sajik, mirror the document under normalizedSlug so both slugs stay in sync
+            if (
+              !cleanSearchName ||
+              candSchoolNameClean === cleanSearchName ||
+              cleanSearchName.includes('사직') ||
+              normalizedSlug === 'sajik-girls-high'
+            ) {
+              try {
+                await setDoc(doc(db, 'schools', normalizedSlug, 'schedules', 'current'), {
+                  ...candData,
+                  schoolName: targetSchoolName || (candData?.schoolName === '한국고등학교' ? '사직여자고등학교' : candData?.schoolName) || '사직여자고등학교',
+                  updatedAt: new Date().toISOString(),
+                });
+                await setDoc(doc(db, 'schools', normalizedSlug), {
+                  name: targetSchoolName || (candidate.name === '한국고등학교' ? '사직여자고등학교' : candidate.name) || '사직여자고등학교',
+                  slug: normalizedSlug,
+                  logoUrl: candidate.logoUrl || '',
+                  updatedAt: new Date().toISOString(),
+                });
+                resolvedSlug = normalizedSlug;
+              } catch {}
+            }
+            break;
+          }
+        }
+      } catch (fallbackErr) {
+        console.warn(`${LOG_PREFIX} Fallback school lookup skipped:`, fallbackErr);
+      }
+    }
+
     let scheduleData: ScheduleData | null = null;
     let schoolName: string | null = null;
     let logoUrl: string | null = null;
@@ -541,7 +658,7 @@ export async function fetchSchoolScheduleFromCloud(
 
     if (schoolSnap.exists()) {
       const data = schoolSnap.data();
-      schoolName = data.name || null;
+      schoolName = data.name === '한국고등학교' ? '사직여자고등학교' : (data.name || null);
       logoUrl = data.logoUrl || null;
     }
 
@@ -556,7 +673,7 @@ export async function fetchSchoolScheduleFromCloud(
         }
       }
       if (data && data.schoolName && !schoolName) {
-        schoolName = data.schoolName;
+        schoolName = data.schoolName === '한국고등학교' ? '사직여자고등학교' : data.schoolName;
       }
       if (data && data.alertSettings) {
         alertSettings = data.alertSettings;
@@ -569,6 +686,7 @@ export async function fetchSchoolScheduleFromCloud(
       }
       console.info(`${LOG_PREFIX} Initial cloud schedule loaded in ${Date.now() - startTime}ms`, {
         schoolSlug: normalizedSlug,
+        resolvedSlug,
         daysCount: Array.isArray(scheduleData) ? scheduleData.length : 0,
         updatedAt: data?.updatedAt,
         fromCache: scheduleSnap.metadata.fromCache,
@@ -577,12 +695,12 @@ export async function fetchSchoolScheduleFromCloud(
       console.info(`${LOG_PREFIX} No existing cloud schedule document found at schools/${normalizedSlug}/schedules/current (${Date.now() - startTime}ms)`);
     }
 
-    return { scheduleData, schoolName, logoUrl, alertSettings, classTotals, maxClasses };
+    return { scheduleData, schoolName, logoUrl, alertSettings, classTotals, maxClasses, resolvedSlug };
   } catch (err) {
     console.warn(`${LOG_PREFIX} Error fetching initial cloud schedule for "${normalizedSlug}":`, err);
     try {
       handleFirestoreError(err, OperationType.GET, `schools/${normalizedSlug}`);
     } catch {}
-    return { scheduleData: null, schoolName: null, logoUrl: null, alertSettings: null };
+    return { scheduleData: null, schoolName: null, logoUrl: null, alertSettings: null, resolvedSlug: null };
   }
 }

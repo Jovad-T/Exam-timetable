@@ -224,8 +224,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   onSwitchToSelector,
   maxClasses = 15,
   classTotals = {},
-  schoolSlug = 'korea-high',
-  schoolName,
+  schoolSlug = 'sajik-girls-high',
+  schoolName = '사직여자고등학교',
   examMode,
   onChangeExamMode,
 }) => {

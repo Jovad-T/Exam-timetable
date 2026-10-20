@@ -71,7 +71,7 @@ export function getSchoolUrl(
   overrideDomain?: string
 ): string {
   const base = getBaseUrl(overrideDomain);
-  const activeSlug = cleanSlug(schoolSlug, true) || 'korea-high';
+  const activeSlug = cleanSlug(schoolSlug, true) || 'sajik-girls-high';
 
   if (role === 'admin') {
     return `${base}/${activeSlug}/admin`;
