@@ -143,11 +143,11 @@ export const ElectronUpdateCard: React.FC = () => {
     transferred: 0,
     total: 0,
     error: null,
-    feedUrl: null,
+    feedUrl: 'github:Jovad-T/Exam-timetable',
   });
   const [providerMode, setProviderMode] = useState<'github' | 'generic'>('github');
-  const [githubOwner, setGithubOwner] = useState('');
-  const [githubRepo, setGithubRepo] = useState('');
+  const [githubOwner, setGithubOwner] = useState('Jovad-T');
+  const [githubRepo, setGithubRepo] = useState('Exam-timetable');
   const [staticFeedUrl, setStaticFeedUrl] = useState('');
   const [savedToast, setSavedToast] = useState(false);
 
@@ -165,8 +165,8 @@ export const ElectronUpdateCard: React.FC = () => {
         setStaticFeedUrl(initial.config.feedUrl);
       } else if (initial.config?.githubOwner || initial.config?.githubRepo) {
         setProviderMode('github');
-        setGithubOwner(initial.config.githubOwner || '');
-        setGithubRepo(initial.config.githubRepo || '');
+        setGithubOwner(initial.config.githubOwner || 'Jovad-T');
+        setGithubRepo(initial.config.githubRepo || 'Exam-timetable');
       }
     });
 

@@ -33,6 +33,7 @@ nsis:
 
 publish:
   - provider: github
-    owner: your-github-username
-    repo: your-github-repo-name
+    owner: Jovad-T
+    repo: Exam-timetable
     releaseType: release
+

@@ -3,6 +3,10 @@
   "private": true,
   "version": "1.0.0",
   "main": "electron-main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jovad-T/Exam-timetable.git"
+  },
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --outdir=. --external:vite --external:express --external:dotenv --external:@google/genai",

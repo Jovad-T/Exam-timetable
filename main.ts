@@ -104,6 +104,9 @@ function broadcastUpdateStatus(patch: Partial<UpdateState>): void {
   }
 }
 
+const DEFAULT_GITHUB_OWNER = 'Jovad-T';
+const DEFAULT_GITHUB_REPO = 'Exam-timetable';
+
 function configureAutoUpdater(): void {
   // Automatically download updates from GitHub Release in the background and install on quit
   autoUpdater.autoDownload = true;
@@ -113,8 +116,8 @@ function configureAutoUpdater(): void {
 
   const savedConfig = loadUpdaterConfig();
   const customFeedUrl = process.env.ELECTRON_UPDATE_URL || savedConfig.feedUrl;
-  const customGithubOwner = process.env.GITHUB_OWNER || savedConfig.githubOwner;
-  const customGithubRepo = process.env.GITHUB_REPO || savedConfig.githubRepo;
+  const customGithubOwner = process.env.GITHUB_OWNER || savedConfig.githubOwner || DEFAULT_GITHUB_OWNER;
+  const customGithubRepo = process.env.GITHUB_REPO || savedConfig.githubRepo || DEFAULT_GITHUB_REPO;
 
   try {
     if (customFeedUrl && /^https?:\/\//i.test(customFeedUrl.trim())) {
@@ -140,7 +143,7 @@ function configureAutoUpdater(): void {
       console.info('[AutoUpdater] Configured GitHub Release update feed:', currentUpdateState.feedUrl);
     } else {
       // Uses the default GitHub repository configured in electron-builder.yml (app-update.yml)
-      currentUpdateState.feedUrl = 'github:default (electron-builder.yml)';
+      currentUpdateState.feedUrl = `github:${DEFAULT_GITHUB_OWNER}/${DEFAULT_GITHUB_REPO}`;
     }
   } catch (err: any) {
     console.warn('[AutoUpdater] setFeedURL warning:', err?.message || err);
