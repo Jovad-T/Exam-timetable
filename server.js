@@ -115,9 +115,31 @@ ${extractedText}` : `${promptText}
       parsedData = Array.isArray(parsedObj) ? parsedObj : parsedObj.schedule || parsedObj.data || Object.values(parsedObj).find((v) => Array.isArray(v)) || [];
       if (!Array.isArray(parsedData)) parsedData = [parsedData];
     } else {
-      const geminiKey = customApiKey || process.env.GEMINI_API_KEY;
-      const clientAI = geminiKey ? new GoogleGenAI({ apiKey: geminiKey, httpOptions: { headers: { "User-Agent": "aistudio-build" } } }) : ai;
-      const geminiModel = effectiveModel.includes("pro") ? "gemini-3.1-pro-preview" : "gemini-3.8-flash";
+      let resolvedKey = (customApiKey || "").trim();
+      if (resolvedKey.startsWith("enc_")) {
+        try {
+          const b64 = resolvedKey.slice(4);
+          const ciphered = decodeURIComponent(Buffer.from(b64, "base64").toString("utf-8"));
+          const SALT = "AI_EXAM_SCHEDULE_SECURE_2026";
+          let res2 = "";
+          for (let i = 0; i < ciphered.length; i++) {
+            res2 += String.fromCharCode(ciphered.charCodeAt(i) ^ SALT.charCodeAt(i % SALT.length));
+          }
+          resolvedKey = res2;
+        } catch {
+        }
+      } else if (resolvedKey.startsWith("b64_")) {
+        try {
+          resolvedKey = Buffer.from(resolvedKey.slice(4), "base64").toString("utf-8");
+        } catch {
+        }
+      }
+      const geminiKey = resolvedKey || process.env.GEMINI_API_KEY;
+      if (!geminiKey) {
+        return res.status(400).json({ success: false, error: "Gemini API \uD0A4\uAC00 \uC124\uC815\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uAD00\uB9AC\uC790 \uC124\uC815\uC5D0\uC11C API \uD0A4\uB97C \uB4F1\uB85D\uD574\uC8FC\uC138\uC694." });
+      }
+      const clientAI = new GoogleGenAI({ apiKey: geminiKey, httpOptions: { headers: { "User-Agent": "aistudio-build" } } });
+      const geminiModel = "gemini-3.8-flash";
       const parts = [];
       if (extractedText) {
         parts.push({ text: promptText });
@@ -194,6 +216,154 @@ ${extractedText}` : `${promptText}
     return res.status(500).json({
       success: false,
       error: error.message || "\uC2DC\uAC04\uD45C \uBB38\uC11C \uBD84\uC11D \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4."
+    });
+  }
+});
+app.post("/api/parse-roster", async (req, res) => {
+  try {
+    const { fileBase64, mimeType, extractedText, customApiKey } = req.body;
+    if (!fileBase64 && !extractedText) {
+      return res.status(400).json({ success: false, error: "\uBD84\uC11D\uD560 \uBA85\uB82C\uD45C \uD30C\uC77C\uC774\uB098 \uD14D\uC2A4\uD2B8 \uB370\uC774\uD130\uAC00 \uD544\uC694\uD569\uB2C8\uB2E4." });
+    }
+    let resolvedKey = (customApiKey || "").trim();
+    if (resolvedKey.startsWith("enc_")) {
+      try {
+        const b64 = resolvedKey.slice(4);
+        const ciphered = decodeURIComponent(Buffer.from(b64, "base64").toString("utf-8"));
+        const SALT = "AI_EXAM_SCHEDULE_SECURE_2026";
+        let dec = "";
+        for (let i = 0; i < ciphered.length; i++) {
+          dec += String.fromCharCode(ciphered.charCodeAt(i) ^ SALT.charCodeAt(i % SALT.length));
+        }
+        resolvedKey = dec;
+      } catch {
+      }
+    } else if (resolvedKey.startsWith("b64_")) {
+      try {
+        resolvedKey = Buffer.from(resolvedKey.slice(4), "base64").toString("utf-8");
+      } catch {
+      }
+    }
+    const geminiKey = resolvedKey || process.env.GEMINI_API_KEY;
+    if (!geminiKey) {
+      return res.status(400).json({
+        success: false,
+        error: "Gemini API \uD0A4\uAC00 \uC124\uC815\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4."
+      });
+    }
+    const clientAI = new GoogleGenAI({
+      apiKey: geminiKey,
+      httpOptions: { headers: { "User-Agent": "aistudio-build" } }
+    });
+    const systemInstruction = `
+\uB2F9\uC2E0\uC740 \uB300\uD55C\uBBFC\uAD6D \uACE0\uB4F1\uD559\uAD50\uC758 '\uC804\uAD50 \uD559\uC0DD \uBA85\uB82C\uD45C' \uB610\uB294 '\uD559\uAE09 \uC778\uC6D0 \uD604\uD669\uD45C' \uBB38\uC11C(PDF, \uC5D1\uC140, \uC774\uBBF8\uC9C0 \uB4F1)\uB97C \uBD84\uC11D\uD558\uC5EC \uAC01 \uD559\uB144\xB7\uBC18\uBCC4 \uCD1D \uD559\uC0DD \uC218(\uC7AC\uC801 \uC778\uC6D0)\uB97C \uC815\uD655\uD558\uAC8C \uC9D1\uACC4\uD558\uB294 \uB370\uC774\uD130 \uBD84\uC11D \uC804\uBB38\uAC00\uC785\uB2C8\uB2E4.
+
+[\uBD84\uC11D \uBC0F \uC9D1\uACC4 \uADDC\uCE59]
+1. \uBB38\uC11C \uC0C1\uB2E8 \uC81C\uBAA9(\uC608: "2026\uD559\uB144\uB3C4 2\uD559\uB144 \uC804\uCCB4 \uBA85\uB82C")\uC5D0\uC11C \uD559\uB144 \uC815\uBCF4\uB97C \uC815\uD655\uD788 \uD30C\uC545\uD558\uC2ED\uC2DC\uC624. ("2026\uD559\uB144\uB3C4"\uC758 \uC22B\uC790\uB97C \uD559\uB144\uC73C\uB85C \uD63C\uB3D9\uD558\uC9C0 \uB9C8\uC2ED\uC2DC\uC624.)
+2. \uD45C \uD558\uB2E8\uC774\uB098 \uC0C1\uB2E8\uC5D0 \uAC01 \uBC18\uBCC4 '\uC778\uC6D0', '\uC7AC\uC801', '\uD604\uC6D0', '\uACC4', '\uC18C\uACC4', '\uD569\uACC4' \uD589(\uC608: "\uC778\uC6D0 22 | \uC778\uC6D0 22 | \uC778\uC6D0 23 ...")\uC774 \uBA85\uC2DC\uB418\uC5B4 \uC788\uB2E4\uBA74 \uBC18\uB4DC\uC2DC \uD574\uB2F9 \uC22B\uC790\uB97C \uCD5C\uC6B0\uC120\uC73C\uB85C \uADF8\uB300\uB85C \uCD94\uCD9C\uD558\uC2ED\uC2DC\uC624.
+3. \uC6B0\uCE21 \uD558\uB2E8\uC758 "\uCD1D\uC6D0 : 184" \uAC19\uC740 \uD559\uB144 \uC804\uCCB4 \uD569\uACC4(\uCD1D\uC6D0/\uCD1D\uACC4)\uB97C \uB9C8\uC9C0\uB9C9 \uBC18(\uC608: 8\uBC18)\uC758 \uC778\uC6D0\uC73C\uB85C \uC798\uBABB \uCD94\uCD9C\uD558\uC9C0 \uB9C8\uC2ED\uC2DC\uC624.
+4. \uB9CC\uC57D \uD559\uC0DD \uAC1C\uC778\uBCC4 \uBA85\uB2E8(\uBA85\uB82C\uD45C)\uC744 \uC9C1\uC811 \uC138\uC5B4\uC57C \uD55C\uB2E4\uBA74:
+   - \uC591\uC2DD \uD558\uB2E8\uC5D0 25\uBC88~30\uBC88 \uB4F1 \uC774\uB984\uC774 \uBE44\uC5B4 \uC788\uB294 \uACF5\uB780 \uBC88\uD638\uB9CC \uC778\uC1C4\uB418\uC5B4 \uC788\uB294 \uACBD\uC6B0, \uC774\uB984\uC774 \uC5C6\uB294 \uBE48 \uBC88\uD638\uB294 \uC808\uB300 \uD559\uC0DD \uC218\uC5D0 \uD3EC\uD568\uD558\uC9C0 \uB9C8\uC2ED\uC2DC\uC624.
+   - '\uC804\uCD9C', '\uC790\uD1F4', '\uD734\uD559', '\uC720\uC608', '\uBA74\uC81C', '\uC81C\uC801', '\uACB0\uBC88'\uC73C\uB85C \uD45C\uAE30\uB418\uC5B4 \uC774\uB984\uC774 \uC5C6\uB294 \uD589\uC740 \uD559\uC0DD \uC218\uC5D0\uC11C \uC81C\uC678\uD558\uC2ED\uC2DC\uC624. (\uB2E8, \uD559\uC0DD \uC774\uB984\uACFC \uD568\uAED8 '\uC804\uC785', '\uC704\uD0C1'\uC774 \uD45C\uAE30\uB41C \uC7AC\uC801\uC0DD\uC740 \uD3EC\uD568\uD569\uB2C8\uB2E4.)
+   - \uD559\uBC88\uC774 5\uC790\uB9AC(\uC608: 10101 = 1\uD559\uB144 01\uBC18 01\uBC88) \uB610\uB294 4\uC790\uB9AC(\uC608: 1101 = 1\uD559\uB144 1\uBC18 01\uBC88)\uC778 \uACBD\uC6B0 \uD559\uBC88 \uCCB4\uACC4\uB97C \uBD84\uC11D\uD558\uC5EC \uD559\uB144\uACFC \uBC18\uC744 \uBD84\uB958\uD558\uACE0 \uAC01 \uBC18\uC758 \uC2E4\uC81C \uD559\uC0DD \uC218\uB97C \uC815\uD655\uD788 \uC138\uC2ED\uC2DC\uC624.
+5. \uACB0\uACFC\uB294 \uBC18\uB4DC\uC2DC JSON \uAC1D\uCCB4 \uB0B4 'classes' \uBC30\uC5F4 \uBC0F 'maxClassNum'\uC73C\uB85C \uBC18\uD658\uD558\uC2ED\uC2DC\uC624.
+`;
+    const parts = [];
+    const isPdf = mimeType && mimeType.includes("pdf") || fileBase64 && fileBase64.includes("application/pdf");
+    if (extractedText && String(extractedText).trim().length > 20) {
+      parts.push({
+        text: `\uB2E4\uC74C\uC740 \uC5C5\uB85C\uB4DC\uB41C \uC804\uAD50 \uD559\uC0DD \uBA85\uB82C\uD45C/\uC778\uC6D0 \uD604\uD669 \uD30C\uC77C\uC5D0\uC11C \uCD94\uCD9C\uB41C \uB370\uC774\uD130\uC785\uB2C8\uB2E4:
+
+${String(extractedText).slice(0, 8e4)}
+
+\uC704 \uB370\uC774\uD130\uB97C \uC815\uBC00 \uBD84\uC11D\uD558\uC5EC \uD559\uB144\uBCC4\xB7\uBC18\uBCC4 \uCD1D\uC6D0(\uD559\uC0DD \uC218)\uC744 JSON\uC73C\uB85C \uCD94\uCD9C\uD574 \uC8FC\uC138\uC694.`
+      });
+    } else if (fileBase64) {
+      const base64Data = fileBase64.replace(/^data:image\/\w+;base64,/, "").replace(/^data:application\/pdf;base64,/, "");
+      const effectiveMimeType = isPdf ? "application/pdf" : mimeType || "image/jpeg";
+      parts.push({ inlineData: { mimeType: effectiveMimeType, data: base64Data } });
+      parts.push({
+        text: `\uC774 \uC804\uAD50 \uD559\uC0DD \uBA85\uB82C\uD45C/\uD559\uAE09 \uC778\uC6D0 \uD604\uD669 \uBB38\uC11C\uB97C \uC815\uBC00 \uBD84\uC11D\uD558\uC5EC \uD559\uB144\uBCC4\xB7\uBC18\uBCC4 \uCD1D\uC6D0(\uD559\uC0DD \uC218)\uC744 JSON\uC73C\uB85C \uCD94\uCD9C\uD574 \uC8FC\uC138\uC694.`
+      });
+    }
+    const modelsToTry = ["gemini-3-flash-preview", "gemini-2.5-flash", "gemini-3.8-flash"];
+    let response = null;
+    let lastErr = null;
+    for (const modelName of modelsToTry) {
+      try {
+        response = await clientAI.models.generateContent({
+          model: modelName,
+          contents: { parts },
+          config: {
+            systemInstruction,
+            responseMimeType: "application/json",
+            temperature: 0,
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                classes: {
+                  type: Type.ARRAY,
+                  description: "\uD559\uB144\uBCC4 \uBC18\uBCC4 \uD559\uC0DD \uCD1D\uC6D0 \uBAA9\uB85D",
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      grade: { type: Type.STRING, description: '\uD559\uB144 \uC22B\uC790 \uBB38\uC790\uC5F4 ("1", "2", "3")' },
+                      classNum: { type: Type.STRING, description: '\uBC18 \uC22B\uC790 \uBB38\uC790\uC5F4 ("1" ~ "15")' },
+                      count: { type: Type.INTEGER, description: "\uD574\uB2F9 \uD559\uAE09 \uCD1D\uC6D0(\uD559\uC0DD \uC218)" }
+                    },
+                    required: ["grade", "classNum", "count"]
+                  }
+                },
+                maxClassNum: {
+                  type: Type.INTEGER,
+                  description: "\uAC10\uC9C0\uB41C \uAC00\uC7A5 \uD070 \uBC18 \uBC88\uD638 (1~15)"
+                }
+              },
+              required: ["classes", "maxClassNum"]
+            }
+          }
+        });
+        if (response?.text) break;
+      } catch (err) {
+        lastErr = err;
+        if (err?.message?.includes("429") || err?.message?.includes("RESOURCE_EXHAUSTED")) {
+          break;
+        }
+      }
+    }
+    if (!response && lastErr) {
+      throw lastErr;
+    }
+    const parsed = JSON.parse(response?.text || '{"classes":[],"maxClassNum":0}');
+    const classTotals = {};
+    let maxClassFound = parsed.maxClassNum || 0;
+    if (Array.isArray(parsed.classes)) {
+      for (const item of parsed.classes) {
+        const g = String(item.grade || "").replace(/[^1-3]/g, "");
+        const c = String(item.classNum || "").replace(/[^0-9]/g, "");
+        const cnt = Number(item.count);
+        if (g && c && !isNaN(cnt) && cnt > 0) {
+          classTotals[`${g}-${c}`] = String(cnt);
+          const cNum = parseInt(c, 10);
+          if (cNum > maxClassFound && cNum <= 15) {
+            maxClassFound = cNum;
+          }
+        }
+      }
+    }
+    return res.json({
+      success: true,
+      classTotals,
+      maxClassFound,
+      totalClassesCount: Object.keys(classTotals).length
+    });
+  } catch (error) {
+    console.error("Roster Parsing Error:", error);
+    const errMsg = String(error?.message || "");
+    const isQuota = errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.toLowerCase().includes("quota");
+    return res.status(isQuota ? 429 : 500).json({
+      success: false,
+      error: isQuota ? "Gemini API \uD638\uCD9C \uD560\uB2F9\uB7C9(Quota)\uC744 \uCD08\uACFC\uD588\uC2B5\uB2C8\uB2E4. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD558\uAC70\uB098 \uC5D1\uC140(.xlsx, .xls, .csv) \uB610\uB294 \uD14D\uC2A4\uD2B8 PDF \uD615\uC2DD\uC73C\uB85C \uCCA8\uBD80\uD574 \uC8FC\uC138\uC694." : error.message || "\uBA85\uB82C\uD45C \uD30C\uC77C \uBD84\uC11D \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4."
     });
   }
 });
