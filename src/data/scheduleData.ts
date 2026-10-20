@@ -41,8 +41,6 @@ export function cleanScheduleData(data: ScheduleData): ScheduleData {
     // 2. Auto-upgrade any stale Mock Exam schedule to the date-agnostic mock bell schedule
     if (
       day.id === 'day-mock-g12' ||
-      day.date === '11/18' ||
-      day.date === '10/20' ||
       day.date === '모의고사' ||
       (day.fullTitle && (day.fullTitle.includes('전국연합학력평가') || day.fullTitle.includes('모의고사')))
     ) {
@@ -66,7 +64,7 @@ export function cleanScheduleData(data: ScheduleData): ScheduleData {
   const prefix: ScheduleData = [];
   if (!hasMock) prefix.push(mockDaySchedule);
 
-  return [...prefix, ...upgraded.filter((d) => d.id !== 'day-mock-g12' && d.date !== '모의고사' && d.date !== '10/20')];
+  return [...prefix, ...upgraded.filter((d) => d.id !== 'day-mock-g12' && d.date !== '모의고사')];
 }
 
 /**
@@ -86,9 +84,7 @@ export function isSuneungOrMockSchedule(day?: DayExamSchedule | null): boolean {
     id.includes('mock') ||
     notice.includes('듣기평가') ||
     day.date === '모의고사' ||
-    day.date === '11/13' ||
-    day.date === '10/20' ||
-    day.date === '11/18'
+    day.date === '11/13'
   );
 }
 
@@ -101,9 +97,7 @@ export function isMockSchedule(day?: DayExamSchedule | null): boolean {
     title.includes('학력평가') ||
     title.includes('12156') ||
     id.includes('mock') ||
-    day.date === '모의고사' ||
-    day.date === '10/20' ||
-    day.date === '11/18'
+    day.date === '모의고사'
   );
 }
 

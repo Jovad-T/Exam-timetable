@@ -765,7 +765,10 @@ export default function App() {
   );
 
   const currentDaySchedule: DayExamSchedule =
-    modeFilteredSchedules.find((d) => d.id === activeTab || d.date === activeTab) || modeFilteredSchedules[0] || (examMode === 'mock' ? mockDaySchedule : regularScheduleData[0]);
+    modeFilteredSchedules.find((d) => d.id === activeTab || d.date === activeTab) ||
+    modeFilteredSchedules.find((d) => isTodayScheduleDay(d.date)) ||
+    modeFilteredSchedules[0] ||
+    (examMode === 'mock' ? mockDaySchedule : regularScheduleData[0]);
 
   const handleCopyCode = () => {
     const cleanData = scheduleData.map((day) => ({
@@ -805,7 +808,16 @@ export default function App() {
   const handleExtractSuccess = (extractedData: ScheduleData) => {
     const cleaned = cleanScheduleData(extractedData);
     setScheduleData(cleaned);
-    if (cleaned.length > 0) setActiveTab(cleaned[0].id || cleaned[0].date);
+    const regDays = cleaned.filter((d) => isRegularSchedule(d));
+    if (regDays.length > 0) {
+      setExamMode('regular');
+      try {
+        localStorage.setItem('selected_exam_mode', 'regular');
+      } catch {}
+      setActiveTab(getTodayActiveTabId(regDays));
+    } else if (cleaned.length > 0) {
+      setActiveTab(cleaned[0].id || cleaned[0].date);
+    }
   };
 
   const handleResetSample = () => {
@@ -860,6 +872,12 @@ export default function App() {
       schedule: [{ id: `p-${Date.now()}-1`, period: '1교시', subjects: [{ id: `s-${Date.now()}-1`, name: '자습', time: '08:30 ~ 09:00', duration: 30, targetClass: '전체' }] }]
     };
     setScheduleData((prev) => [...prev, newDay]);
+    if (isRegularSchedule(newDay)) {
+      setExamMode('regular');
+      try {
+        localStorage.setItem('selected_exam_mode', 'regular');
+      } catch {}
+    }
     setActiveTab(newDay.id!);
   };
 

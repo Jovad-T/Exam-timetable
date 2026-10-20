@@ -864,24 +864,33 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           return `${String(Number(h) || 0).padStart(2, '0')}:${String(Number(m) || 0).padStart(2, '0')}`;
         };
 
+        const extractTimesFromSub = (s: SubjectItem) => {
+          if (s.entryTime && !pEntry) {
+            const entryMatch = s.entryTime.match(/(\d{1,2})\s*:\s*(\d{2})/);
+            if (entryMatch) pEntry = normTime(`${entryMatch[1]}:${entryMatch[2]}`);
+          }
+          const timeMatches = [...(s.time || '').matchAll(/(\d{1,2})\s*:\s*(\d{2})/g)];
+          if (timeMatches.length >= 2) {
+            const sNorm = normTime(`${timeMatches[0][1]}:${timeMatches[0][2]}`);
+            const eNorm = normTime(`${timeMatches[1][1]}:${timeMatches[1][2]}`);
+            if (!pStart || toSec(sNorm) < toSec(pStart)) pStart = sNorm;
+            if (!pEnd || toSec(eNorm) > toSec(pEnd)) pEnd = eNorm;
+          }
+        };
+
         effectiveSubjects.forEach((s) => {
           if (s.name) {
             const nameWithCode =
               s.subjectCode && !s.name.includes('(') ? `${s.name}(${s.subjectCode})` : s.name;
             if (!subjectList.includes(nameWithCode)) subjectList.push(nameWithCode);
           }
-          if (s.entryTime && !pEntry) {
-            const entryMatch = s.entryTime.match(/(\d{1,2}:\d{2})/);
-            if (entryMatch) pEntry = normTime(entryMatch[1]);
-          }
-          const match = s.time?.match(/(\d{1,2}:\d{2})\s*[~-∼〜]\s*(\d{1,2}:\d{2})/);
-          if (match) {
-            const sNorm = normTime(match[1]);
-            const eNorm = normTime(match[2]);
-            if (!pStart || toSec(sNorm) < toSec(pStart)) pStart = sNorm;
-            if (!pEnd || toSec(eNorm) > toSec(pEnd)) pEnd = eNorm;
-          }
+          extractTimesFromSub(s);
         });
+
+        // Fallback to all subjects in period if class-filtered subjects lacked explicit time strings
+        if (!pStart || !pEnd) {
+          (p.subjects || []).forEach((s) => extractTimesFromSub(s));
+        }
 
         const startSec = pStart ? toSec(pStart) : 0;
         const endSec = pEnd ? toSec(pEnd) : 0;
@@ -909,7 +918,12 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           !item.periodName.includes('점심') &&
           !item.periodName.includes('중식') &&
           !item.periodName.includes('조례') &&
-          !item.periodName.includes('청소')
+          !item.periodName.includes('조회') &&
+          !item.periodName.includes('종례') &&
+          !item.periodName.includes('청소') &&
+          !item.periodName.includes('채점') &&
+          !item.periodName.includes('입실') &&
+          !item.periodName.includes('귀가')
       );
   };
 
@@ -950,10 +964,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       // Apply test simulation mode if enabled
       if (simMode === 'break') {
         if (parsed.length > 1) {
-          // Break time before period 2 starts (e.g. 5 minutes before period 2 startSec)
-          effectiveNowSec = parsed[1].startSec - 300;
+          // Break time right after period 1 ends (before period 2 starts)
+          effectiveNowSec = parsed[0].endSec + 60;
         } else {
-          effectiveNowSec = parsed[0].startSec - 600;
+          effectiveNowSec = Math.max(0, parsed[0].startSec - 900);
         }
       } else if (simMode === 'p1') {
         effectiveNowSec = parsed[0].startSec + Math.floor((parsed[0].endSec - parsed[0].startSec) * 0.45);
@@ -1276,15 +1290,26 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   }, [currentExam.activePeriodIndex, currentExam.nextPeriodIndex]);
 
   // Determine effective screen:
-  // 모의고사 모드(isMockSchedule)에서는 1~4교시 전체 타종 시간표(break_view)를 기본 유지하여 화면이 갑자기 바뀌지 않도록 고정
-  const isExamActive =
-    currentExam.statusType === 'ongoing' || currentExam.statusType === 'preparing';
+  // 시험 시간(statusType === 'ongoing', 즉 실제 시험 시작 시각 ~ 종료 시각)에만 집중 시험 화면(exam_view)으로 전환하고,
+  // 쉬는 시간 / 입실 대기 시간(preparing) / 시험 시작 전(before_all) / 모든 시험 종료 후(after_all)에는 전체 시간표 화면(break_view) 표시
+  const isExamActive = currentExam.statusType === 'ongoing';
+
+  // 실시간으로 시험이 시작(ongoing 진입)되거나 종료(쉬는 시간 진입)될 때 수동 미리보기에 고정되어 있지 않도록 자동 모드로 즉시 복귀
+  const prevStatusTypeRef = useRef<CurrentExamState['statusType']>(currentExam.statusType);
+  useEffect(() => {
+    if (prevStatusTypeRef.current !== currentExam.statusType) {
+      const wasOngoing = prevStatusTypeRef.current === 'ongoing';
+      const isNowOngoing = currentExam.statusType === 'ongoing';
+      if (wasOngoing !== isNowOngoing) {
+        setScreenMode('auto');
+      }
+      prevStatusTypeRef.current = currentExam.statusType;
+    }
+  }, [currentExam.statusType]);
 
   const effectiveScreen: 'break_view' | 'exam_view' =
     screenMode === 'auto'
-      ? isMockSchedule(daySchedule)
-        ? 'break_view'
-        : isExamActive
+      ? isExamActive
         ? 'exam_view'
         : 'break_view'
       : screenMode;
@@ -1821,7 +1846,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                   </h4>
                 </div>
 
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
                   {/* 시험 종료 10분 전 / 시작 10분 전 인라인 배지 (고정 폭 및 레이아웃 높이 변화 없음) */}
                   {currentExam.isEndingSoon && (
                     <div className="bg-rose-600 border-2 border-yellow-300 rounded-xl px-3 py-1 text-white font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-md whitespace-nowrap tabular-nums">
@@ -1839,29 +1864,70 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                       </span>
                     </div>
                   )}
-                  {!isMockSchedule(daySchedule) && (
-                    <button
-                      onClick={() => setFilterMyClassOnly(!filterMyClassOnly)}
-                      className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black transition cursor-pointer shadow-xs border ${
-                        filterMyClassOnly
-                          ? 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 border-yellow-300 font-black'
-                          : 'bg-emerald-900/90 hover:bg-emerald-800 text-emerald-100 border-emerald-600'
-                      }`}
-                      title="우리 반 맞춤 과목만 보기 또는 전체 과목 보기 전환"
-                    >
-                      {filterMyClassOnly ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-slate-950 shrink-0" />
-                          <span>우리 반 맞춤 보기 ({attendance.grade}-{attendance.classNum})</span>
-                        </>
-                      ) : (
-                        <>
-                          <Layers className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
-                          <span>전체 과목 보기</span>
-                        </>
-                      )}
-                    </button>
-                  )}
+                      {/* 전체화면(쉬는 시간 화면)에서도 자동 화면 전환 상태 확인 및 1.쉬는시간/2.시험시간 전환 가능 */}
+                      <div className="flex items-center gap-1 bg-slate-950/90 px-1.5 py-0.5 rounded-xl border border-slate-700 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setScreenMode('auto')}
+                          className={`px-2 py-0.5 rounded-lg font-black transition cursor-pointer flex items-center gap-1 ${
+                            screenMode === 'auto'
+                              ? 'bg-indigo-600 text-white shadow-2xs'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                          title="쉬는 시간(전체 시간표) ↔ 시험 시간(집중 대형 화면) 자동 전환"
+                        >
+                          <Sparkles className="w-3 h-3 text-yellow-300 shrink-0" />
+                          <span>자동전환</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setScreenMode('break_view')}
+                          className={`px-2 py-0.5 rounded-lg font-black transition cursor-pointer ${
+                            screenMode === 'break_view'
+                              ? 'bg-cyan-600 text-white shadow-2xs'
+                              : screenMode === 'auto' && effectiveScreen === 'break_view'
+                              ? 'bg-cyan-950 text-cyan-200 border border-cyan-500/40'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                          title="1. 쉬는 시간 (전체 시간표 화면)"
+                        >
+                          1.쉬는시간
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setScreenMode('exam_view')}
+                          className={`px-2 py-0.5 rounded-lg font-black transition cursor-pointer ${
+                            screenMode === 'exam_view'
+                              ? 'bg-amber-600 text-white shadow-2xs'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                          title="2. 시험 시간 (과목 집중 대형 화면)"
+                        >
+                          2.시험시간
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => setFilterMyClassOnly(!filterMyClassOnly)}
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black transition cursor-pointer shadow-xs border ${
+                          filterMyClassOnly
+                            ? 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 border-yellow-300 font-black'
+                            : 'bg-emerald-900/90 hover:bg-emerald-800 text-emerald-100 border-emerald-600'
+                        }`}
+                        title="우리 반 맞춤 과목만 보기 또는 전체 과목 보기 전환"
+                      >
+                        {filterMyClassOnly ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-slate-950 shrink-0" />
+                            <span>우리 반 맞춤 보기 ({attendance.grade}-{attendance.classNum})</span>
+                          </>
+                        ) : (
+                          <>
+                            <Layers className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+                            <span>전체 과목 보기</span>
+                          </>
+                        )}
+                      </button>
                 </div>
               </div>
 
@@ -3283,41 +3349,66 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             <span className="text-amber-400 text-[11px] font-bold mr-0.5 hidden sm:inline">테스트:</span>
             <button
               type="button"
-              onClick={() => setSimMode('realtime')}
+              onClick={() => {
+                setSimMode('realtime');
+                setScreenMode('auto');
+              }}
               className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
                 simMode === 'realtime' ? 'bg-emerald-600 text-white font-black' : 'text-slate-400 hover:text-slate-200'
               }`}
-              title="실제 시스템 시간 모드"
+              title="실제 시스템 시간 모드 (자동 화면 전환)"
             >
               실시간
             </button>
             <button
               type="button"
-              onClick={() => setSimMode('p1')}
+              onClick={() => {
+                setSimMode('break');
+                setScreenMode('auto');
+              }}
+              className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                simMode === 'break' ? 'bg-cyan-600 text-white font-black' : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="쉬는 시간 시뮬레이션 테스트 (전체 시간표 화면 자동 전환)"
+            >
+              쉬는시간
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSimMode('p1');
+                setScreenMode('auto');
+              }}
               className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
                 simMode === 'p1' ? 'bg-amber-600 text-white font-black' : 'text-slate-400 hover:text-slate-200'
               }`}
-              title="1교시 진행 중 시뮬레이션 테스트"
+              title="1교시 진행 중 시뮬레이션 테스트 (시험 진행 화면 자동 전환)"
             >
               1교시중
             </button>
             <button
               type="button"
-              onClick={() => setSimMode('p2')}
+              onClick={() => {
+                setSimMode('p2');
+                setScreenMode('auto');
+              }}
               className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
                 simMode === 'p2' ? 'bg-amber-600 text-white font-black' : 'text-slate-400 hover:text-slate-200'
               }`}
-              title="2교시 진행 중 시뮬레이션 테스트"
+              title="2교시 진행 중 시뮬레이션 테스트 (시험 진행 화면 자동 전환)"
             >
               2교시중
             </button>
             <button
               type="button"
-              onClick={() => setSimMode('warningAlert')}
+              onClick={() => {
+                setSimMode('warningAlert');
+                setScreenMode('auto');
+              }}
               className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
                 simMode === 'warningAlert' ? 'bg-rose-600 text-white font-black' : 'text-slate-400 hover:text-slate-200'
               }`}
-              title="시험 종료 임박(5분 전) 경고 시뮬레이션 테스트"
+              title="시험 종료 임박 시뮬레이션 테스트"
             >
               종료임박
             </button>
