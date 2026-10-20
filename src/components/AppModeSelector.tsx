@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, School, ArrowRight, BookOpen, Award } from 'lucide-react';
+import { Sparkles, School, ArrowRight, BookOpen, Award, Settings } from 'lucide-react';
 
 interface AppModeSelectorProps {
   onSelectClassroomMode: (examType: 'regular' | 'mock') => void;
@@ -8,6 +8,7 @@ interface AppModeSelectorProps {
 
 export const AppModeSelector: React.FC<AppModeSelectorProps> = ({
   onSelectClassroomMode,
+  onSelectAdminMode,
 }) => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white flex items-center justify-center p-4 sm:p-8 lg:p-12">
@@ -112,8 +113,28 @@ export const AppModeSelector: React.FC<AppModeSelectorProps> = ({
 
         </div>
 
-        <div className="text-center text-xs sm:text-sm text-slate-400 pt-2 break-keep">
-          ※ 선택하신 시험 종류로 교실 전자칠판이 실행됩니다. (시간표 관리 및 설정은 <code className="text-indigo-300 font-mono font-bold">/admin</code> 주소로 접속하세요)
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2 text-center">
+          <div className="text-xs sm:text-sm text-slate-400 break-keep">
+            ※ 선택하신 시험 종류로 교실 전자칠판이 실행됩니다. (시간표 관리 및 설정은{' '}
+            <button
+              type="button"
+              onClick={onSelectAdminMode}
+              className="text-indigo-300 hover:text-white font-mono font-bold underline underline-offset-4 cursor-pointer transition"
+            >
+              /admin
+            </button>{' '}
+            주소로 접속하세요)
+          </div>
+          {onSelectAdminMode && (
+            <button
+              type="button"
+              onClick={onSelectAdminMode}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-indigo-600 text-slate-200 hover:text-white border border-slate-700 hover:border-indigo-400 text-xs font-black transition cursor-pointer shadow-sm shrink-0"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>관리자 모드 (/admin) 열기</span>
+            </button>
+          )}
         </div>
 
       </div>

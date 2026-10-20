@@ -23,6 +23,7 @@ interface EditScheduleModalProps {
   periodName: string;
   prevPeriodEndTime?: string | null;
   selectedGrade?: string;
+  isMockMode?: boolean;
 }
 
 // Helper to convert 'HH:mm' to minutes from midnight
@@ -40,11 +41,11 @@ const minutesToTime = (mins: number): string => {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 };
 
-// Generate time options list (08:00 ~ 17:30 in 5/10 min steps)
+// Generate time options list (08:00 ~ 17:30 in 5 min steps)
 const generateTimeOptions = (startHour = 8, endHour = 17) => {
   const options: string[] = [];
   for (let h = startHour; h <= endHour; h++) {
-    for (let m = 0; m < 60; m += 10) {
+    for (let m = 0; m < 60; m += 5) {
       if (h === endHour && m > 30) break;
       const hh = String(h).padStart(2, '0');
       const mm = String(m).padStart(2, '0');
@@ -64,11 +65,13 @@ export const EditScheduleModal: React.FC<EditScheduleModalProps> = ({
   periodName,
   prevPeriodEndTime,
   selectedGrade = '2학년',
+  isMockMode = false,
 }) => {
   const [name, setName] = useState('');
   const [subjectCode, setSubjectCode] = useState('');
   const [grade, setGrade] = useState(selectedGrade);
   const [entryTime, setEntryTime] = useState('09:10');
+  const [prepTimeRange, setPrepTimeRange] = useState('08:35');
   const [startTime, setStartTime] = useState('09:20');
   const [endTime, setEndTime] = useState('10:20');
   const [time, setTime] = useState('09:20~10:20');
@@ -90,9 +93,16 @@ export const EditScheduleModal: React.FC<EditScheduleModalProps> = ({
 
       setName(rawName);
       setSubjectCode(code);
-      setEntryTime(initialSubject.entryTime || '09:10');
+      setEntryTime(initialSubject.preliminaryBell || initialSubject.entryTime || (isMockMode ? '08:25' : '09:10'));
+      setPrepTimeRange(
+        initialSubject.prepTimeRange
+          ? initialSubject.prepTimeRange.replace(/\s+/g, '')
+          : isMockMode
+          ? '08:35'
+          : ''
+      );
       
-      const rawTime = initialSubject.time || '09:20~10:20';
+      const rawTime = initialSubject.time || (isMockMode ? '08:40 ~ 10:00' : '09:20~10:20');
       setTime(rawTime);
 
       // Parse start and end time from time string
@@ -104,18 +114,19 @@ export const EditScheduleModal: React.FC<EditScheduleModalProps> = ({
 
       const dur = initialSubject.duration || 60;
       setDuration(dur);
-      setTargetClass(initialSubject.targetClass || '행정학급');
+      setTargetClass(initialSubject.targetClass || (isMockMode ? '전체' : '행정학급'));
 
       if (initialSubject.targetClass?.includes('1학년')) setGrade('1학년');
       else if (initialSubject.targetClass?.includes('2학년')) setGrade('2학년');
       else if (initialSubject.targetClass?.includes('3학년')) setGrade('3학년');
     } else {
       // Auto-suggestions based on previous period or period name
-      const suggestion = getSuggestedTime(periodName, prevPeriodEndTime, 60);
+      const suggestion = getSuggestedTime(periodName, prevPeriodEndTime, isMockMode ? 70 : 60);
       setName('');
       setSubjectCode('');
       setGrade(selectedGrade);
-      setEntryTime(suggestion.suggestedEntryTime);
+      setEntryTime(isMockMode ? '08:25' : suggestion.suggestedEntryTime);
+      setPrepTimeRange(isMockMode ? '08:35' : '');
       
       const parts = suggestion.suggestedTimeRange.split(/[~～-]/);
       const parsedStart = parts[0]?.trim() || '09:20';
@@ -124,9 +135,9 @@ export const EditScheduleModal: React.FC<EditScheduleModalProps> = ({
       setEndTime(parsedEnd);
       setTime(suggestion.suggestedTimeRange);
       setDuration(suggestion.suggestedDuration);
-      setTargetClass('행정학급');
+      setTargetClass(isMockMode ? '전체' : '행정학급');
     }
-  }, [initialSubject, isOpen, periodName, prevPeriodEndTime, selectedGrade]);
+  }, [initialSubject, isOpen, periodName, prevPeriodEndTime, selectedGrade, isMockMode]);
 
   if (!isOpen) return null;
 
@@ -140,13 +151,13 @@ export const EditScheduleModal: React.FC<EditScheduleModalProps> = ({
       // Auto calculate duration from difference
       const newDur = endM - startM;
       setDuration(newDur);
-      setTime(`${newStart}~${endTime}`);
+      setTime(isMockMode ? `${newStart} ~ ${endTime}` : `${newStart}~${endTime}`);
     } else {
       // If end time is before or equal to start time, push end time by current duration
       const newEndM = startM + (duration || 60);
       const newEnd = minutesToTime(newEndM);
       setEndTime(newEnd);
-      setTime(`${newStart}~${newEnd}`);
+      setTime(isMockMode ? `${newStart} ~ ${newEnd}` : `${newStart}~${newEnd}`);
     }
   };
 
@@ -159,9 +170,9 @@ export const EditScheduleModal: React.FC<EditScheduleModalProps> = ({
     if (endM > startM) {
       const calculatedDuration = endM - startM;
       setDuration(calculatedDuration);
-      setTime(`${startTime}~${newEnd}`);
+      setTime(isMockMode ? `${startTime} ~ ${newEnd}` : `${startTime}~${newEnd}`);
     } else {
-      setTime(`${startTime}~${newEnd}`);
+      setTime(isMockMode ? `${startTime} ~ ${newEnd}` : `${startTime}~${newEnd}`);
     }
   };
 
@@ -173,23 +184,35 @@ export const EditScheduleModal: React.FC<EditScheduleModalProps> = ({
       const newEndM = startM + newDur;
       const newEnd = minutesToTime(newEndM);
       setEndTime(newEnd);
-      setTime(`${startTime}~${newEnd}`);
+      setTime(isMockMode ? `${startTime} ~ ${newEnd}` : `${startTime}~${newEnd}`);
     }
   };
 
   // Preset button handler
-  const applyPreset = (presetEntry: string, presetStart: string, presetEnd: string, presetDur: number) => {
+  const applyPreset = (
+    presetEntry: string,
+    presetStart: string,
+    presetEnd: string,
+    presetDur: number,
+    presetPrep?: string,
+    presetName?: string
+  ) => {
     setEntryTime(presetEntry);
+    if (presetPrep !== undefined) setPrepTimeRange(presetPrep);
+    if (presetName && !name.trim()) setName(presetName);
     setStartTime(presetStart);
     setEndTime(presetEnd);
-    setTime(`${presetStart}~${presetEnd}`);
+    setTime(isMockMode ? `${presetStart} ~ ${presetEnd}` : `${presetStart}~${presetEnd}`);
     setDuration(presetDur);
   };
 
   // Helper to set entry time to 10 minutes before start time
   const handleSetEntry10MinBefore = () => {
     const startM = timeToMinutes(startTime);
-    if (startM >= 10) {
+    if (startM >= 15 && isMockMode) {
+      setEntryTime(minutesToTime(startM - 15));
+      setPrepTimeRange(minutesToTime(startM - 5));
+    } else if (startM >= 10) {
       setEntryTime(minutesToTime(startM - 10));
     }
   };
@@ -216,14 +239,15 @@ export const EditScheduleModal: React.FC<EditScheduleModalProps> = ({
 
     // Construct full display name (e.g. 기하(03))
     const formattedName =
-      trimmedCode && !trimmedName.includes('(')
+      !isMockMode && trimmedCode && !trimmedName.includes('(')
         ? `${trimmedName}(${trimmedCode})`
         : trimmedName;
 
     // Final formatted time range
-    const finalTime = `${startTime}~${endTime}`;
+    const finalTime = isMockMode ? `${startTime} ~ ${endTime}` : `${startTime}~${endTime}`;
 
-    onSave({
+    const savedSubject: SubjectItem = {
+      ...initialSubject,
       id: initialSubject?.id || `sub-${Date.now()}`,
       name: formattedName,
       subjectCode: trimmedCode,
@@ -231,7 +255,15 @@ export const EditScheduleModal: React.FC<EditScheduleModalProps> = ({
       time: finalTime,
       duration: Number(duration) || 60,
       targetClass: targetClass.trim(),
-    });
+    };
+
+    if (isMockMode || prepTimeRange.trim() || initialSubject?.preliminaryBell) {
+      savedSubject.preliminaryBell = entryTime.trim();
+      savedSubject.prepTimeRange = prepTimeRange.trim() || minutesToTime(Math.max(0, timeToMinutes(startTime) - 5));
+      savedSubject.endBell = endTime.trim();
+    }
+
+    onSave(savedSubject);
     onClose();
   };
 
@@ -239,13 +271,17 @@ export const EditScheduleModal: React.FC<EditScheduleModalProps> = ({
     <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden relative animate-in fade-in zoom-in duration-150 my-6">
         {/* Header */}
-        <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between border-b border-slate-800">
+        <div className={`${isMockMode ? 'bg-purple-950' : 'bg-slate-900'} text-white px-5 py-3.5 flex items-center justify-between border-b border-slate-800`}>
           <div className="flex items-center gap-2">
             <Zap className="w-4 h-4 text-amber-400" />
             <h3 className="text-sm font-bold text-white">
-              {initialSubject
-                ? `과목 수정 (${grade} ${periodName})`
-                : `새 과목 추가 (${grade} ${periodName})`}
+              {isMockMode
+                ? initialSubject
+                  ? `모의고사 영역/타종 수정 (${periodName})`
+                  : `모의고사 새 영역 추가 (${periodName})`
+                : initialSubject
+                ? `정기고사 과목 수정 (${grade} ${periodName})`
+                : `정기고사 새 과목 추가 (${grade} ${periodName})`}
             </h3>
           </div>
           <button
@@ -327,97 +363,184 @@ export const EditScheduleModal: React.FC<EditScheduleModalProps> = ({
           {/* Quick Presets Chips */}
           <div>
             <span className="block font-bold text-slate-700 mb-1.5 flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 text-indigo-500" /> 표준 시험시간 빠른 1-Click 선택:
+              <Clock className="w-3.5 h-3.5 text-indigo-500" />{' '}
+              {isMockMode ? '전국연합학력평가(모의고사) 표준 타종 1-Click 선택:' : '표준 시험시간 빠른 1-Click 선택:'}
             </span>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => applyPreset('08:30', '08:30', '09:00', 30)}
-                className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-lg border border-slate-200 text-[11px] font-bold transition cursor-pointer"
-              >
-                자습 (08:30~09:00, 30분)
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset('09:10', '09:20', '10:20', 60)}
-                className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-lg border border-slate-200 text-[11px] font-bold transition cursor-pointer"
-              >
-                1교시 60분 (09:20~10:20)
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset('09:20', '09:30', '10:20', 50)}
-                className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-lg border border-slate-200 text-[11px] font-bold transition cursor-pointer"
-              >
-                1교시 50분 (09:30~10:20)
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset('10:50', '11:00', '12:00', 60)}
-                className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-lg border border-slate-200 text-[11px] font-bold transition cursor-pointer"
-              >
-                2교시 60분 (11:00~12:00)
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset('11:00', '11:10', '12:00', 50)}
-                className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-lg border border-slate-200 text-[11px] font-bold transition cursor-pointer"
-              >
-                2교시 50분 (11:10~12:00)
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset('11:10', '11:20', '12:00', 40)}
-                className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-lg border border-slate-200 text-[11px] font-bold transition cursor-pointer"
-              >
-                2교시 40분 (11:20~12:00)
-              </button>
-            </div>
+            {isMockMode ? (
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => applyPreset('08:25', '08:40', '10:00', 80, '08:35', '국어 영역')}
+                  className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-800 rounded-lg border border-purple-200 text-[11px] font-bold transition cursor-pointer"
+                >
+                  1교시 국어 (08:40~10:00, 80분)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset('10:20', '10:30', '12:10', 100, '10:25', '수학 영역')}
+                  className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-800 rounded-lg border border-purple-200 text-[11px] font-bold transition cursor-pointer"
+                >
+                  2교시 수학 (10:30~12:10, 100분)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset('12:55', '13:10', '14:20', 70, '13:00', '영어 영역')}
+                  className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-800 rounded-lg border border-purple-200 text-[11px] font-bold transition cursor-pointer"
+                >
+                  3교시 영어 (13:10~14:20, 70분)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset('14:40', '14:50', '15:20', 30, '14:45', '한국사')}
+                  className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-800 rounded-lg border border-purple-200 text-[11px] font-bold transition cursor-pointer"
+                >
+                  4교시 한국사 (14:50~15:20, 30분)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset('15:25', '15:35', '16:15', 40, '15:30', '통합사회 (탐구 1)')}
+                  className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-800 rounded-lg border border-purple-200 text-[11px] font-bold transition cursor-pointer"
+                >
+                  4교시 탐구1 (15:35~16:15, 40분)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset('16:20', '16:30', '17:10', 40, '16:25', '통합과학 (탐구 2)')}
+                  className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-800 rounded-lg border border-purple-200 text-[11px] font-bold transition cursor-pointer"
+                >
+                  4교시 탐구2 (16:30~17:10, 40분)
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => applyPreset('08:30', '08:30', '09:00', 30)}
+                  className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-lg border border-slate-200 text-[11px] font-bold transition cursor-pointer"
+                >
+                  자습 (08:30~09:00, 30분)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset('09:10', '09:20', '10:20', 60)}
+                  className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-lg border border-slate-200 text-[11px] font-bold transition cursor-pointer"
+                >
+                  1교시 60분 (09:20~10:20)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset('09:20', '09:30', '10:20', 50)}
+                  className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-lg border border-slate-200 text-[11px] font-bold transition cursor-pointer"
+                >
+                  1교시 50분 (09:30~10:20)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset('10:50', '11:00', '12:00', 60)}
+                  className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-lg border border-slate-200 text-[11px] font-bold transition cursor-pointer"
+                >
+                  2교시 60분 (11:00~12:00)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset('11:00', '11:10', '12:00', 50)}
+                  className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-lg border border-slate-200 text-[11px] font-bold transition cursor-pointer"
+                >
+                  2교시 50분 (11:10~12:00)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset('11:10', '11:20', '12:00', 40)}
+                  className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-lg border border-slate-200 text-[11px] font-bold transition cursor-pointer"
+                >
+                  2교시 40분 (11:20~12:00)
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Time & Duration Section (사용자 요청: 입실 시간/시험 시간 드롭다운 & 시험시간 자동 계산) */}
-          <div className="bg-indigo-50/60 p-4 rounded-2xl border-2 border-indigo-200 space-y-3.5">
+          <div className={`${isMockMode ? 'bg-purple-50/60 border-purple-200' : 'bg-indigo-50/60 border-indigo-200'} p-4 rounded-2xl border-2 space-y-3.5`}>
             <div className="flex items-center justify-between pb-2 border-b border-indigo-100">
               <span className="font-black text-indigo-950 text-xs flex items-center gap-1.5">
                 <Clock className="w-4 h-4 text-indigo-600" />
-                <span>시간 드롭다운 선택 & 시험시간 자동 계산</span>
+                <span>{isMockMode ? '모의고사 타종 시간 (예비령·준비령·본령) 설정' : '시간 드롭다운 선택 & 시험시간 자동 계산'}</span>
               </span>
-              <span className="text-[11px] bg-indigo-600 text-white font-extrabold px-2 py-0.5 rounded-full">
+              <span className={`text-[11px] ${isMockMode ? 'bg-purple-600' : 'bg-indigo-600'} text-white font-extrabold px-2 py-0.5 rounded-full`}>
                 자동 계산 활성화
               </span>
             </div>
 
-            {/* 1. 입실 시간 드롭다운 */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="font-bold text-slate-800 flex items-center gap-1">
-                  <span>입실 시간 (entryTime)</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={handleSetEntry10MinBefore}
-                  className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold underline cursor-pointer"
-                >
-                  시작 10분 전으로 맞추기
-                </button>
+            {/* 1. 입실 시간(예비령) 및 모의고사 준비령 드롭다운 */}
+            <div className={isMockMode ? 'grid grid-cols-1 sm:grid-cols-2 gap-2.5' : ''}>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-800 flex items-center gap-1">
+                    <span>{isMockMode ? '🔔 예비령 (입실 시각)' : '입실 시간 (entryTime)'}</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleSetEntry10MinBefore}
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold underline cursor-pointer"
+                  >
+                    {isMockMode ? '자동 맞춤' : '시작 10분 전으로 맞추기'}
+                  </button>
+                </div>
+                <div className="relative">
+                  <select
+                    value={entryTime}
+                    onChange={(e) => setEntryTime(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-indigo-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-black text-slate-900 appearance-none pr-8 cursor-pointer"
+                  >
+                    {!TIME_OPTIONS.includes(entryTime) && (
+                      <option value={entryTime}>{entryTime} (현재 설정값)</option>
+                    )}
+                    {TIME_OPTIONS.map((t) => (
+                      <option key={`entry-${t}`} value={t}>
+                        {t} {isMockMode ? '(예비령/입실)' : '(입실)'}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-indigo-600 absolute right-3 top-3 pointer-events-none" />
+                </div>
               </div>
-              <div className="relative">
-                <select
-                  value={entryTime}
-                  onChange={(e) => setEntryTime(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-indigo-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-black text-slate-900 appearance-none pr-8 cursor-pointer"
-                >
-                  {!TIME_OPTIONS.includes(entryTime) && (
-                    <option value={entryTime}>{entryTime} (현재 설정값)</option>
-                  )}
-                  {TIME_OPTIONS.map((t) => (
-                    <option key={`entry-${t}`} value={t}>
-                      {t} (입실)
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="w-4 h-4 text-indigo-600 absolute right-3 top-3 pointer-events-none" />
-              </div>
+
+              {isMockMode && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-slate-800 flex items-center gap-1">
+                      <span>🔔 준비령 (문제지 배부)</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const startM = timeToMinutes(startTime);
+                        if (startM >= 5) setPrepTimeRange(minutesToTime(startM - 5));
+                      }}
+                      className="text-[11px] text-purple-600 hover:text-purple-800 font-bold underline cursor-pointer"
+                    >
+                      본령 5분 전
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <select
+                      value={prepTimeRange}
+                      onChange={(e) => setPrepTimeRange(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-purple-300 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 font-black text-slate-900 appearance-none pr-8 cursor-pointer"
+                    >
+                      {!TIME_OPTIONS.includes(prepTimeRange) && prepTimeRange && (
+                        <option value={prepTimeRange}>{prepTimeRange} (현재 설정값)</option>
+                      )}
+                      {TIME_OPTIONS.map((t) => (
+                        <option key={`prep-${t}`} value={t}>
+                          {t} (준비령)
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-purple-600 absolute right-3 top-3 pointer-events-none" />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 2. 시험 시작 시간 ~ 시험 종료 시간 드롭다운 */}

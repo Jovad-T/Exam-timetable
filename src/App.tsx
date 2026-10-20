@@ -22,7 +22,7 @@ import { AlertSettingsCard } from './components/AlertSettingsCard';
 import { SchoolLogoCard } from './components/SchoolLogoCard';
 import { GeminiSettingsCard } from './components/GeminiSettingsCard';
 import { DateTabs } from './components/DateTabs';
-import { TimetableGrid } from './components/TimetableGrid';
+import { TimetableGrid, AdminScheduleTab } from './components/TimetableGrid';
 import { CodeOutputViewer } from './components/CodeOutputViewer';
 import { ImageUploaderModal } from './components/ImageUploaderModal';
 import { EditScheduleModal } from './components/EditScheduleModal';
@@ -46,6 +46,30 @@ import {
   FIRESTORE_UPGRADE_URL,
 } from './services/firebase';
 
+const checkIsAdminUrl = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
+    const pathSegments = path.split('/').filter(Boolean);
+    const params = new URLSearchParams(window.location.search);
+    const hash = decodeURIComponent(window.location.hash.replace('#', '')).toLowerCase();
+    return (
+      path === '/admin' ||
+      path.endsWith('/admin') ||
+      pathSegments.includes('admin') ||
+      params.get('mode') === 'admin' ||
+      params.get('role') === 'admin' ||
+      params.has('admin') ||
+      hash === 'admin' ||
+      hash === '/admin' ||
+      hash.includes(':admin') ||
+      hash.endsWith('/admin')
+    );
+  } catch {
+    return false;
+  }
+};
+
 export default function App() {
   const safeParse = <T,>(key: string, defaultValue: T): T => {
     if (typeof window === 'undefined') return defaultValue;
@@ -66,6 +90,10 @@ export default function App() {
         const pathParts = window.location.pathname.split('/').filter(Boolean);
         if (pathParts.length >= 2 && (pathParts[pathParts.length - 1] === 'admin' || pathParts[pathParts.length - 1] === 'classroom')) {
           const slugFromPath = cleanSlug(decodeURIComponent(pathParts[pathParts.length - 2]), true);
+          if (slugFromPath && slugFromPath !== 'korea-high') return slugFromPath;
+        }
+        if (pathParts.length >= 2 && pathParts[0] === 'admin') {
+          const slugFromPath = cleanSlug(decodeURIComponent(pathParts[1]), true);
           if (slugFromPath && slugFromPath !== 'korea-high') return slugFromPath;
         }
         const params = new URLSearchParams(window.location.search);
@@ -147,6 +175,8 @@ export default function App() {
     return 'mock';
   });
 
+  const [adminTab, setAdminTab] = useState<AdminScheduleTab>('both');
+
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -157,26 +187,14 @@ export default function App() {
         }
       } catch {}
     }
-    return 'day-mock-g12';
+    return 'ALL';
   });
-
-  React.useEffect(() => {
-    if (examMode === 'mock') {
-      setActiveTab('day-mock-g12');
-    } else if (examMode === 'regular') {
-      const regDays = (Array.isArray(scheduleData) ? scheduleData : []).filter((d) => isRegularSchedule(d));
-      const existsInReg = activeTab === 'ALL' || regDays.some((d) => d.id === activeTab || d.date === activeTab);
-      if (!existsInReg) {
-        const fallbackReg = regDays.length > 0 ? regDays : regularScheduleData;
-        setActiveTab(getTodayActiveTabId(fallbackReg));
-      }
-    }
-  }, [examMode, scheduleData]);
 
   const [selectedGrade, setSelectedGrade] = useState<string>('2학년');
 
   const handleSelectExamMode = React.useCallback((mode: 'regular' | 'mock') => {
     setExamMode(mode);
+    setAdminTab(mode);
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem('selected_exam_mode', mode);
@@ -201,11 +219,29 @@ export default function App() {
     }
   }, [scheduleData, schoolSlug]);
 
+  const handleChangeAdminTab = React.useCallback((tab: AdminScheduleTab) => {
+    setAdminTab(tab);
+    if (tab === 'mock') {
+      setExamMode('mock');
+      try { localStorage.setItem('selected_exam_mode', 'mock'); } catch {}
+      setActiveTab('day-mock-g12');
+    } else if (tab === 'regular') {
+      setExamMode('regular');
+      try { localStorage.setItem('selected_exam_mode', 'regular'); } catch {}
+      setActiveTab('ALL');
+    } else {
+      setActiveTab('ALL');
+    }
+  }, []);
+
   const [copied, setCopied] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'board' | 'developer'>('developer');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       try {
+        if (checkIsAdminUrl()) {
+          return false;
+        }
         const path = window.location.pathname.replace(/\/+$/, '');
         const params = new URLSearchParams(window.location.search);
         const hash = decodeURIComponent(window.location.hash.replace('#', ''));
@@ -247,18 +283,15 @@ export default function App() {
     });
   });
 
-
-
   const [appRole, setAppRole] = useState<'selector' | 'classroom' | 'admin'>(() => {
     if (typeof window !== 'undefined') {
       try {
+        if (checkIsAdminUrl()) {
+          return 'admin';
+        }
         const path = window.location.pathname.replace(/\/+$/, '');
         const params = new URLSearchParams(window.location.search);
         const hash = decodeURIComponent(window.location.hash.replace('#', ''));
-
-        if (path.endsWith('/admin') || params.get('mode') === 'admin' || hash.includes(':admin') || hash === 'admin') {
-          return 'admin';
-        }
 
         // URL 파라미터(?exam=regular|mock, ?direct=1, ?fullscreen=1) 또는 localStorage에 이미 교실 설정이 완료된 경우 즉시 교실 전체화면 진입
         const examParam = params.get('exam') || params.get('examMode');
@@ -293,6 +326,22 @@ export default function App() {
     return 'selector';
   });
 
+  React.useEffect(() => {
+    if (appRole === 'admin' && viewMode === 'developer' && adminTab === 'both') {
+      return;
+    }
+    if (examMode === 'mock') {
+      setActiveTab('day-mock-g12');
+    } else if (examMode === 'regular') {
+      const regDays = (Array.isArray(scheduleData) ? scheduleData : []).filter((d) => isRegularSchedule(d));
+      const existsInReg = activeTab === 'ALL' || regDays.some((d) => d.id === activeTab || d.date === activeTab);
+      if (!existsInReg) {
+        const fallbackReg = regDays.length > 0 ? regDays : regularScheduleData;
+        setActiveTab(getTodayActiveTabId(fallbackReg));
+      }
+    }
+  }, [examMode, scheduleData, appRole, viewMode, adminTab]);
+
   const changeAppRole = (role: 'selector' | 'classroom' | 'admin', slug: string = schoolSlug) => {
     const cleanTargetSlug = cleanSlug(slug, true) || 'sajik-girls-high';
     setAppRole(role);
@@ -300,6 +349,9 @@ export default function App() {
     if (role === 'admin') {
       setViewMode('developer');
       setIsFullscreen(false);
+      if (typeof document !== 'undefined' && document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
     } else if (role === 'classroom') {
       setViewMode('board');
       setIsFullscreen(true);
@@ -307,8 +359,8 @@ export default function App() {
       setIsFullscreen(false);
     }
     if (typeof window !== 'undefined') {
-      const targetEndpoint = role === 'admin' ? 'admin' : 'classroom';
-      const path = `/${cleanTargetSlug}/${targetEndpoint}`;
+      const targetEndpoint = role === 'admin' ? 'admin' : role === 'classroom' ? 'classroom' : '';
+      const path = targetEndpoint ? `/${cleanTargetSlug}/${targetEndpoint}` : '/';
       if (window.location.pathname !== path) {
         window.history.pushState({}, '', path);
       }
@@ -321,28 +373,43 @@ export default function App() {
   };
 
   React.useEffect(() => {
-    const handlePopState = () => {
+    const syncRouteState = () => {
       const path = window.location.pathname.replace(/\/+$/, '');
       const pathParts = path.split('/').filter(Boolean);
       if (pathParts.length >= 2 && (pathParts[pathParts.length - 1] === 'admin' || pathParts[pathParts.length - 1] === 'classroom')) {
         const slugFromPath = cleanSlug(decodeURIComponent(pathParts[pathParts.length - 2]), true);
         if (slugFromPath) setSchoolSlug(slugFromPath);
+      } else if (pathParts.length >= 2 && pathParts[0] === 'admin') {
+        const slugFromPath = cleanSlug(decodeURIComponent(pathParts[1]), true);
+        if (slugFromPath) setSchoolSlug(slugFromPath);
       }
-      if (path.endsWith('/admin')) {
+      if (checkIsAdminUrl()) {
         setAppRole('admin');
         setViewMode('developer');
         setIsFullscreen(false);
+        try {
+          localStorage.setItem('current_app_role', 'admin');
+          localStorage.setItem('classroom_auto_fullscreen', 'false');
+        } catch {}
+        if (typeof document !== 'undefined' && document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        }
       } else if (path.endsWith('/classroom')) {
         setAppRole('classroom');
         setViewMode('board');
         setIsFullscreen(true);
-      } else {
+      } else if (path === '' || path === '/') {
         setAppRole('selector');
         setIsFullscreen(false);
       }
     };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    syncRouteState();
+    window.addEventListener('popstate', syncRouteState);
+    window.addEventListener('hashchange', syncRouteState);
+    return () => {
+      window.removeEventListener('popstate', syncRouteState);
+      window.removeEventListener('hashchange', syncRouteState);
+    };
   }, []);
 
   const isInitialCloudLoadDoneRef = React.useRef<boolean>(false);
@@ -778,18 +845,33 @@ export default function App() {
     subject: SubjectItem | null;
   } | null>(null);
 
-  const modeFilteredSchedules: ScheduleData = React.useMemo(() => {
+  const regularSchedulesList: ScheduleData = React.useMemo(() => {
     const all = Array.isArray(scheduleData) && scheduleData.length > 0 ? scheduleData : allComprehensiveScheduleData;
-    if (examMode === 'mock') {
-      const found = all.filter((d) => isMockSchedule(d));
-      return found.length > 0 ? found : [mockDaySchedule];
-    }
     const foundReg = all.filter((d) => isRegularSchedule(d));
     return foundReg.length > 0 ? foundReg : regularScheduleData;
-  }, [scheduleData, examMode]);
+  }, [scheduleData]);
 
-  const totalDays = modeFilteredSchedules.length;
-  const totalSubjects = modeFilteredSchedules.reduce(
+  const mockSchedulesList: ScheduleData = React.useMemo(() => {
+    const all = Array.isArray(scheduleData) && scheduleData.length > 0 ? scheduleData : allComprehensiveScheduleData;
+    const found = all.filter((d) => isMockSchedule(d));
+    return found.length > 0 ? found : [mockDaySchedule];
+  }, [scheduleData]);
+
+  const modeFilteredSchedules: ScheduleData = React.useMemo(() => {
+    if (examMode === 'mock') {
+      return mockSchedulesList;
+    }
+    return regularSchedulesList;
+  }, [examMode, mockSchedulesList, regularSchedulesList]);
+
+  const adminPoolSchedules: ScheduleData = React.useMemo(() => {
+    if (adminTab === 'mock') return mockSchedulesList;
+    if (adminTab === 'regular') return regularSchedulesList;
+    return [...regularSchedulesList, ...mockSchedulesList];
+  }, [adminTab, regularSchedulesList, mockSchedulesList]);
+
+  const totalDays = adminPoolSchedules.length;
+  const totalSubjects = adminPoolSchedules.reduce(
     (accDay, day) => accDay + (Array.isArray(day?.schedule) ? day.schedule : []).reduce((accPeriod, p) => accPeriod + (Array.isArray(p?.subjects) ? p.subjects.length : 0), 0), 0
   );
 
@@ -804,7 +886,7 @@ export default function App() {
       date: day.date, fullTitle: day.fullTitle, notice: day.notice, bottomNotice: day.bottomNotice || DEFAULT_BOTTOM_NOTICE,
       schedule: day.schedule.map((p) => ({
         period: p.period, subjects: p.subjects.map((s) => ({
-          name: s.name, subjectCode: s.subjectCode, entryTime: s.entryTime, time: s.time, duration: s.duration, targetClass: s.targetClass,
+          name: s.name, subjectCode: s.subjectCode, entryTime: s.entryTime, preliminaryBell: s.preliminaryBell, prepTimeRange: s.prepTimeRange, time: s.time, duration: s.duration, targetClass: s.targetClass,
         })),
       })),
     }));
@@ -819,7 +901,7 @@ export default function App() {
       date: day.date, fullTitle: day.fullTitle, notice: day.notice, bottomNotice: day.bottomNotice || DEFAULT_BOTTOM_NOTICE,
       schedule: day.schedule.map((p) => ({
         period: p.period, subjects: p.subjects.map((s) => ({
-          name: s.name, subjectCode: s.subjectCode, entryTime: s.entryTime, time: s.time, duration: s.duration, targetClass: s.targetClass,
+          name: s.name, subjectCode: s.subjectCode, entryTime: s.entryTime, preliminaryBell: s.preliminaryBell, prepTimeRange: s.prepTimeRange, time: s.time, duration: s.duration, targetClass: s.targetClass,
         })),
       })),
     }));
@@ -849,17 +931,27 @@ export default function App() {
     }
   };
 
+  const handleResetMockSchedule = () => {
+    if (confirm('모의고사 시간표를 표준 타종 시간표(1~5교시 예비령·준비령·본령)로 초기화하시겠습니까?')) {
+      setScheduleData((prev) => {
+        const withoutMock = prev.filter((d) => !isMockSchedule(d));
+        return [mockDaySchedule, ...withoutMock];
+      });
+    }
+  };
+
   const handleResetSample = () => {
     if (confirm('전체 표준 시험 시간표(모의고사 타종, 정기고사) 샘플 데이터로 복원하시겠습니까?')) {
       setScheduleData(allComprehensiveScheduleData);
-      setActiveTab('day-mock-g12');
+      setAdminTab('both');
+      setActiveTab('ALL');
     }
   };
 
   const handleClearAllSchedule = () => {
     if (confirm('현재 등록된 시험 시간표 데이터를 모두 비우시겠습니까?\n\n- 빈 상태로 시작하여 새 시간표 파일을 업로드하거나 직접 추가할 수 있습니다.\n- 언제든 [샘플 복원] 버튼으로 예시 시간표를 다시 불러올 수 있습니다.')) {
       setScheduleData([]);
-      setActiveTab('');
+      setActiveTab('ALL');
     }
   };
 
@@ -980,7 +1072,25 @@ export default function App() {
     });
   };
 
-  const displayedSchedules = activeTab === 'ALL' ? modeFilteredSchedules : modeFilteredSchedules.filter((d) => d.id === activeTab || d.date === activeTab);
+  const displayedSchedules: ScheduleData = React.useMemo(() => {
+    if (activeTab === 'ALL') {
+      return adminPoolSchedules;
+    }
+    const matched = adminPoolSchedules.filter((d) => d.id === activeTab || d.date === activeTab);
+    return matched.length > 0 ? matched : adminPoolSchedules;
+  }, [activeTab, adminPoolSchedules]);
+
+  const handleSelectAdminDayTab = (dayId: string) => {
+    setActiveTab(dayId);
+    if (dayId === 'ALL') return;
+    if (dayId === 'day-mock-g12' || dayId === '모의고사') {
+      setExamMode('mock');
+      try { localStorage.setItem('selected_exam_mode', 'mock'); } catch {}
+    } else {
+      setExamMode('regular');
+      try { localStorage.setItem('selected_exam_mode', 'regular'); } catch {}
+    }
+  };
 
   if (appRole === 'selector') {
     return (
@@ -1091,44 +1201,20 @@ export default function App() {
           
           <div className="bg-slate-900 border-b border-slate-800 text-white sticky top-[65px] z-20 shadow-md">
             <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-2">
-              <div className="flex items-center justify-between gap-2 overflow-x-hidden whitespace-nowrap">
-                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                  <button onClick={() => changeAppRole('selector')} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer border border-slate-700/80 shrink-0" title="모드 선택 화면으로 돌아가기"><span>🏠</span><span className="hidden md:inline">모드 선택</span></button>
-                  <button onClick={() => { changeAppRole('classroom'); setViewMode('board'); }} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600/90 hover:bg-emerald-500 text-white transition cursor-pointer shadow-xs shrink-0" title="교실 배포용 전자칠판 전체 모드로 즉시 전환"><Monitor className="w-3.5 h-3.5" /><span className="hidden sm:inline">교실 모드</span></button>
-                  <div className="h-4 w-px bg-slate-700 mx-0.5"></div>
-                  <div className="flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-slate-700/80 shrink-0">
-                    <button type="button" onClick={() => handleSelectExamMode('regular')} className={`px-2 py-0.5 rounded-md text-[11px] font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${examMode === 'regular' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'}`}><BookOpen className="w-3 h-3 text-emerald-300" /><span>정기고사</span></button>
-                    <button type="button" onClick={() => handleSelectExamMode('mock')} className={`px-2 py-0.5 rounded-md text-[11px] font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${examMode === 'mock' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'}`}><Award className="w-3 h-3 text-purple-300" /><span>모의고사</span></button>
-                  </div>
-                  <div className="h-4 w-px bg-slate-700 mx-0.5"></div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {modeFilteredSchedules.length > 1 && (<button onClick={() => setActiveTab('ALL')} className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer shrink-0 ${activeTab === 'ALL' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700/60'}`}><Layers className="w-3 h-3" /><span>전체</span></button>)}
-                    {modeFilteredSchedules.map((day) => {
-                      const isSelected = activeTab === day.id || activeTab === day.date || modeFilteredSchedules.length === 1;
-                      const isToday = isTodayScheduleDay(day);
-                      return (
-                        <button key={day.id || day.date} onClick={() => setActiveTab(day.id || day.date)} className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer shrink-0 ${isSelected ? 'bg-indigo-600 text-white shadow-xs' : isToday ? 'bg-amber-950/70 text-yellow-300 border border-yellow-500/50 hover:bg-amber-900/80' : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700/60'}`}><Calendar className={`w-3 h-3 ${isSelected ? 'text-indigo-200' : isToday ? 'text-yellow-400' : 'text-slate-400'}`} /><span>{isMockSchedule(day) ? '모의고사' : day.date}</span></button>
-                      );
-                    })}
-                    <button onClick={handleAddDay} className="flex items-center justify-center w-6 h-6 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/80 hover:text-white transition cursor-pointer shrink-0"><Plus className="w-3.5 h-3.5 stroke-[2.5]" /></button>
-                  </div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 shrink-0">
+                  <button onClick={() => changeAppRole('selector')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white transition cursor-pointer border border-slate-700/80 shrink-0" title="모드 선택 화면으로 돌아가기"><span>🏠</span><span>모드 선택</span></button>
+                  <button onClick={() => { changeAppRole('classroom'); setViewMode('board'); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600/90 hover:bg-emerald-500 text-white transition cursor-pointer shadow-xs shrink-0" title="교실 배포용 전자칠판 전체 모드로 즉시 전환"><Monitor className="w-3.5 h-3.5" /><span>교실 모드</span></button>
                 </div>
 
                 <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                  <div className="flex items-center gap-0.5 bg-slate-800/90 p-0.5 rounded-lg border border-slate-700/80 text-xs font-black shrink-0">
-                    <span className="text-[10px] text-slate-400 px-1.5 flex items-center gap-1 hidden lg:flex"><Filter className="w-3 h-3 text-indigo-400" />학년:</span>
-                    {['1학년', '2학년', '3학년'].map((grade) => (
-                      <button key={grade} onClick={() => setSelectedGrade(grade)} className={`px-2 py-0.5 rounded-md text-xs font-black transition cursor-pointer ${selectedGrade === grade ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}>{grade}</button>
-                    ))}
-                  </div>
-                  <div className="h-4 w-px bg-slate-700 mx-0.5"></div>
-                  <button type="button" onClick={() => setViewMode((prev) => (prev === 'board' ? 'developer' : 'board'))} className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-black transition cursor-pointer shrink-0 shadow-xs ${viewMode === 'board' ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 ring-2 ring-emerald-300/80 shadow-emerald-500/20' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700'}`}>
+                  <button type="button" onClick={() => setViewMode((prev) => (prev === 'board' ? 'developer' : 'board'))} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer shrink-0 shadow-xs ${viewMode === 'board' ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 ring-2 ring-emerald-300/80 shadow-emerald-500/20' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700'}`}>
                     {viewMode === 'board' ? (<><Eye className="w-3.5 h-3.5 text-slate-950 stroke-[2.5]" /><span>미리보기</span><span className="bg-slate-950 text-emerald-300 text-[10px] px-1.5 py-0.2 rounded-full font-black ml-0.5">활성</span></>) : (<><EyeOff className="w-3.5 h-3.5 text-slate-400" /><span>미리보기</span><span className="bg-slate-700 text-slate-300 text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-0.5">비활성</span></>)}
                   </button>
                   <div className="h-4 w-px bg-slate-700 mx-0.5 hidden sm:block"></div>
-                  <div className="flex items-center gap-1 hidden sm:flex shrink-0">
-                    <button type="button" onClick={handleClearAllSchedule} className="text-xs text-rose-300 hover:text-white hover:bg-rose-500/20 border border-rose-400/30 px-2 py-1 rounded-lg flex items-center gap-1 font-semibold transition cursor-pointer"><Trash2 className="w-3 h-3 text-rose-400" /><span className="hidden xl:inline">시간표 비우기</span></button>
-                    <button type="button" onClick={handleResetSample} className="text-xs text-slate-300 hover:text-white hover:bg-slate-700/60 border border-slate-600/50 px-2 py-1 rounded-lg flex items-center gap-1 font-semibold transition cursor-pointer"><RefreshCw className="w-3 h-3 text-indigo-400" /><span className="hidden xl:inline">샘플 복원</span></button>
+                  <div className="flex items-center gap-1.5 hidden sm:flex shrink-0">
+                    <button type="button" onClick={handleClearAllSchedule} className="text-xs text-rose-300 hover:text-white hover:bg-rose-500/20 border border-rose-400/30 px-2.5 py-1.5 rounded-lg flex items-center gap-1 font-semibold transition cursor-pointer"><Trash2 className="w-3 h-3 text-rose-400" /><span>시간표 비우기</span></button>
+                    <button type="button" onClick={handleResetSample} className="text-xs text-slate-300 hover:text-white hover:bg-slate-700/60 border border-slate-600/50 px-2.5 py-1.5 rounded-lg flex items-center gap-1 font-semibold transition cursor-pointer"><RefreshCw className="w-3 h-3 text-indigo-400" /><span>샘플 복원</span></button>
                   </div>
                 </div>
               </div>
@@ -1160,6 +1246,18 @@ export default function App() {
           <>
             <TimetableGrid
               daySchedules={displayedSchedules} selectedGrade={selectedGrade} setSelectedGrade={setSelectedGrade}
+              adminTab={adminTab}
+              onChangeAdminTab={handleChangeAdminTab}
+              regularSchedules={regularSchedulesList}
+              mockSchedules={mockSchedulesList}
+              activeTab={activeTab}
+              onSelectDayTab={handleSelectAdminDayTab}
+              onOpenUploadModal={() => setIsUploadModalOpen(true)}
+              onResetMockSchedule={handleResetMockSchedule}
+              onPreviewInBoard={(mode) => {
+                handleSelectExamMode(mode);
+                setViewMode('board');
+              }}
               onEditSubject={(dayIdx, periodIdx, subIdx, subject) => {
                 const targetDay = displayedSchedules[dayIdx];
                 const realIdx = scheduleData.findIndex((d) => d.id === targetDay.id || d.date === targetDay.date);
@@ -1572,7 +1670,7 @@ export default function App() {
       </main>
 
       <ImageUploaderModal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} onExtractSuccess={handleExtractSuccess} />
-      <EditScheduleModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} onSave={handleSaveSubject} initialSubject={editingContext?.subject} periodName={editingContext !== null && scheduleData[editingContext.dayIdx] ? scheduleData[editingContext.dayIdx].schedule[editingContext.periodIdx]?.period || '' : ''} prevPeriodEndTime={(() => { if (!editingContext) return null; const { dayIdx, periodIdx } = editingContext; if (periodIdx <= 0) return null; const prevPeriod = scheduleData[dayIdx]?.schedule[periodIdx - 1]; if (!prevPeriod || !prevPeriod.subjects.length) return null; const lastSub = prevPeriod.subjects[prevPeriod.subjects.length - 1]; const matches = lastSub.time?.match(/(\d{1,2}:\d{2})\s*~\s*(\d{1,2}:\d{2})/); return matches ? matches[2] : null; })()} selectedGrade={selectedGrade} />
+      <EditScheduleModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} onSave={handleSaveSubject} initialSubject={editingContext?.subject} periodName={editingContext !== null && scheduleData[editingContext.dayIdx] ? scheduleData[editingContext.dayIdx].schedule[editingContext.periodIdx]?.period || '' : ''} prevPeriodEndTime={(() => { if (!editingContext) return null; const { dayIdx, periodIdx } = editingContext; if (periodIdx <= 0) return null; const prevPeriod = scheduleData[dayIdx]?.schedule[periodIdx - 1]; if (!prevPeriod || !prevPeriod.subjects.length) return null; const lastSub = prevPeriod.subjects[prevPeriod.subjects.length - 1]; const matches = lastSub.time?.match(/(\d{1,2}:\d{2})\s*~\s*(\d{1,2}:\d{2})/); return matches ? matches[2] : null; })()} selectedGrade={selectedGrade} isMockMode={editingContext !== null && scheduleData[editingContext.dayIdx] ? isMockSchedule(scheduleData[editingContext.dayIdx]) : adminTab === 'mock'} />
       <DaySettingsModal isOpen={isAddDayModalOpen} onClose={() => setIsAddDayModalOpen(false)} mode="add" onSave={handleSaveNewDay} />
       <ShareSchoolModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} schoolName={schoolName} schoolSlug={schoolSlug} schoolLogo={schoolLogo} />
     </div>

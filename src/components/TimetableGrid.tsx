@@ -17,13 +17,25 @@ import {
   Sun,
   GraduationCap,
   Award,
+  RefreshCw,
+  Layers,
+  Upload,
+  Monitor,
 } from 'lucide-react';
 import { DayExamSchedule, SubjectItem } from '../types/schedule';
 import { DaySettingsModal } from './DaySettingsModal';
 import { cleanNoticeText, isSuneungOrMockSchedule, isMockSchedule, isSuneungSchedule } from '../data/scheduleData';
 
+export type AdminScheduleTab = 'regular' | 'mock' | 'both';
+
 interface TimetableGridProps {
   daySchedules: DayExamSchedule[];
+  regularSchedules?: DayExamSchedule[];
+  mockSchedules?: DayExamSchedule[];
+  adminTab?: AdminScheduleTab;
+  onChangeAdminTab?: (tab: AdminScheduleTab) => void;
+  activeDayTab?: string;
+  onSelectDayTab?: (dayId: string) => void;
   selectedGrade: string;
   setSelectedGrade?: (grade: string) => void;
   onEditSubject: (
@@ -50,10 +62,19 @@ interface TimetableGridProps {
     newTargetClass: string
   ) => void;
   onAddDay?: () => void;
+  onOpenUpload?: () => void;
+  onResetMockSchedule?: () => void;
+  onLaunchClassroom?: (mode: 'regular' | 'mock') => void;
 }
 
 export const TimetableGrid: React.FC<TimetableGridProps> = ({
   daySchedules,
+  regularSchedules = [],
+  mockSchedules = [],
+  adminTab = 'both',
+  onChangeAdminTab,
+  activeDayTab = 'ALL',
+  onSelectDayTab,
   selectedGrade,
   setSelectedGrade,
   onEditSubject,
@@ -65,6 +86,9 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
   onEditDayBottomNotice,
   onEditDayTopNotice,
   onAddDay,
+  onOpenUpload,
+  onResetMockSchedule,
+  onLaunchClassroom,
 }) => {
   const [viewLayout, setViewLayout] = useState<'table' | 'cards'>('table');
   
@@ -82,31 +106,6 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
 
   // 모의고사 모드에서 교시 표시 (기본값: 'all' -> 1~4교시 전체 동시 표시)
   const [selectedMockPeriodId, setSelectedMockPeriodId] = useState<string>('all');
-
-  if (daySchedules.length === 0) {
-    return (
-      <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
-        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
-          <BookOpen className="w-8 h-8" />
-        </div>
-        <h3 className="text-lg font-bold text-slate-800">등록된 시험 시간표가 없습니다.</h3>
-        <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">
-          '새 시험 일자 추가' 버튼을 눌러 시험 시간표를 새로 작성하거나 AI 시간표 분석기를 이용하세요.
-        </p>
-        {onAddDay && (
-          <div className="mt-5">
-            <button
-              onClick={onAddDay}
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md transition cursor-pointer inline-flex items-center gap-1.5"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>새 시험 일자 추가하기</span>
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
 
   // Grade color helper
   const getGradeBadgeStyle = (targetClass: string) => {
@@ -143,139 +142,345 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
   };
 
   return (
-    <div className="space-y-8">
-      {/* Top Banner with Add Day Shortcut */}
-      <div className="flex items-center justify-between bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-        <div className="flex items-center gap-2">
-          <Calendar className="w-5 h-5 text-indigo-600" />
-          <span className="text-sm font-black text-slate-800">
-            총 {daySchedules.length}개의 시험 일정 관리 중
-          </span>
-        </div>
-        {onAddDay && (
-          <button
-            onClick={onAddDay}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-sm transition cursor-pointer"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>새 시험 일자 추가</span>
-          </button>
-        )}
-      </div>
-
-      {/* Grade Selector Toolbar (사용자 요청: 이 화면에서 학년을 선택할 수 있게) */}
-      <div className="bg-indigo-900 text-white rounded-2xl p-4 shadow-md flex flex-col sm:flex-row items-center justify-between gap-3 border border-indigo-800">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-indigo-800 border border-indigo-700 flex items-center justify-center shrink-0">
-            <Users className="w-5 h-5 text-indigo-200" />
+    <div className="space-y-6">
+      {/* ★ 통합 시험 모드 관리 탭 카드 (정기고사 / 모의고사 / 한화면에 같이 관리) ★ */}
+      <div className="bg-white rounded-2xl border-2 border-indigo-100 shadow-sm overflow-hidden">
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-5 py-4 text-white flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] font-black uppercase tracking-wider bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2.5 py-0.5 rounded-full">
+                관리자 통합 시간표 관리 (/admin)
+              </span>
+              <span className="text-xs text-emerald-300 font-bold">
+                정기고사({regularSchedules.length}일) · 모의고사({mockSchedules.length}개) 동시 지원
+              </span>
+            </div>
+            <h2 className="text-base sm:text-lg font-black text-white tracking-tight">
+              정기고사 & 전국연합학력평가(모의고사) 시간표 통합 관리
+            </h2>
           </div>
-          <div>
-            <h4 className="text-sm font-black text-white">조회 및 관리 대상 학년 선택</h4>
-            <p className="text-xs text-indigo-200">학년별로 시간표와 과목 대상 반이 필터링됩니다.</p>
-          </div>
+
+          {/* 3-Way Main Mode Tabs */}
+          {onChangeAdminTab && (
+            <div className="flex items-center gap-1.5 bg-slate-950/90 p-1.5 rounded-2xl border border-slate-700/80 flex-wrap">
+              <button
+                type="button"
+                onClick={() => onChangeAdminTab('both')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                  adminTab === 'both'
+                    ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md ring-2 ring-indigo-400/40'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Layers className="w-4 h-4 text-amber-300" />
+                <span>정기고사 + 모의고사 같이 관리</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onChangeAdminTab('regular')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                  adminTab === 'regular'
+                    ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400/40'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <BookOpen className="w-4 h-4 text-emerald-300" />
+                <span>정기고사 탭 ({regularSchedules.length}일)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onChangeAdminTab('mock')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                  adminTab === 'mock'
+                    ? 'bg-purple-600 text-white shadow-md ring-2 ring-purple-400/40'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Award className="w-4 h-4 text-purple-300" />
+                <span>모의고사 타종 탭</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {setSelectedGrade && (
-          <div className="flex items-center gap-1.5 bg-indigo-950/80 p-1.5 rounded-xl border border-indigo-700/80">
-            {['1학년', '2학년', '3학년'].map((grade) => {
-              const isSelected = selectedGrade === grade;
+        {/* Sub-toolbar: Quick Date / Mode Selector & Action Shortcuts */}
+        <div className="p-4 bg-slate-50/90 border-t border-slate-200/80 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-black text-slate-600 mr-1 flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+              <span>빠른 일정 선택:</span>
+            </span>
+
+            {/* 정기고사 날짜 탭들 */}
+            {(adminTab === 'regular' || adminTab === 'both') && regularSchedules.length > 0 && (
+              <>
+                {adminTab === 'regular' && regularSchedules.length > 1 && onSelectDayTab && (
+                  <button
+                    type="button"
+                    onClick={() => onSelectDayTab('ALL')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border flex items-center gap-1 ${
+                      activeDayTab === 'ALL'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'bg-white hover:bg-emerald-50 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>정기고사 전체 ({regularSchedules.length}일)</span>
+                  </button>
+                )}
+                {regularSchedules.map((rDay) => {
+                  const isSel =
+                    adminTab === 'regular' &&
+                    (activeDayTab === rDay.id || activeDayTab === rDay.date);
+                  return (
+                    <button
+                      key={rDay.id || rDay.date}
+                      type="button"
+                      onClick={() => {
+                        onChangeAdminTab?.('regular');
+                        onSelectDayTab?.(rDay.id || rDay.date);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border flex items-center gap-1 ${
+                        isSel
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                          : 'bg-white hover:bg-emerald-50 text-emerald-900 border-emerald-200'
+                      }`}
+                    >
+                      <BookOpen className="w-3 h-3 text-emerald-500" />
+                      <span>정기고사 {rDay.date}</span>
+                    </button>
+                  );
+                })}
+              </>
+            )}
+
+            {/* 모의고사 탭 버튼 */}
+            {mockSchedules.map((mDay) => {
+              const isSel = adminTab === 'mock';
               return (
                 <button
-                  key={grade}
-                  onClick={() => setSelectedGrade(grade)}
-                  className={`px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer ${
-                    isSelected
-                      ? 'bg-white text-indigo-950 shadow-md scale-105'
-                      : 'text-indigo-200 hover:text-white hover:bg-indigo-800/60'
+                  key={mDay.id || 'day-mock-g12'}
+                  type="button"
+                  onClick={() => {
+                    onChangeAdminTab?.('mock');
+                    onSelectDayTab?.(mDay.id || mDay.date);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border flex items-center gap-1 ${
+                    isSel
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                      : 'bg-purple-50 hover:bg-purple-100 text-purple-900 border-purple-200'
                   }`}
                 >
-                  {grade}
+                  <Award className={`w-3.5 h-3.5 ${isSel ? 'text-purple-200' : 'text-purple-600'}`} />
+                  <span>전국연합학력평가 (모의고사 타종)</span>
                 </button>
               );
             })}
           </div>
-        )}
+
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {onAddDay && (
+              <button
+                type="button"
+                onClick={onAddDay}
+                className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-xs transition cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                <span>정기고사 날짜 추가</span>
+              </button>
+            )}
+            {onOpenUpload && (
+              <button
+                type="button"
+                onClick={onOpenUpload}
+                className="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-black transition cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>AI 시간표 파일 분석</span>
+              </button>
+            )}
+            {onLaunchClassroom && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onLaunchClassroom('regular')}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-xs transition cursor-pointer"
+                  title="정기고사 모드로 교실 전자칠판 바로 실행"
+                >
+                  <Monitor className="w-3.5 h-3.5" />
+                  <span>정기고사 칠판 열기</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onLaunchClassroom('mock')}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-black shadow-xs transition cursor-pointer"
+                  title="모의고사 타종 모드로 교실 전자칠판 바로 실행"
+                >
+                  <Award className="w-3.5 h-3.5" />
+                  <span>모의고사 칠판 열기</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
-      {daySchedules.map((day, dayIdx) => {
-        return (
-          <div
-            key={day.id || day.date || dayIdx}
-            className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden transition"
-          >
-            {/* Day Header (Admin controls) */}
-            <div className="bg-slate-900 text-white px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="bg-indigo-600 text-white text-base sm:text-lg font-black px-4 py-1.5 rounded-xl shadow-sm tracking-wide flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4" />
-                  <span>{isMockSchedule(day) ? '모의고사' : day.date}</span>
-                </span>
-
-                <span className="text-xs sm:text-sm text-slate-300 font-bold">
-                  {isMockSchedule(day) ? '전국연합학력평가' : (day.fullTitle || `2026학년도 2학기 1차 고사 시간표(${day.date})`)}
-                </span>
-
-                {/* 날짜/제목 수정 버튼 (클릭 시 전용 모달 오픈, window.prompt 완전 대체) */}
-                <button
-                  type="button"
-                  onClick={() => setEditingDayState({ dayIdx, day })}
-                  className="text-xs text-indigo-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-xl border border-slate-700 flex items-center gap-1.5 font-black transition cursor-pointer shadow-2xs"
-                  title="시험 날짜 및 전체 제목 수정"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                  <span>날짜/제목 수정</span>
-                </button>
+      {daySchedules.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
+          <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+            <BookOpen className="w-8 h-8" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800">등록된 시험 시간표가 없습니다.</h3>
+          <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">
+            '정기고사 날짜 추가' 버튼을 눌러 시험 시간표를 새로 작성하거나 AI 시간표 분석기를 이용하세요.
+          </p>
+          {onAddDay && (
+            <div className="mt-5">
+              <button
+                onClick={onAddDay}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md transition cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>새 시험 일자 추가하기</span>
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Grade Selector Toolbar (사용자 요청: 이 화면에서 학년을 선택할 수 있게) */}
+          <div className="bg-indigo-900 text-white rounded-2xl p-4 shadow-md flex flex-col sm:flex-row items-center justify-between gap-3 border border-indigo-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-indigo-800 border border-indigo-700 flex items-center justify-center shrink-0">
+                <Users className="w-5 h-5 text-indigo-200" />
               </div>
-
-              {/* View Layout & Action Buttons */}
-              <div className="flex items-center gap-2 self-end md:self-auto flex-wrap">
-                {/* View Layout Toggle */}
-                <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-xl border border-slate-700">
-                  <button
-                    onClick={() => setViewLayout('table')}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      viewLayout === 'table'
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                    title="관리자 일괄 테이블 뷰"
-                  >
-                    <Table className="w-3.5 h-3.5" />
-                    <span>상세 테이블</span>
-                  </button>
-                  <button
-                    onClick={() => setViewLayout('cards')}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      viewLayout === 'cards'
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                    title="카드 그리드 뷰"
-                  >
-                    <LayoutGrid className="w-3.5 h-3.5" />
-                    <span>카드 뷰</span>
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => onAddPeriod(dayIdx)}
-                  className="flex items-center gap-1 text-xs font-black bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-2 rounded-xl transition cursor-pointer shadow-xs"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>교시 추가</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setDeletingDayState({ dayIdx, date: day.date })}
-                  className="flex items-center gap-1 text-xs font-black bg-rose-950/60 hover:bg-rose-900 text-rose-300 px-3 py-2 rounded-xl border border-rose-800/80 transition cursor-pointer"
-                  title="이 날짜 시간표 전체 삭제"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>날짜 삭제</span>
-                </button>
+              <div>
+                <h4 className="text-sm font-black text-white">조회 및 관리 대상 학년 선택</h4>
+                <p className="text-xs text-indigo-200">정기고사 과목의 학년별 시간표 및 대상 반이 필터링됩니다. (모의고사는 전 학년 공통 타종 표시)</p>
               </div>
             </div>
+
+            {setSelectedGrade && (
+              <div className="flex items-center gap-1.5 bg-indigo-950/80 p-1.5 rounded-xl border border-indigo-700/80">
+                {['1학년', '2학년', '3학년'].map((grade) => {
+                  const isSelected = selectedGrade === grade;
+                  return (
+                    <button
+                      key={grade}
+                      onClick={() => setSelectedGrade(grade)}
+                      className={`px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer ${
+                        isSelected
+                          ? 'bg-white text-indigo-950 shadow-md scale-105'
+                          : 'text-indigo-200 hover:text-white hover:bg-indigo-800/60'
+                      }`}
+                    >
+                      {grade}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {daySchedules.map((day, dayIdx) => {
+            const isMock = isMockSchedule(day);
+            return (
+              <div
+                key={day.id || day.date || dayIdx}
+                className={`bg-white rounded-2xl border-2 ${
+                  isMock ? 'border-purple-200/90' : 'border-slate-200/90'
+                } shadow-sm overflow-hidden transition`}
+              >
+                {/* Day Header (Admin controls) */}
+                <div className={`${isMock ? 'bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950' : 'bg-slate-900'} text-white px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4`}>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className={`${isMock ? 'bg-purple-600' : 'bg-emerald-600'} text-white text-xs font-black px-2.5 py-1 rounded-lg uppercase tracking-wider`}>
+                      {isMock ? '🏆 모의고사 모드' : '📘 정기고사 모드'}
+                    </span>
+                    <span className={`${isMock ? 'bg-purple-800/80 border border-purple-500/40' : 'bg-indigo-600'} text-white text-base sm:text-lg font-black px-4 py-1.5 rounded-xl shadow-sm tracking-wide flex items-center gap-1.5`}>
+                      {isMock ? <Award className="w-4 h-4 text-purple-200" /> : <Calendar className="w-4 h-4" />}
+                      <span>{isMock ? '모의고사 타종 시간표' : day.date}</span>
+                    </span>
+
+                    <span className="text-xs sm:text-sm text-slate-300 font-bold">
+                      {isMock ? (day.fullTitle || '전국연합학력평가 (예비령·준비령·본령)') : (day.fullTitle || `2026학년도 2학기 1차 고사 시간표(${day.date})`)}
+                    </span>
+
+                    {/* 날짜/제목 수정 버튼 (클릭 시 전용 모달 오픈, window.prompt 완전 대체) */}
+                    <button
+                      type="button"
+                      onClick={() => setEditingDayState({ dayIdx, day })}
+                      className="text-xs text-indigo-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-xl border border-slate-700 flex items-center gap-1.5 font-black transition cursor-pointer shadow-2xs"
+                      title="시험 날짜 및 전체 제목 수정"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>{isMock ? '제목/안내문 수정' : '날짜/제목 수정'}</span>
+                    </button>
+                  </div>
+
+                  {/* View Layout & Action Buttons */}
+                  <div className="flex items-center gap-2 self-end md:self-auto flex-wrap">
+                    {/* View Layout Toggle */}
+                    <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-xl border border-slate-700">
+                      <button
+                        onClick={() => setViewLayout('table')}
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                          viewLayout === 'table'
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                        title="관리자 일괄 테이블 뷰"
+                      >
+                        <Table className="w-3.5 h-3.5" />
+                        <span>상세 테이블</span>
+                      </button>
+                      <button
+                        onClick={() => setViewLayout('cards')}
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                          viewLayout === 'cards'
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                        title="카드 그리드 뷰"
+                      >
+                        <LayoutGrid className="w-3.5 h-3.5" />
+                        <span>카드 뷰</span>
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => onAddPeriod(dayIdx)}
+                      className="flex items-center gap-1 text-xs font-black bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-2 rounded-xl transition cursor-pointer shadow-xs"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>교시 추가</span>
+                    </button>
+
+                    {isMock ? (
+                      onResetMockSchedule && (
+                        <button
+                          type="button"
+                          onClick={onResetMockSchedule}
+                          className="flex items-center gap-1 text-xs font-black bg-purple-900/80 hover:bg-purple-800 text-purple-200 px-3 py-2 rounded-xl border border-purple-600/60 transition cursor-pointer"
+                          title="모의고사 타종 시간표를 전국연합학력평가 표준 기본값으로 복원"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>표준 타종 복원</span>
+                        </button>
+                      )
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setDeletingDayState({ dayIdx, date: day.date })}
+                        className="flex items-center gap-1 text-xs font-black bg-rose-950/60 hover:bg-rose-900 text-rose-300 px-3 py-2 rounded-xl border border-rose-800/80 transition cursor-pointer"
+                        title="이 날짜 시간표 전체 삭제"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>날짜 삭제</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
 
             {/* Notice Bar */}
             <div className="bg-amber-50/90 border-b border-amber-200 px-6 py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs font-bold text-amber-900">
@@ -833,16 +1038,18 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
       })}
 
       {/* Bottom Add Day Action */}
-      {onAddDay && (
+      {onAddDay && adminTab !== 'mock' && (
         <div className="text-center pt-2">
           <button
             onClick={onAddDay}
             className="px-6 py-3 bg-white hover:bg-indigo-50 border-2 border-dashed border-indigo-300 hover:border-indigo-500 text-indigo-700 rounded-2xl text-xs font-black transition cursor-pointer inline-flex items-center gap-2 shadow-xs"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
-            <span>+ 새로운 시험 날짜 시간표 추가하기</span>
+            <span>+ 새로운 정기고사 날짜 시간표 추가하기</span>
           </button>
         </div>
+      )}
+        </>
       )}
 
       {/* Dedicated Day Settings Modal (날짜/제목 수정 모달) */}
