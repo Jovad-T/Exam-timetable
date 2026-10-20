@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
@@ -121,6 +122,11 @@ function createWindow(targetUrl) {
 
 app.whenReady().then(() => {
   const distPath = path.join(__dirname, 'dist');
+
+  // Check for updates automatically (e.g. from GitHub Releases)
+  autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+    console.log('Auto update check failed:', err);
+  });
 
   startLocalServer(distPath, (err, port, server) => {
     if (!err && port) {
