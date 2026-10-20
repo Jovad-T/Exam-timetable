@@ -38,7 +38,6 @@ import { audioAlert } from '../utils/audioAlert';
 import { SubjectItem } from '../types/schedule';
 import { DEFAULT_ANNOUNCEMENT_TEMPLATES } from './AlertSettingsCard';
 import { getKoreaDate, isTodayScheduleDay } from '../utils/dateUtils';
-import { PWAInstallButton } from './PWAInstallButton';
 import { cleanNoticeText, isSuneungOrMockSchedule, isMockSchedule, isSuneungSchedule, isRegularSchedule } from '../data/scheduleData';
 
 export const DAILY_ENCOURAGEMENT_QUOTES = [
@@ -3328,7 +3327,6 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               현재 시간 : <span className="inline-block min-w-[8ch] text-center">{currentTime}</span>
             </span>
           </div>
-          <PWAInstallButton />
 
           {/* Exam Mode Quick Switcher in Clock Bar */}
           {onChangeExamMode && (
