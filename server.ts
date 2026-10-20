@@ -160,19 +160,7 @@ app.post('/api/extract-schedule', async (req, res) => {
 
       const clientAI = new GoogleGenAI({ apiKey: geminiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
 
-      const reqM = (effectiveModel || '').toLowerCase();
-      let geminiModel = 'gemini-3.8-flash';
-      if (reqM.includes('pro')) {
-        geminiModel = 'gemini-1.5-pro';
-      } else if (reqM.includes('2.0')) {
-        geminiModel = 'gemini-2.0-flash';
-      } else if (reqM.includes('1.5')) {
-        geminiModel = 'gemini-1.5-flash';
-      } else if (reqM.includes('3.8')) {
-        geminiModel = 'gemini-3.8-flash';
-      } else {
-        geminiModel = 'gemini-3.8-flash';
-      }
+      const geminiModel = 'gemini-3.8-flash';
       const parts: any[] = [];
       if (extractedText) {
         parts.push({ text: promptText });
@@ -255,6 +243,147 @@ app.post('/api/extract-schedule', async (req, res) => {
     return res.status(500).json({
       success: false,
       error: error.message || '시간표 문서 분석 중 오류가 발생했습니다.',
+    });
+  }
+});
+
+// API Route: Parse Student Roster / Class Total Counts from PDF, Excel Text, or Image
+app.post('/api/parse-roster', async (req, res) => {
+  try {
+    const { fileBase64, mimeType, extractedText, customApiKey } = req.body;
+
+    if (!fileBase64 && !extractedText) {
+      return res.status(400).json({ success: false, error: '분석할 명렬표 파일이나 텍스트 데이터가 필요합니다.' });
+    }
+
+    let resolvedKey = (customApiKey || '').trim();
+    if (resolvedKey.startsWith('enc_')) {
+      try {
+        const b64 = resolvedKey.slice(4);
+        const ciphered = decodeURIComponent(Buffer.from(b64, 'base64').toString('utf-8'));
+        const SALT = 'AI_EXAM_SCHEDULE_SECURE_2026';
+        let dec = '';
+        for (let i = 0; i < ciphered.length; i++) {
+          dec += String.fromCharCode(ciphered.charCodeAt(i) ^ SALT.charCodeAt(i % SALT.length));
+        }
+        resolvedKey = dec;
+      } catch {}
+    } else if (resolvedKey.startsWith('b64_')) {
+      try {
+        resolvedKey = Buffer.from(resolvedKey.slice(4), 'base64').toString('utf-8');
+      } catch {}
+    }
+
+    const geminiKey = resolvedKey || process.env.GEMINI_API_KEY;
+    if (!geminiKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'Gemini API 키가 설정되지 않았습니다.',
+      });
+    }
+
+    const clientAI = new GoogleGenAI({
+      apiKey: geminiKey,
+      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
+    });
+
+    const systemInstruction = `
+당신은 고등학교 전교 학생 명렬표(출석부, 학급별 인원 현황표, 학번 명단 등) PDF, 엑셀 텍스트, 이미지를 정밀 분석하여 **학년별·반별 학급 총원(학생 수)**을 정확히 산출하는 전문가입니다.
+
+[분석 규칙]
+1. 문서가 **개별 학생 명렬표(출석부/명단)**인 경우:
+   - 학년(1~3학년), 반(1~15반), 번호(또는 학번 5자리 예: 10101 -> 1학년 1반 1번, 20828 -> 2학년 8반 28번, 혹은 4자리 예: 1101 -> 1학년 1반 1번)를 식별하여 각 학급에 속한 실제 학생 수를 카운트하거나, 해당 학급의 가장 마지막 학생 수(재적 인원)를 정확히 산출하십시오.
+2. 문서가 **학급별 인원 현황표/집계표**인 경우:
+   - 표에서 각 학년(1, 2, 3학년)과 반(1반, 2반...)에 해당하는 재적 인원 / 총원 / 학생 수 숫자를 정확히 추출하십시오.
+3. 만약 문서에 특정 학년(예: 2학년)만 있고 학년 표시가 생략된 채 "1반, 2반..."만 있는 경우, 문맥상 학년을 추정하되 불명확하면 기본 "2"학년으로 매핑하십시오.
+4. 출력은 학년(grade: "1" | "2" | "3"), 반(classNum: "1" ~ "15" 숫자 문자열), 총원(count: 숫자) 배열과 발견된 최대 반 번호(maxClassNum)를 반환하십시오.
+`;
+
+    const parts: any[] = [];
+    const isPdf = (mimeType && mimeType.includes('pdf')) || (fileBase64 && fileBase64.includes('application/pdf'));
+
+    if (extractedText) {
+      parts.push({
+        text: `다음은 업로드된 전교 학생 명렬표/인원 현황 파일에서 추출된 데이터입니다:\n\n${extractedText.slice(0, 120000)}\n\n위 데이터를 정밀 분석하여 학년별·반별 총원(학생 수)을 JSON으로 추출해 주세요.`,
+      });
+    }
+
+    if (fileBase64) {
+      const base64Data = fileBase64
+        .replace(/^data:image\/\w+;base64,/, '')
+        .replace(/^data:application\/pdf;base64,/, '');
+      const effectiveMimeType = isPdf ? 'application/pdf' : (mimeType || 'image/jpeg');
+      parts.push({ inlineData: { mimeType: effectiveMimeType, data: base64Data } });
+      if (!extractedText) {
+        parts.push({
+          text: `이 전교 학생 명렬표/학급 인원 현황 문서를 정밀 분석하여 학년별·반별 총원(학생 수)을 JSON으로 추출해 주세요.`,
+        });
+      }
+    }
+
+    const response = await clientAI.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: { parts },
+      config: {
+        systemInstruction,
+        responseMimeType: 'application/json',
+        temperature: 0.1,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            classes: {
+              type: Type.ARRAY,
+              description: '학년별 반별 학생 총원 목록',
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  grade: { type: Type.STRING, description: '학년 숫자 문자열 ("1", "2", "3")' },
+                  classNum: { type: Type.STRING, description: '반 숫자 문자열 ("1" ~ "15")' },
+                  count: { type: Type.INTEGER, description: '해당 학급 총원(학생 수)' },
+                },
+                required: ['grade', 'classNum', 'count'],
+              },
+            },
+            maxClassNum: {
+              type: Type.INTEGER,
+              description: '감지된 가장 큰 반 번호 (1~15)',
+            },
+          },
+          required: ['classes', 'maxClassNum'],
+        },
+      },
+    });
+
+    const parsed = JSON.parse(response.text || '{"classes":[],"maxClassNum":0}');
+    const classTotals: Record<string, string> = {};
+    let maxClassFound = parsed.maxClassNum || 0;
+
+    if (Array.isArray(parsed.classes)) {
+      for (const item of parsed.classes) {
+        const g = String(item.grade || '').replace(/[^1-3]/g, '');
+        const c = String(item.classNum || '').replace(/[^0-9]/g, '');
+        const cnt = Number(item.count);
+        if (g && c && !isNaN(cnt) && cnt > 0) {
+          classTotals[`${g}-${c}`] = String(cnt);
+          const cNum = parseInt(c, 10);
+          if (cNum > maxClassFound && cNum <= 15) {
+            maxClassFound = cNum;
+          }
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      classTotals,
+      maxClassFound,
+      totalClassesCount: Object.keys(classTotals).length,
+    });
+  } catch (error: any) {
+    console.error('Roster Parsing Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || '명렬표 파일 분석 중 오류가 발생했습니다.',
     });
   }
 });

@@ -33,9 +33,10 @@ import { InitialClassSetupModal } from './components/InitialClassSetupModal';
 import { ScheduleUploadCard } from './components/ScheduleUploadCard';
 import { SchoolSettingsCard } from './components/SchoolSettingsCard';
 import { ShareSchoolModal } from './components/ShareSchoolModal';
-import { Sparkles, Calendar, BookOpen, Monitor, Code, RefreshCw, CheckCircle2, Palette, Hash, Grid, Cloud, Trash2, Sliders, Eye, EyeOff, Layers, Filter, Plus, Home, GraduationCap, Award } from 'lucide-react';
+import { Sparkles, Calendar, BookOpen, Monitor, Code, RefreshCw, CheckCircle2, Palette, Hash, Grid, Cloud, Trash2, Sliders, Eye, EyeOff, Layers, Filter, Plus, Home, GraduationCap, Award, Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import { cleanSlug, generateSchoolSlug } from './utils/slugUtils';
 import { getTodayActiveTabId, findTodayScheduleDay, isTodayScheduleDay } from './utils/dateUtils';
+import { parseRosterFile } from './utils/rosterParser';
 import {
   saveSchoolScheduleToCloud,
   subscribeSchoolSchedule,
@@ -254,7 +255,7 @@ export default function App() {
     }
     if (appRole === 'admin' && schoolSlug) {
       const dataToSave = scheduleData || defaultScheduleData;
-      saveSchoolScheduleToCloud(schoolSlug, dataToSave, schoolName, schoolLogo, newSettings);
+      saveSchoolScheduleToCloud(schoolSlug, dataToSave, schoolName, schoolLogo, newSettings, classTotals, maxClasses);
     }
   };
 
@@ -356,7 +357,7 @@ export default function App() {
   React.useEffect(() => {
     if (!schoolSlug) return;
     fetchSchoolScheduleFromCloud(schoolSlug)
-      .then(({ scheduleData: cloudData, schoolName: cloudName, logoUrl, alertSettings: cloudAlertSettings }) => {
+      .then(({ scheduleData: cloudData, schoolName: cloudName, logoUrl, alertSettings: cloudAlertSettings, classTotals: cloudClassTotals, maxClasses: cloudMaxClasses }) => {
         if (cloudData && Array.isArray(cloudData) && cloudData.length > 0) {
           const cleanedCloudData = cleanScheduleData(cloudData);
           setScheduleData(cleanedCloudData);
@@ -374,13 +375,21 @@ export default function App() {
           setAlertSettings(cloudAlertSettings);
           try { localStorage.setItem('exam_alert_settings', JSON.stringify(cloudAlertSettings)); } catch {}
         }
+        if (cloudClassTotals) {
+          setClassTotals(cloudClassTotals);
+          try { localStorage.setItem(`class_totals_${schoolSlug}`, JSON.stringify(cloudClassTotals)); } catch {}
+        }
+        if (typeof cloudMaxClasses === 'number' && cloudMaxClasses > 0) {
+          setMaxClasses(cloudMaxClasses);
+          try { localStorage.setItem('max_classes', String(cloudMaxClasses)); } catch {}
+        }
       })
       .catch((err) => { console.error('Failed to fetch initial data from cloud:', err); })
       .finally(() => { setCloudSyncStatus('synced'); });
 
     const unsubscribe = subscribeSchoolSchedule(
       schoolSlug,
-      (newScheduleData, cloudName, cloudAlertSettings) => {
+      (newScheduleData, cloudName, cloudAlertSettings, cloudClassTotals, cloudMaxClasses) => {
         if (newScheduleData && Array.isArray(newScheduleData) && newScheduleData.length > 0) {
           const cleaned = cleanScheduleData(newScheduleData);
           setScheduleData(cleaned);
@@ -393,6 +402,14 @@ export default function App() {
         if (cloudAlertSettings) {
           setAlertSettings(cloudAlertSettings);
           try { localStorage.setItem('exam_alert_settings', JSON.stringify(cloudAlertSettings)); } catch {}
+        }
+        if (cloudClassTotals) {
+          setClassTotals(cloudClassTotals);
+          try { localStorage.setItem(`class_totals_${schoolSlug}`, JSON.stringify(cloudClassTotals)); } catch {}
+        }
+        if (typeof cloudMaxClasses === 'number' && cloudMaxClasses > 0) {
+          setMaxClasses(cloudMaxClasses);
+          try { localStorage.setItem('max_classes', String(cloudMaxClasses)); } catch {}
         }
         setCloudSyncStatus('synced');
       },
@@ -433,7 +450,7 @@ export default function App() {
 
     setTimeout(() => {
       setCloudSyncStatus('syncing');
-      saveSchoolScheduleToCloud(processedSlug, scheduleData, cleanName, schoolLogo, alertSettings)
+      saveSchoolScheduleToCloud(processedSlug, scheduleData, cleanName, schoolLogo, alertSettings, classTotals, maxClasses)
         .then(() => setCloudSyncStatus('synced'))
         .catch(() => setCloudSyncStatus('offline'));
 
@@ -441,6 +458,7 @@ export default function App() {
         try {
           localStorage.setItem('current_school_slug', processedSlug);
           localStorage.setItem(`school_name_${processedSlug}`, cleanName);
+          localStorage.setItem(`class_totals_${processedSlug}`, JSON.stringify(classTotals));
           const currentScheduleStr = localStorage.getItem(`schedule_data_${prevSlug}`);
           if (currentScheduleStr) {
             localStorage.setItem(`schedule_data_${processedSlug}`, currentScheduleStr);
@@ -463,7 +481,7 @@ export default function App() {
     if (appRole === 'admin' && cloudSyncStatus !== 'offline' && !isFirestoreQuotaExceeded()) {
       const timer = setTimeout(() => {
         setCloudSyncStatus('syncing');
-        saveSchoolScheduleToCloud(schoolSlug, scheduleData, schoolName, schoolLogo, alertSettings)
+        saveSchoolScheduleToCloud(schoolSlug, scheduleData, schoolName, schoolLogo, alertSettings, classTotals, maxClasses)
           .then(() => setCloudSyncStatus('synced'))
           .catch(() => setCloudSyncStatus('offline'));
       }, 3000);
@@ -503,11 +521,121 @@ export default function App() {
     return 15;
   });
 
+  const [classTotals, setClassTotals] = useState<Record<string, string>>(() => {
+    return safeParse<Record<string, string>>(`class_totals_${schoolSlug}`, {});
+  });
+  const [totalSettingGradeTab, setTotalSettingGradeTab] = useState<'1' | '2' | '3'>('2');
+  const [bulkTotalInput, setBulkTotalInput] = useState<string>('');
+  const [saveSuccessToast, setSaveSuccessToast] = useState<boolean>(false);
+  const [isParsingRoster, setIsParsingRoster] = useState<boolean>(false);
+  const [rosterParseStatus, setRosterParseStatus] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+  const rosterFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (!schoolSlug) return;
+    const savedTotals = safeParse<Record<string, string>>(`class_totals_${schoolSlug}`, {});
+    setClassTotals(savedTotals);
+  }, [schoolSlug]);
+
+  const syncAttendanceWithTotals = (newTotals: Record<string, string>, targetSlug: string = schoolSlug) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const updateStorageKey = (key: string) => {
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        const g = (parsed.grade || '2').replace('학년', '').trim();
+        const c = (parsed.classNum || '3').replace('반', '').trim();
+        const preset = newTotals[`${g}-${c}`] || newTotals[`default-${g}`] || newTotals['default'];
+        if (preset !== undefined) {
+          localStorage.setItem(key, JSON.stringify({ ...parsed, totalCount: preset }));
+        }
+      };
+      updateStorageKey('class_attendance_settings');
+      if (targetSlug) {
+        updateStorageKey(`class_attendance_settings_${targetSlug}`);
+      }
+    } catch {}
+  };
+
   const handleUpdateMaxClasses = (newMax: number) => {
     setMaxClasses(newMax);
     if (typeof window !== 'undefined') {
       try { localStorage.setItem('max_classes', String(newMax)); } catch {}
     }
+  };
+
+  const handleUpdateClassTotals = (updatedTotals: Record<string, string>) => {
+    setClassTotals(updatedTotals);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(`class_totals_${schoolSlug}`, JSON.stringify(updatedTotals));
+      } catch {}
+    }
+    syncAttendanceWithTotals(updatedTotals, schoolSlug);
+  };
+
+  const handleRosterFileUpload = async (file: File) => {
+    setIsParsingRoster(true);
+    setRosterParseStatus(null);
+    try {
+      const result = await parseRosterFile(file);
+      if (result.totalClassesCount === 0) {
+        setRosterParseStatus({
+          type: 'error',
+          message: '파일에서 학년·반별 인원 정보를 찾지 못했습니다. 학년/반/번호 또는 총원이 포함된 명렬표인지 확인해 주세요.',
+        });
+        return;
+      }
+
+      const mergedTotals = { ...classTotals, ...result.classTotals };
+      let nextMaxClasses = maxClasses;
+      if (result.maxClassFound > 0 && result.maxClassFound <= 15) {
+        nextMaxClasses = Math.max(maxClasses, result.maxClassFound);
+        handleUpdateMaxClasses(nextMaxClasses);
+      }
+
+      handleUpdateClassTotals(mergedTotals);
+      if (appRole === 'admin' && schoolSlug) {
+        saveSchoolScheduleToCloud(
+          schoolSlug,
+          scheduleData || defaultScheduleData,
+          schoolName,
+          schoolLogo,
+          alertSettings,
+          mergedTotals,
+          nextMaxClasses
+        );
+      }
+
+      setRosterParseStatus({
+        type: 'success',
+        message: `'${file.name}' 분석 완료! 총 ${result.totalClassesCount}개 학급(합계 ${result.totalStudentsCount}명)의 총원이 자동 입력 및 저장되었습니다.`,
+      });
+    } catch (err: any) {
+      setRosterParseStatus({
+        type: 'error',
+        message: err?.message || '명렬표 파일 분석 중 오류가 발생했습니다.',
+      });
+    } finally {
+      setIsParsingRoster(false);
+      if (rosterFileInputRef.current) {
+        rosterFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleSaveClassAndTotalsSettings = () => {
+    handleUpdateMaxClasses(maxClasses);
+    handleUpdateClassTotals(classTotals);
+    if (appRole === 'admin' && schoolSlug) {
+      saveSchoolScheduleToCloud(schoolSlug, scheduleData || defaultScheduleData, schoolName, schoolLogo, alertSettings, classTotals, maxClasses);
+    }
+    setSaveSuccessToast(true);
+    setTimeout(() => setSaveSuccessToast(false), 2500);
   };
 
   React.useEffect(() => {
@@ -780,9 +908,13 @@ export default function App() {
               try {
                 localStorage.setItem('current_school_slug', sSlug);
                 localStorage.setItem(`school_name_${sSlug}`, sName);
+                const savedTotals = safeParse<Record<string, string>>(`class_totals_${sSlug}`, classTotals);
+                const presetTotal = savedTotals[`${grade}-${classNum}`] || savedTotals[`default-${grade}`] || savedTotals['default'] || '';
                 const existing = localStorage.getItem(`class_attendance_settings_${sSlug}`);
                 const parsed = existing ? JSON.parse(existing) : {};
-                localStorage.setItem(`class_attendance_settings_${sSlug}`, JSON.stringify({ ...parsed, grade, classNum }));
+                const nextAtt = { ...parsed, grade, classNum, totalCount: presetTotal || parsed.totalCount || '' };
+                localStorage.setItem(`class_attendance_settings_${sSlug}`, JSON.stringify(nextAtt));
+                localStorage.setItem('class_attendance_settings', JSON.stringify(nextAtt));
               } catch {}
             }
             changeAppRole('classroom', sSlug);
@@ -798,7 +930,7 @@ export default function App() {
     return (
       <div className="w-screen h-screen overflow-hidden bg-[#071a12] text-white font-sans p-0 m-0">
         <ElectronicBoard
-          daySchedule={currentDaySchedule} allDays={modeFilteredSchedules} onSelectDay={(dayId) => setActiveTab(dayId)} examMode={examMode} onChangeExamMode={handleSelectExamMode} onOpenUploadModal={() => setIsUploadModalOpen(true)} isFullscreen={true} onToggleFullscreen={handleToggleFullscreen} onUpdateBottomNotice={handleUpdateBottomNotice} onUpdateTopNotice={handleUpdateTopNotice} alertSettings={alertSettings} onChangeAlertSettings={handleUpdateAlertSettings} selectedGrade={selectedGrade} onSelectGrade={setSelectedGrade} schoolLogo={schoolLogo} onUpdateSchoolLogo={handleUpdateSchoolLogo} schoolName={schoolName} boardTheme={boardTheme} onUpdateBoardTheme={handleUpdateBoardTheme} maxClasses={maxClasses}
+          daySchedule={currentDaySchedule} allDays={modeFilteredSchedules} onSelectDay={(dayId) => setActiveTab(dayId)} examMode={examMode} onChangeExamMode={handleSelectExamMode} onOpenUploadModal={() => setIsUploadModalOpen(true)} isFullscreen={true} onToggleFullscreen={handleToggleFullscreen} onUpdateBottomNotice={handleUpdateBottomNotice} onUpdateTopNotice={handleUpdateTopNotice} alertSettings={alertSettings} onChangeAlertSettings={handleUpdateAlertSettings} selectedGrade={selectedGrade} onSelectGrade={setSelectedGrade} schoolLogo={schoolLogo} onUpdateSchoolLogo={handleUpdateSchoolLogo} schoolName={schoolName} boardTheme={boardTheme} onUpdateBoardTheme={handleUpdateBoardTheme} maxClasses={maxClasses} classTotals={classTotals} schoolSlug={schoolSlug}
           onSwitchToAdmin={() => { changeAppRole('admin'); setViewMode('developer'); }}
           onSwitchToSelector={() => { changeAppRole('selector'); }}
           onUpdateTargetClass={(periodIdx, subIdx, newTargetClass) => {
@@ -813,11 +945,16 @@ export default function App() {
             setSelectedGrade(`${grade}학년`);
             if (typeof window !== 'undefined') {
               try {
+                const targetSlug = sSlug || schoolSlug;
                 if (sSlug) localStorage.setItem('current_school_slug', sSlug);
                 if (sName && sSlug) localStorage.setItem(`school_name_${sSlug}`, sName);
-                const existing = localStorage.getItem(`class_attendance_settings_${sSlug || schoolSlug}`);
+                const savedTotals = safeParse<Record<string, string>>(`class_totals_${targetSlug}`, classTotals);
+                const presetTotal = savedTotals[`${grade}-${classNum}`] || savedTotals[`default-${grade}`] || savedTotals['default'] || '';
+                const existing = localStorage.getItem(`class_attendance_settings_${targetSlug}`);
                 const parsed = existing ? JSON.parse(existing) : {};
-                localStorage.setItem(`class_attendance_settings_${sSlug || schoolSlug}`, JSON.stringify({ ...parsed, grade, classNum }));
+                const nextAtt = { ...parsed, grade, classNum, totalCount: presetTotal || parsed.totalCount || '' };
+                localStorage.setItem(`class_attendance_settings_${targetSlug}`, JSON.stringify(nextAtt));
+                localStorage.setItem('class_attendance_settings', JSON.stringify(nextAtt));
               } catch {}
             }
             changeAppRole('classroom', sSlug);
@@ -907,7 +1044,7 @@ export default function App() {
         {viewMode === 'board' ? (
           <div className="relative flex-1 flex flex-col">
             <ElectronicBoard
-              daySchedule={currentDaySchedule} allDays={modeFilteredSchedules} onSelectDay={(dayId) => setActiveTab(dayId)} examMode={examMode} onChangeExamMode={handleSelectExamMode} onOpenUploadModal={() => setIsUploadModalOpen(true)} isFullscreen={isFullscreen} onToggleFullscreen={handleToggleFullscreen} onUpdateBottomNotice={handleUpdateBottomNotice} onUpdateTopNotice={handleUpdateTopNotice} alertSettings={alertSettings} onChangeAlertSettings={handleUpdateAlertSettings} selectedGrade={selectedGrade} onSelectGrade={setSelectedGrade} schoolLogo={schoolLogo} onUpdateSchoolLogo={handleUpdateSchoolLogo} schoolName={schoolName} boardTheme={boardTheme} onUpdateBoardTheme={handleUpdateBoardTheme}
+              daySchedule={currentDaySchedule} allDays={modeFilteredSchedules} onSelectDay={(dayId) => setActiveTab(dayId)} examMode={examMode} onChangeExamMode={handleSelectExamMode} onOpenUploadModal={() => setIsUploadModalOpen(true)} isFullscreen={isFullscreen} onToggleFullscreen={handleToggleFullscreen} onUpdateBottomNotice={handleUpdateBottomNotice} onUpdateTopNotice={handleUpdateTopNotice} alertSettings={alertSettings} onChangeAlertSettings={handleUpdateAlertSettings} selectedGrade={selectedGrade} onSelectGrade={setSelectedGrade} schoolLogo={schoolLogo} onUpdateSchoolLogo={handleUpdateSchoolLogo} schoolName={schoolName} boardTheme={boardTheme} onUpdateBoardTheme={handleUpdateBoardTheme} maxClasses={maxClasses} classTotals={classTotals} schoolSlug={schoolSlug}
               onSwitchToAdmin={() => { setViewMode('developer'); setIsFullscreen(false); }}
               onUpdateTargetClass={(periodIdx, subIdx, newTargetClass) => {
                 const dayIdx = scheduleData.findIndex((d) => d.id === currentDaySchedule.id || d.date === currentDaySchedule.date);
@@ -986,19 +1123,305 @@ export default function App() {
                 <SchoolLogoCard schoolLogo={schoolLogo} onChangeLogo={handleUpdateSchoolLogo} fullTitle={currentDaySchedule?.fullTitle} />
                 <GeminiSettingsCard />
 
-                <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+                <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2.5"><div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs"><Grid className="w-5 h-5" /></div><div><h3 className="text-base font-black text-slate-900 flex items-center gap-2"><span>최대 학급 반 개수 설정</span></h3><p className="text-xs text-slate-500 font-medium">전자칠판 및 초기 설정에서 선택 가능한 최대 반 번호를 설정합니다.</p></div></div>
-                    <div className="text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-200">현재 설정: <strong className="text-indigo-900">{maxClasses}반까지</strong></div>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                        <Grid className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                          <span>최대 학급 반 개수 및 학급당 총원 설정</span>
+                        </h3>
+                        <p className="text-xs text-slate-500 font-medium">
+                          전자칠판에서 선택 가능한 최대 반 번호와 각 학급의 총원을 미리 입력하면 전자칠판에 즉시 총원이 표시됩니다.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-200">
+                      현재 설정: <strong className="text-indigo-900">{maxClasses}반까지</strong>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {Array.from({ length: 15 }, (_, i) => i + 1).map((cnt) => (
-                      <button key={cnt} type="button" onClick={() => handleUpdateMaxClasses(cnt)} className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border ${maxClasses === cnt ? 'bg-indigo-600 text-white border-indigo-600 shadow-md ring-2 ring-indigo-500/30' : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'}`}>{cnt}반까지</button>
-                    ))}
+
+                  {/* 1. 최대 반 개수 버튼 */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-black text-slate-700 block">1. 최대 학급 반 개수 선택</label>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {Array.from({ length: 15 }, (_, i) => i + 1).map((cnt) => (
+                        <button
+                          key={cnt}
+                          type="button"
+                          onClick={() => handleUpdateMaxClasses(cnt)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border ${
+                            maxClasses === cnt
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-md ring-2 ring-indigo-500/30'
+                              : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                          }`}
+                        >
+                          {cnt}반까지
+                        </button>
+                      ))}
+                    </div>
                   </div>
+
+                  {/* 2. 학급당 총원 미리 입력 및 명렬표 파일 자동 파싱 섹션 */}
+                  <div className="pt-4 border-t border-slate-100 space-y-4">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-sm font-black text-slate-900 flex items-center gap-2 flex-wrap">
+                          <span>2. 학급당 총원(학생 수) 미리 입력 & 전교 학생 명렬표 자동 파싱</span>
+                          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                            전자칠판 총원 칸에 즉시 자동 표시
+                          </span>
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          전교 학생 명렬표(엑셀 .xls/.xlsx, .csv, .pdf, 이미지)를 첨부하면 학년·반별 학생 수를 자동으로 계산하여 채워줍니다.
+                        </p>
+                      </div>
+
+                      {/* 일괄 입력 도구 */}
+                      <div className="flex items-center gap-1.5 flex-wrap bg-slate-50 p-2 rounded-xl border border-slate-200">
+                        <span className="text-xs font-black text-slate-700 px-1">일괄 입력:</span>
+                        <div className="flex items-center bg-white border border-slate-300 rounded-lg px-2 py-1">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="예: 28"
+                            value={bulkTotalInput}
+                            onChange={(e) => setBulkTotalInput(e.target.value.replace(/[^0-9]/g, ''))}
+                            className="w-14 text-xs font-black text-center text-slate-900 focus:outline-none font-mono"
+                          />
+                          <span className="text-xs font-bold text-slate-500">명</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!bulkTotalInput.trim()) return;
+                            const val = bulkTotalInput.trim();
+                            const next = { ...classTotals, [`default-${totalSettingGradeTab}`]: val };
+                            for (let c = 1; c <= 15; c++) {
+                              next[`${totalSettingGradeTab}-${c}`] = val;
+                            }
+                            handleUpdateClassTotals(next);
+                          }}
+                          className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-black transition cursor-pointer"
+                        >
+                          {totalSettingGradeTab}학년 전체 적용
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!bulkTotalInput.trim()) return;
+                            const val = bulkTotalInput.trim();
+                            const next: Record<string, string> = { ...classTotals, default: val };
+                            ['1', '2', '3'].forEach((g) => {
+                              next[`default-${g}`] = val;
+                              for (let c = 1; c <= 15; c++) {
+                                next[`${g}-${c}`] = val;
+                              }
+                            });
+                            handleUpdateClassTotals(next);
+                          }}
+                          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-black transition cursor-pointer"
+                        >
+                          전교생(1~3학년) 일괄 적용
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleUpdateClassTotals({});
+                            setBulkTotalInput('');
+                            setRosterParseStatus(null);
+                          }}
+                          className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs font-bold transition cursor-pointer"
+                        >
+                          초기화
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 전교 학생 명렬표 파일 업로드 (Excel / PDF / CSV / 이미지) */}
+                    <div
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const f = e.dataTransfer.files?.[0];
+                        if (f && !isParsingRoster) handleRosterFileUpload(f);
+                      }}
+                      className="bg-gradient-to-r from-indigo-50/80 via-slate-50 to-emerald-50/70 border-2 border-dashed border-indigo-300 hover:border-indigo-500 rounded-2xl p-4 transition flex flex-col sm:flex-row items-center justify-between gap-3"
+                    >
+                      <input
+                        ref={rosterFileInputRef}
+                        type="file"
+                        accept=".xlsx,.xls,.csv,.pdf,image/*"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleRosterFileUpload(f);
+                        }}
+                        className="hidden"
+                      />
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <FileSpreadsheet className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs sm:text-sm font-black text-slate-900">
+                              전교 학생 명렬표 / 학급 인원 현황표 첨부 (.xls, .xlsx, .csv, .pdf)
+                            </span>
+                            <span className="text-[10px] font-black bg-indigo-600 text-white px-2 py-0.5 rounded-full">
+                              자동 학급 총원 계산
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 mt-0.5">
+                            나이스(NEIS) 학생 명렬표 엑셀 파일이나 학급 인원 현황 PDF를 이곳에 끌어다 놓거나 버튼을 눌러 첨부하세요.
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={isParsingRoster}
+                        onClick={() => rosterFileInputRef.current?.click()}
+                        className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shrink-0 transition cursor-pointer shadow-sm ${
+                          isParsingRoster
+                            ? 'bg-slate-300 text-slate-600 cursor-wait'
+                            : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                        }`}
+                      >
+                        {isParsingRoster ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <span>명렬표 분석 중...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4" />
+                            <span>명렬표 파일 첨부 (Excel / PDF)</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {rosterParseStatus && (
+                      <div
+                        className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between gap-2 border ${
+                          rosterParseStatus.type === 'success'
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                            : 'bg-rose-50 border-rose-200 text-rose-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {rosterParseStatus.type === 'success' ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          )}
+                          <span>{rosterParseStatus.message}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setRosterParseStatus(null)}
+                          className="text-[11px] underline opacity-75 hover:opacity-100 cursor-pointer shrink-0"
+                        >
+                          닫기
+                        </button>
+                      </div>
+                    )}
+
+                    {/* 학년 탭 선택 */}
+                    <div className="flex items-center gap-1.5">
+                      {(['1', '2', '3'] as const).map((g) => {
+                        const isSel = totalSettingGradeTab === g;
+                        const filledCount = Array.from({ length: maxClasses }, (_, i) => i + 1).filter(
+                          (c) => Boolean(classTotals[`${g}-${c}`]?.trim())
+                        ).length;
+                        return (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => setTotalSettingGradeTab(g)}
+                            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border flex items-center gap-1.5 ${
+                              isSel
+                                ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200'
+                            }`}
+                          >
+                            <span>{g}학년 반별 총원</span>
+                            {filledCount > 0 && (
+                              <span
+                                className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                                  isSel ? 'bg-emerald-400 text-slate-950' : 'bg-indigo-100 text-indigo-700'
+                                }`}
+                              >
+                                {filledCount}/{maxClasses}반 설정됨
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* 반별 총원 입력 그리드 (1반 ~ maxClasses반) */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 gap-2.5 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/90">
+                      {Array.from({ length: maxClasses }, (_, i) => i + 1).map((c) => {
+                        const key = `${totalSettingGradeTab}-${c}`;
+                        const val = classTotals[key] ?? classTotals[`default-${totalSettingGradeTab}`] ?? classTotals['default'] ?? '';
+                        return (
+                          <div
+                            key={key}
+                            className="bg-white rounded-xl p-2.5 border border-slate-200 shadow-2xs flex flex-col gap-1.5 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-black text-slate-700">
+                                {totalSettingGradeTab}학년 {c}반
+                              </span>
+                              {val && (
+                                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 rounded">
+                                  {val}명
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus-within:bg-white focus-within:border-indigo-400">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="미입력"
+                                value={val}
+                                onChange={(e) => {
+                                  const cleanedVal = e.target.value.replace(/[^0-9]/g, '');
+                                  const next = { ...classTotals, [key]: cleanedVal };
+                                  handleUpdateClassTotals(next);
+                                }}
+                                className="w-full text-sm font-black text-center text-indigo-950 bg-transparent focus:outline-none font-mono"
+                              />
+                              <span className="text-xs font-bold text-slate-400 shrink-0 ml-0.5">명</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-between pt-3 border-t border-slate-100 flex-wrap gap-2">
-                    <span className="text-xs text-slate-500 font-bold">설정하신 최대 반 개수({maxClasses}반까지)가 전자칠판 반 선택 목록에 적용됩니다.</span>
-                    <button type="button" onClick={() => { handleUpdateMaxClasses(maxClasses); alert(`최대 학급 반 개수가 [${maxClasses}반까지]로 안전하게 저장되었습니다!`); }} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md transition cursor-pointer flex items-center gap-1.5"><span>설정 저장하기</span></button>
+                    <span className="text-xs text-slate-500 font-bold">
+                      설정하신 최대 반 개수({maxClasses}반까지) 및 학급당 총원이 전자칠판에 즉시 적용됩니다.
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {saveSuccessToast && (
+                        <span className="text-xs font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center gap-1 animate-fadeIn">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>최대 반 개수 및 학급별 총원이 저장되었습니다!</span>
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleSaveClassAndTotalsSettings}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <span>설정 저장하기</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 

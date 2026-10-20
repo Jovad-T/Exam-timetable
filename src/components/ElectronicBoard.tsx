@@ -175,6 +175,8 @@ interface ElectronicBoardProps {
   onSwitchToAdmin?: () => void;
   onSwitchToSelector?: () => void;
   maxClasses?: number;
+  classTotals?: Record<string, string>;
+  schoolSlug?: string;
   schoolName?: string;
   examMode?: 'regular' | 'mock';
   onChangeExamMode?: (mode: 'regular' | 'mock') => void;
@@ -221,6 +223,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   onSwitchToAdmin,
   onSwitchToSelector,
   maxClasses = 15,
+  classTotals = {},
+  schoolSlug = 'korea-high',
   schoolName,
   examMode,
   onChangeExamMode,
@@ -573,19 +577,37 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Class attendance state - initialized to empty strings so teachers can write on board directly (판서)
+  // Class attendance state - initialized with pre-configured class total count if set in admin settings
   // 학년/반 셋팅을 로컬 스토리지에 유지하여 새로고침 시에도 유지
+  const getPresetTotalCount = (g: string, c: string) => {
+    const cleanG = g.replace('학년', '').trim() || '2';
+    const cleanC = c.replace('반', '').trim() || '3';
+    return (
+      classTotals?.[`${cleanG}-${cleanC}`] ||
+      classTotals?.[`default-${cleanG}`] ||
+      classTotals?.['default'] ||
+      ''
+    );
+  };
+
   const [attendance, setAttendance] = useState<ClassAttendance>(() => {
     const initialGrade = selectedGrade ? selectedGrade.replace('학년', '') : '2';
     if (typeof window !== 'undefined') {
       try {
-        const saved = localStorage.getItem('class_attendance_settings');
+        const slugSaved = localStorage.getItem(`class_attendance_settings_${schoolSlug}`);
+        const saved = slugSaved || localStorage.getItem('class_attendance_settings');
         if (saved) {
           const parsed = JSON.parse(saved);
+          const g = parsed.grade || initialGrade;
+          const c = parsed.classNum || '3';
+          const presetTotal = getPresetTotalCount(g, c);
           return {
-            ...parsed,
-            grade: parsed.grade || initialGrade,
-            classNum: parsed.classNum || '3',
+            grade: g,
+            classNum: c,
+            totalCount: parsed.totalCount || presetTotal || '',
+            presentCount: parsed.presentCount || '',
+            absentNotes: parsed.absentNotes || '',
+            lastNum: parsed.lastNum || '',
           };
         }
       } catch (e) {
@@ -593,25 +615,57 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
         try { localStorage.removeItem('class_attendance_settings'); } catch {}
       }
     }
+    const presetTotal = getPresetTotalCount(initialGrade, '3');
     return {
       grade: initialGrade,
       classNum: '3',
-      totalCount: '',
+      totalCount: presetTotal,
       presentCount: '',
       absentNotes: '',
       lastNum: '',
     };
   });
 
+  // 관리자가 설정한 학급별 총원(classTotals)이 변경되거나 학년/반이 바뀔 때 자동으로 총원에 반영
+  useEffect(() => {
+    const presetTotal = getPresetTotalCount(attendance.grade, attendance.classNum);
+    if (presetTotal && attendance.totalCount !== presetTotal) {
+      setAttendance((prev) => {
+        const next = { ...prev, totalCount: presetTotal };
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('class_attendance_settings', JSON.stringify(next));
+            if (schoolSlug) {
+              localStorage.setItem(`class_attendance_settings_${schoolSlug}`, JSON.stringify(next));
+            }
+          } catch {}
+        }
+        return next;
+      });
+    }
+  }, [classTotals, attendance.grade, attendance.classNum, schoolSlug]);
+
   const handleUpdateAttendance = (updated: ClassAttendance) => {
-    setAttendance(updated);
+    const isClassChanged = updated.grade !== attendance.grade || updated.classNum !== attendance.classNum;
+    const presetTotal = getPresetTotalCount(updated.grade, updated.classNum);
+    const finalUpdated: ClassAttendance = isClassChanged
+      ? {
+          ...updated,
+          totalCount: presetTotal || updated.totalCount,
+        }
+      : updated;
+
+    setAttendance(finalUpdated);
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem('class_attendance_settings', JSON.stringify(updated));
+        localStorage.setItem('class_attendance_settings', JSON.stringify(finalUpdated));
+        if (schoolSlug) {
+          localStorage.setItem(`class_attendance_settings_${schoolSlug}`, JSON.stringify(finalUpdated));
+        }
       } catch {}
     }
-    if (updated.grade && onSelectGrade) {
-      onSelectGrade(`${updated.grade}학년`);
+    if (finalUpdated.grade && onSelectGrade) {
+      onSelectGrade(`${finalUpdated.grade}학년`);
     }
   };
 

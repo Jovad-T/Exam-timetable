@@ -149,7 +149,9 @@ export async function saveSchoolScheduleToCloud(
   scheduleData: ScheduleData,
   schoolName: string,
   logoUrl?: string | null,
-  alertSettings?: any
+  alertSettings?: any,
+  classTotals?: Record<string, string>,
+  maxClasses?: number
 ): Promise<void> {
   if (!schoolSlug) return;
   if (isFirestoreQuotaExceeded()) {
@@ -195,6 +197,12 @@ export async function saveSchoolScheduleToCloud(
       if (alertSettings !== undefined) {
         schedulePayload.alertSettings = alertSettings;
       }
+      if (classTotals !== undefined) {
+        schedulePayload.classTotals = classTotals;
+      }
+      if (maxClasses !== undefined) {
+        schedulePayload.maxClasses = maxClasses;
+      }
       await setDoc(scheduleRef, schedulePayload, { merge: true });
     } catch (err: any) {
       const errMsg = err?.message || String(err);
@@ -222,7 +230,13 @@ export async function saveSchoolScheduleToCloud(
  */
 export function subscribeSchoolSchedule(
   schoolSlug: string,
-  onScheduleUpdate: (data: ScheduleData, cloudSchoolName?: string, alertSettings?: any) => void,
+  onScheduleUpdate: (
+    data: ScheduleData,
+    cloudSchoolName?: string,
+    alertSettings?: any,
+    classTotals?: Record<string, string>,
+    maxClasses?: number
+  ) => void,
   onSchoolProfileUpdate?: (name: string, logoUrl?: string) => void
 ): () => void {
   if (!schoolSlug || isFirestoreQuotaExceeded()) {
@@ -258,7 +272,7 @@ export function subscribeSchoolSchedule(
         if (data && data.scheduleJson) {
           try {
             const parsed = JSON.parse(data.scheduleJson);
-            onScheduleUpdate(parsed, data.schoolName, data.alertSettings);
+            onScheduleUpdate(parsed, data.schoolName, data.alertSettings, data.classTotals, data.maxClasses);
           } catch (e) {
             console.error('Error parsing cloud schedule JSON:', e);
           }
@@ -285,7 +299,14 @@ export function subscribeSchoolSchedule(
  */
 export async function fetchSchoolScheduleFromCloud(
   schoolSlug: string
-): Promise<{ scheduleData: ScheduleData | null; schoolName: string | null; logoUrl: string | null; alertSettings: any | null }> {
+): Promise<{
+  scheduleData: ScheduleData | null;
+  schoolName: string | null;
+  logoUrl: string | null;
+  alertSettings: any | null;
+  classTotals?: Record<string, string> | null;
+  maxClasses?: number | null;
+}> {
   if (!schoolSlug || isFirestoreQuotaExceeded()) return { scheduleData: null, schoolName: null, logoUrl: null, alertSettings: null };
 
   try {
@@ -299,6 +320,8 @@ export async function fetchSchoolScheduleFromCloud(
     let schoolName: string | null = null;
     let logoUrl: string | null = null;
     let alertSettings: any | null = null;
+    let classTotals: Record<string, string> | null = null;
+    let maxClasses: number | null = null;
 
     if (schoolSnap.exists()) {
       const data = schoolSnap.data();
@@ -322,9 +345,15 @@ export async function fetchSchoolScheduleFromCloud(
       if (data && data.alertSettings) {
         alertSettings = data.alertSettings;
       }
+      if (data && data.classTotals) {
+        classTotals = data.classTotals;
+      }
+      if (data && typeof data.maxClasses === 'number') {
+        maxClasses = data.maxClasses;
+      }
     }
 
-    return { scheduleData, schoolName, logoUrl, alertSettings };
+    return { scheduleData, schoolName, logoUrl, alertSettings, classTotals, maxClasses };
   } catch (err) {
     console.warn('Error fetching initial cloud schedule:', err);
     try {
