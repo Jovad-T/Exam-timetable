@@ -840,92 +840,87 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
     return sameGradeSubjects.filter((s) => !matching.includes(s));
   };
 
-  // Parse all periods and exams from current daySchedule (synchronized with class timetable)
+  // Parse all periods and exams from current daySchedule (synchronized with class timetable - supports individual subject intervals)
   const parsePeriods = () => {
     if (!daySchedule.schedule || daySchedule.schedule.length === 0) return [];
-    return daySchedule.schedule
-      .map((p, pIdx) => {
-        let pStart = '';
-        let pEnd = '';
-        let pEntry = '';
-        const subjectList: string[] = [];
+    const items: Array<{
+      pIdx: number;
+      periodName: string;
+      subjectNames: string;
+      startTime: string;
+      endTime: string;
+      entryTime: string;
+      startSec: number;
+      endSec: number;
+      entrySec: number;
+      durationMin: number;
+    }> = [];
 
-        // When filterMyClassOnly is active, the clock/progress bar tracks this specific class's exam!
-        const effectiveSubjects = filterMyClassOnly
-          ? getPeriodSubjectsForClass(p.subjects, attendance.grade, attendance.classNum)
-          : p.subjects;
+    daySchedule.schedule.forEach((p, pIdx) => {
+      const effectiveSubjects = filterMyClassOnly
+        ? getPeriodSubjectsForClass(p.subjects, attendance.grade, attendance.classNum)
+        : p.subjects;
 
-        const toSec = (timeStr: string) => {
-          const [h, m] = timeStr.split(':').map(Number);
-          return (h || 0) * 3600 + (m || 0) * 60;
-        };
+      const toSec = (timeStr: string) => {
+        const [h, m] = timeStr.split(':').map(Number);
+        return (h || 0) * 3600 + (m || 0) * 60;
+      };
 
-        const normTime = (timeStr: string) => {
-          const [h, m] = timeStr.split(':').map((v) => v.trim());
-          return `${String(Number(h) || 0).padStart(2, '0')}:${String(Number(m) || 0).padStart(2, '0')}`;
-        };
+      const normTime = (timeStr: string) => {
+        const [h, m] = timeStr.split(':').map((v) => v.trim());
+        return `${String(Number(h) || 0).padStart(2, '0')}:${String(Number(m) || 0).padStart(2, '0')}`;
+      };
 
-        const extractTimesFromSub = (s: SubjectItem) => {
-          if (s.entryTime && !pEntry) {
-            const entryMatch = s.entryTime.match(/(\d{1,2})\s*:\s*(\d{2})/);
-            if (entryMatch) pEntry = normTime(`${entryMatch[1]}:${entryMatch[2]}`);
-          }
-          const timeMatches = [...(s.time || '').matchAll(/(\d{1,2})\s*:\s*(\d{2})/g)];
-          if (timeMatches.length >= 2) {
-            const sNorm = normTime(`${timeMatches[0][1]}:${timeMatches[0][2]}`);
-            const eNorm = normTime(`${timeMatches[1][1]}:${timeMatches[1][2]}`);
-            if (!pStart || toSec(sNorm) < toSec(pStart)) pStart = sNorm;
-            if (!pEnd || toSec(eNorm) > toSec(pEnd)) pEnd = eNorm;
-          }
-        };
-
-        effectiveSubjects.forEach((s) => {
-          if (s.name) {
-            const nameWithCode =
-              s.subjectCode && !s.name.includes('(') ? `${s.name}(${s.subjectCode})` : s.name;
-            if (!subjectList.includes(nameWithCode)) subjectList.push(nameWithCode);
-          }
-          extractTimesFromSub(s);
-        });
-
-        // Fallback to all subjects in period if class-filtered subjects lacked explicit time strings
-        if (!pStart || !pEnd) {
-          (p.subjects || []).forEach((s) => extractTimesFromSub(s));
+      effectiveSubjects.forEach((s) => {
+        let sStart = '';
+        let sEnd = '';
+        let sEntry = '';
+        if (s.entryTime) {
+          const entryMatch = s.entryTime.match(/(\d{1,2})\s*:\s*(\d{2})/);
+          if (entryMatch) sEntry = normTime(`${entryMatch[1]}:${entryMatch[2]}`);
+        }
+        const timeMatches = [...(s.time || '').matchAll(/(\d{1,2})\s*:\s*(\d{2})/g)];
+        if (timeMatches.length >= 2) {
+          sStart = normTime(`${timeMatches[0][1]}:${timeMatches[0][2]}`);
+          sEnd = normTime(`${timeMatches[1][1]}:${timeMatches[1][2]}`);
         }
 
-        const startSec = pStart ? toSec(pStart) : 0;
-        const endSec = pEnd ? toSec(pEnd) : 0;
-        const entrySec = pEntry ? toSec(pEntry) : Math.max(0, startSec - 600);
+        const startSec = sStart ? toSec(sStart) : 0;
+        const endSec = sEnd ? toSec(sEnd) : 0;
+        if (startSec > 0 && endSec > startSec) {
+          const entrySec = sEntry ? toSec(sEntry) : Math.max(0, startSec - 600);
+          const nameWithCode = s.subjectCode && !s.name.includes('(') ? `${s.name}(${s.subjectCode})` : s.name;
 
-        return {
-          pIdx,
-          periodName: p.period,
-          subjectNames: subjectList.join(', ') || '시험 과목',
-          startTime: pStart || '09:00',
-          endTime: pEnd || '10:00',
-          entryTime: pEntry,
-          startSec,
-          endSec,
-          entrySec,
-          durationMin: Math.max(1, Math.round((endSec - startSec) / 60)),
-        };
-      })
-      .filter(
-        (item) =>
-          item.startSec > 0 &&
-          item.endSec > item.startSec &&
-          !item.periodName.includes('휴식') &&
-          !item.periodName.includes('쉬는') &&
-          !item.periodName.includes('점심') &&
-          !item.periodName.includes('중식') &&
-          !item.periodName.includes('조례') &&
-          !item.periodName.includes('조회') &&
-          !item.periodName.includes('종례') &&
-          !item.periodName.includes('청소') &&
-          !item.periodName.includes('채점') &&
-          !item.periodName.includes('입실') &&
-          !item.periodName.includes('귀가')
-      );
+          items.push({
+            pIdx,
+            periodName: p.period,
+            subjectNames: nameWithCode,
+            startTime: sStart,
+            endTime: sEnd,
+            entryTime: sEntry,
+            startSec,
+            endSec,
+            entrySec,
+            durationMin: Math.max(1, Math.round((endSec - startSec) / 60)),
+          });
+        }
+      });
+    });
+
+    return items.filter(
+      (item) =>
+        !item.periodName.includes('휴식') &&
+        !item.periodName.includes('쉬는') &&
+        !item.periodName.includes('점심') &&
+        !item.periodName.includes('중식') &&
+        !item.periodName.includes('조례') &&
+        !item.periodName.includes('조회') &&
+        !item.periodName.includes('종례') &&
+        !item.periodName.includes('청소') &&
+        !item.periodName.includes('채점') &&
+        !item.periodName.includes('입실') &&
+        !item.periodName.includes('귀가')
+    );
   };
 
   // Real-time Current Exam Progress State
