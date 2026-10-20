@@ -528,9 +528,11 @@ export default function App() {
   const [bulkTotalInput, setBulkTotalInput] = useState<string>('');
   const [saveSuccessToast, setSaveSuccessToast] = useState<boolean>(false);
   const [isParsingRoster, setIsParsingRoster] = useState<boolean>(false);
+  const [lastRosterFile, setLastRosterFile] = useState<File | null>(null);
   const [rosterParseStatus, setRosterParseStatus] = useState<{
     type: 'success' | 'error';
     message: string;
+    method?: string;
   } | null>(null);
   const rosterFileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -578,11 +580,15 @@ export default function App() {
     syncAttendanceWithTotals(updatedTotals, schoolSlug);
   };
 
-  const handleRosterFileUpload = async (file: File) => {
+  const handleRosterFileUpload = async (file: File, forceAi = false) => {
     setIsParsingRoster(true);
     setRosterParseStatus(null);
+    setLastRosterFile(file);
     try {
-      const result = await parseRosterFile(file);
+      const result = await parseRosterFile(file, {
+        forceAi,
+        defaultGrade: totalSettingGradeTab,
+      });
       if (result.totalClassesCount === 0) {
         setRosterParseStatus({
           type: 'error',
@@ -591,11 +597,30 @@ export default function App() {
         return;
       }
 
-      const mergedTotals = { ...classTotals, ...result.classTotals };
+      const parsedGrades = new Set<string>();
+      for (const k of Object.keys(result.classTotals)) {
+        const g = k.split('-')[0];
+        if (['1', '2', '3'].includes(g)) parsedGrades.add(g);
+      }
+
+      const cleanedPrevTotals: Record<string, string> = {};
+      for (const [k, v] of Object.entries(classTotals)) {
+        const g = k.split('-')[0];
+        if (!parsedGrades.has(g) && !(k.startsWith('default-') && parsedGrades.has(k.replace('default-', '')))) {
+          cleanedPrevTotals[k] = v;
+        }
+      }
+
+      const mergedTotals = { ...cleanedPrevTotals, ...result.classTotals };
       let nextMaxClasses = maxClasses;
-      if (result.maxClassFound > 0 && result.maxClassFound <= 15) {
-        nextMaxClasses = Math.max(maxClasses, result.maxClassFound);
+      if (result.maxClassFound >= 2 && result.maxClassFound <= 15) {
+        nextMaxClasses = result.maxClassFound;
         handleUpdateMaxClasses(nextMaxClasses);
+      }
+
+      if (!parsedGrades.has(totalSettingGradeTab) && parsedGrades.size > 0) {
+        const firstG = Array.from(parsedGrades).sort()[0] as '1' | '2' | '3';
+        setTotalSettingGradeTab(firstG);
       }
 
       handleUpdateClassTotals(mergedTotals);
@@ -611,9 +636,20 @@ export default function App() {
         );
       }
 
+      const gradeSummaries: string[] = [];
+      for (const g of ['1', '2', '3']) {
+        const gKeys = Object.keys(result.classTotals).filter((k) => k.startsWith(`${g}-`));
+        if (gKeys.length > 0) {
+          const gSum = gKeys.reduce((acc, k) => acc + (parseInt(result.classTotals[k], 10) || 0), 0);
+          gradeSummaries.push(`${g}학년 ${gKeys.length}개반(${gSum}명)`);
+        }
+      }
+      const methodLabel = result.method === 'ai_vision' ? 'AI 정밀 분석' : '정밀 표 구조 분석';
+
       setRosterParseStatus({
         type: 'success',
-        message: `'${file.name}' 분석 완료! 총 ${result.totalClassesCount}개 학급(합계 ${result.totalStudentsCount}명)의 총원이 자동 입력 및 저장되었습니다.`,
+        method: result.method,
+        message: `'${file.name}' [${methodLabel}] 완료! ${gradeSummaries.join(', ')} — 총 ${result.totalClassesCount}개 학급(합계 ${result.totalStudentsCount}명) 저장됨`,
       });
     } catch (err: any) {
       setRosterParseStatus({
@@ -1305,7 +1341,7 @@ export default function App() {
 
                     {rosterParseStatus && (
                       <div
-                        className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between gap-2 border ${
+                        className={`px-4 py-2.5 rounded-xl text-xs font-bold flex flex-wrap items-center justify-between gap-2 border ${
                           rosterParseStatus.type === 'success'
                             ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                             : 'bg-rose-50 border-rose-200 text-rose-700'
@@ -1319,13 +1355,25 @@ export default function App() {
                           )}
                           <span>{rosterParseStatus.message}</span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setRosterParseStatus(null)}
-                          className="text-[11px] underline opacity-75 hover:opacity-100 cursor-pointer shrink-0"
-                        >
-                          닫기
-                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {lastRosterFile && !isParsingRoster && rosterParseStatus.method !== 'ai_vision' && (
+                            <button
+                              type="button"
+                              onClick={() => handleRosterFileUpload(lastRosterFile, true)}
+                              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-black transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                            >
+                              <Sparkles className="w-3 h-3" />
+                              <span>AI 정밀 재분석</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setRosterParseStatus(null)}
+                            className="text-[11px] underline opacity-75 hover:opacity-100 cursor-pointer shrink-0"
+                          >
+                            닫기
+                          </button>
+                        </div>
                       </div>
                     )}
 
