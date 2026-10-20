@@ -50,13 +50,13 @@ export interface FirestoreErrorInfo {
 }
 
 // Quota management helpers
-// Safe default: set to true to prevent resource-exhausted writes from looping and spamming console
-let quotaExceededMemoryFlag = true;
+let quotaExceededMemoryFlag = false;
 
 if (typeof window !== 'undefined') {
   try {
-    localStorage.setItem('firestore_quota_exceeded', 'true');
-    disableNetwork(db).catch(() => {});
+    if (localStorage.getItem('firestore_quota_exceeded') === null) {
+      localStorage.setItem('firestore_quota_exceeded', 'false');
+    }
   } catch {}
 }
 
@@ -66,10 +66,10 @@ export function isFirestoreQuotaExceeded(): boolean {
   if (quotaExceededMemoryFlag) return true;
   if (typeof window !== 'undefined') {
     try {
-      return localStorage.getItem('firestore_quota_exceeded') !== 'false';
+      return localStorage.getItem('firestore_quota_exceeded') === 'true';
     } catch {}
   }
-  return true;
+  return false;
 }
 
 export function markFirestoreQuotaExceeded(): void {
