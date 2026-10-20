@@ -1058,7 +1058,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
         const elapsed = effectiveNowSec - active.startSec;
         const remaining = Math.max(0, active.endSec - effectiveNowSec);
         const pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
-        const isEndingSoon = remaining <= alertThresholdSec && remaining > 0;
+        const isKoreanHistory = active.subjectNames.includes('한국사') || (active.endSec - active.startSec <= 1800);
+        const effectiveAlertMinutes = isKoreanHistory ? 5 : alertMinutes;
+        const effectiveAlertThresholdSec = effectiveAlertMinutes * 60;
+        const isEndingSoon = remaining <= effectiveAlertThresholdSec && remaining > 0;
 
         // Check if exam just started (within first 15 seconds)
         const startCenterKey = `center-start-${active.periodName}-${active.startTime}`;
@@ -1096,14 +1099,13 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
         // 경고 알림 시점에 도달했고 소리가 켜져 있으면 학교 차임벨 및 TTS 방송 재생 (중복 재생 방지)
         if (isEndingSoon && isSoundEnabled && !active.subjectNames.includes('자습')) {
-          const alertKey = `${active.periodName}-${active.startTime}-${alertMinutes}`;
+          const alertKey = `${active.periodName}-${active.startTime}-${effectiveAlertMinutes}`;
           if (lastPlayedAlertKeyRef.current !== alertKey) {
             audioAlert.playAlertSound(alertSettings?.soundType || 'chime', alertSettings?.volume || 0.7);
-            // 사용자 요청: 종료 10분 전 알림 멘트 커스텀 TTS 음성 방송
             if (alertSettings?.ttsEnabled ?? true) {
               const msg =
                 alertSettings?.ttsMessage ||
-                `시험 종료 ${alertMinutes}분 전입니다.\n학생들은 답안지 OMR 카드를 점검하고 마킹 실수가 없는지 확인해 주시기 바랍니다.`;
+                `시험 종료 ${effectiveAlertMinutes}분 전입니다.\n학생들은 답안지 OMR 카드를 점검하고 마킹 실수가 없는지 확인해 주시기 바랍니다.`;
               setTimeout(() => {
                 audioAlert.speakTTS(msg, {
                   volume: alertSettings?.volume || 0.9,
@@ -1114,7 +1116,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             lastPlayedAlertKeyRef.current = alertKey;
             setActiveCenterNotification({
               type: 'ending_soon',
-              title: `[${active.periodName}] 시험 종료 ${alertMinutes}분 전`,
+              title: `[${active.periodName}] 시험 종료 ${effectiveAlertMinutes}분 전`,
               message: `OMR 답안지 마킹 실수가 없는지\n최종 점검하시기 바랍니다.`,
               periodName: active.periodName,
               subjectNames: active.subjectNames,
