@@ -1,14 +1,21 @@
 @import "tailwindcss";
 
-html, body, #root {
+html, body {
   margin: 0;
   padding: 0;
   width: 100%;
   min-height: 100vh;
   box-sizing: border-box;
   overflow-x: hidden;
-  overflow-y: auto;
   background-color: #071a12;
+}
+
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh;
+  box-sizing: border-box;
 }
 
 *, *:before, *:after {

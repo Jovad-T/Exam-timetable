@@ -360,27 +360,36 @@ export default function App() {
       .then(({ scheduleData: cloudData, schoolName: cloudName, logoUrl, alertSettings: cloudAlertSettings, classTotals: cloudClassTotals, maxClasses: cloudMaxClasses }) => {
         if (cloudData && Array.isArray(cloudData) && cloudData.length > 0) {
           const cleanedCloudData = cleanScheduleData(cloudData);
-          setScheduleData(cleanedCloudData);
+          setScheduleData((prev) => {
+            if (JSON.stringify(prev) === JSON.stringify(cleanedCloudData)) return prev;
+            return cleanedCloudData;
+          });
           try { localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cleanedCloudData)); } catch {}
         }
         if (cloudName) {
-          setSchoolName(cloudName);
+          setSchoolName((prev) => (prev === cloudName ? prev : cloudName));
           try { localStorage.setItem(`school_name_${schoolSlug}`, cloudName); } catch {}
         }
         if (logoUrl) {
-          setSchoolLogo(logoUrl);
+          setSchoolLogo((prev) => (prev === logoUrl ? prev : logoUrl));
           try { localStorage.setItem('school_logo', logoUrl); } catch {}
         }
         if (cloudAlertSettings) {
-          setAlertSettings(cloudAlertSettings);
+          setAlertSettings((prev) => {
+            if (JSON.stringify(prev) === JSON.stringify(cloudAlertSettings)) return prev;
+            return cloudAlertSettings;
+          });
           try { localStorage.setItem('exam_alert_settings', JSON.stringify(cloudAlertSettings)); } catch {}
         }
         if (cloudClassTotals) {
-          setClassTotals(cloudClassTotals);
+          setClassTotals((prev) => {
+            if (JSON.stringify(prev) === JSON.stringify(cloudClassTotals)) return prev;
+            return cloudClassTotals;
+          });
           try { localStorage.setItem(`class_totals_${schoolSlug}`, JSON.stringify(cloudClassTotals)); } catch {}
         }
         if (typeof cloudMaxClasses === 'number' && cloudMaxClasses > 0) {
-          setMaxClasses(cloudMaxClasses);
+          setMaxClasses((prev) => (prev === cloudMaxClasses ? prev : cloudMaxClasses));
           try { localStorage.setItem('max_classes', String(cloudMaxClasses)); } catch {}
         }
       })
@@ -392,34 +401,43 @@ export default function App() {
       (newScheduleData, cloudName, cloudAlertSettings, cloudClassTotals, cloudMaxClasses) => {
         if (newScheduleData && Array.isArray(newScheduleData) && newScheduleData.length > 0) {
           const cleaned = cleanScheduleData(newScheduleData);
-          setScheduleData(cleaned);
+          setScheduleData((prev) => {
+            if (JSON.stringify(prev) === JSON.stringify(cleaned)) return prev;
+            return cleaned;
+          });
           try { localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cleaned)); } catch {}
         }
         if (cloudName) {
-          setSchoolName(cloudName);
+          setSchoolName((prev) => (prev === cloudName ? prev : cloudName));
           try { localStorage.setItem(`school_name_${schoolSlug}`, cloudName); } catch {}
         }
         if (cloudAlertSettings) {
-          setAlertSettings(cloudAlertSettings);
+          setAlertSettings((prev) => {
+            if (JSON.stringify(prev) === JSON.stringify(cloudAlertSettings)) return prev;
+            return cloudAlertSettings;
+          });
           try { localStorage.setItem('exam_alert_settings', JSON.stringify(cloudAlertSettings)); } catch {}
         }
         if (cloudClassTotals) {
-          setClassTotals(cloudClassTotals);
+          setClassTotals((prev) => {
+            if (JSON.stringify(prev) === JSON.stringify(cloudClassTotals)) return prev;
+            return cloudClassTotals;
+          });
           try { localStorage.setItem(`class_totals_${schoolSlug}`, JSON.stringify(cloudClassTotals)); } catch {}
         }
         if (typeof cloudMaxClasses === 'number' && cloudMaxClasses > 0) {
-          setMaxClasses(cloudMaxClasses);
+          setMaxClasses((prev) => (prev === cloudMaxClasses ? prev : cloudMaxClasses));
           try { localStorage.setItem('max_classes', String(cloudMaxClasses)); } catch {}
         }
         setCloudSyncStatus('synced');
       },
       (name, logo) => {
         if (name) {
-          setSchoolName(name);
+          setSchoolName((prev) => (prev === name ? prev : name));
           try { localStorage.setItem(`school_name_${schoolSlug}`, name); } catch {}
         }
         if (logo) {
-          setSchoolLogo(logo);
+          setSchoolLogo((prev) => (prev === logo ? prev : logo));
           try { localStorage.setItem('school_logo', logo); } catch {}
         }
       }

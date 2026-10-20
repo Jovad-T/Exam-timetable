@@ -574,17 +574,32 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
     );
   }, [daySchedule.bottomNotice]);
 
-  // Window resize listener
+  // Window resize listener (ignore tiny 1px subpixel/scrollbar fluctuations and lock body scroll in fullscreen)
   useEffect(() => {
     const handleResize = () => {
-      setWindowSize({
-        width: window.innerWidth,
-        height: window.innerHeight,
+      setWindowSize((prev) => {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        if (Math.abs(w - prev.width) <= 1 && Math.abs(h - prev.height) <= 1) {
+          return prev;
+        }
+        return { width: w, height: h };
       });
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (isFullscreen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prevOverflow;
+      };
+    }
+  }, [isFullscreen]);
 
   // Class attendance state - initialized with pre-configured class total count if set in admin settings
   // 학년/반 셋팅을 로컬 스토리지에 유지하여 새로고침 시에도 유지
@@ -839,24 +854,34 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           ? getPeriodSubjectsForClass(p.subjects, attendance.grade, attendance.classNum)
           : p.subjects;
 
+        const toSec = (timeStr: string) => {
+          const [h, m] = timeStr.split(':').map(Number);
+          return (h || 0) * 3600 + (m || 0) * 60;
+        };
+
+        const normTime = (timeStr: string) => {
+          const [h, m] = timeStr.split(':').map((v) => v.trim());
+          return `${String(Number(h) || 0).padStart(2, '0')}:${String(Number(m) || 0).padStart(2, '0')}`;
+        };
+
         effectiveSubjects.forEach((s) => {
           if (s.name) {
             const nameWithCode =
               s.subjectCode && !s.name.includes('(') ? `${s.name}(${s.subjectCode})` : s.name;
             if (!subjectList.includes(nameWithCode)) subjectList.push(nameWithCode);
           }
-          if (s.entryTime && !pEntry) pEntry = s.entryTime;
-          const match = s.time?.match(/(\d{1,2}:\d{2})\s*~\s*(\d{1,2}:\d{2})/);
+          if (s.entryTime && !pEntry) {
+            const entryMatch = s.entryTime.match(/(\d{1,2}:\d{2})/);
+            if (entryMatch) pEntry = normTime(entryMatch[1]);
+          }
+          const match = s.time?.match(/(\d{1,2}:\d{2})\s*[~-∼〜]\s*(\d{1,2}:\d{2})/);
           if (match) {
-            if (!pStart || match[1] < pStart) pStart = match[1];
-            if (!pEnd || match[2] > pEnd) pEnd = match[2];
+            const sNorm = normTime(match[1]);
+            const eNorm = normTime(match[2]);
+            if (!pStart || toSec(sNorm) < toSec(pStart)) pStart = sNorm;
+            if (!pEnd || toSec(eNorm) > toSec(pEnd)) pEnd = eNorm;
           }
         });
-
-        const toSec = (timeStr: string) => {
-          const [h, m] = timeStr.split(':').map(Number);
-          return (h || 0) * 3600 + (m || 0) * 60;
-        };
 
         const startSec = pStart ? toSec(pStart) : 0;
         const endSec = pEnd ? toSec(pEnd) : 0;
@@ -1482,9 +1507,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                   <span>{currentFullDate}</span>
                 </span>
               )}
-              <span className="text-xs sm:text-sm md:text-base font-black text-emerald-300 bg-emerald-950/70 px-3 py-1 rounded-xl border border-emerald-500/50 flex items-center gap-1.5 shadow-xs font-mono whitespace-nowrap">
+              <span className="text-xs sm:text-sm md:text-base font-black text-emerald-300 bg-emerald-950/70 px-3 py-1 rounded-xl border border-emerald-500/50 flex items-center gap-1.5 shadow-xs font-mono tabular-nums whitespace-nowrap">
                 <Clock className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
-                <span>{currentTime}</span>
+                <span className="inline-block min-w-[8ch] text-center">{currentTime}</span>
               </span>
 
               {/* 전자칠판 화면 밝기 조절 스크롤바 (아이들 눈부심 방지) */}
@@ -1796,21 +1821,21 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                   </h4>
                 </div>
 
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {/* 시험 종료 10분 전 / 시작 10분 전 인라인 배지 (레이아웃 높이 변화 없음) */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* 시험 종료 10분 전 / 시작 10분 전 인라인 배지 (고정 폭 및 레이아웃 높이 변화 없음) */}
                   {currentExam.isEndingSoon && (
-                    <div className="bg-rose-600 border-2 border-yellow-300 rounded-xl px-3 py-1 text-white font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-md">
+                    <div className="bg-rose-600 border-2 border-yellow-300 rounded-xl px-3 py-1 text-white font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-md whitespace-nowrap tabular-nums">
                       <AlertTriangle className="w-4 h-4 text-yellow-300 shrink-0" />
                       <span>
-                        [{currentExam.periodName} 종료 {alertMinutes}분 전] OMR 답안지 마킹 최종 점검 (남은 시간: {currentExam.remainingFormatted})
+                        [{currentExam.periodName} 종료 {alertMinutes}분 전] OMR 최종 점검 (남은 시간: {currentExam.remainingFormatted})
                       </span>
                     </div>
                   )}
                   {currentExam.isStartingSoon && !currentExam.subjectNames.includes('자습') && (
-                    <div className="bg-cyan-700 border-2 border-yellow-300 rounded-xl px-3 py-1 text-white font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-md">
+                    <div className="bg-cyan-700 border-2 border-yellow-300 rounded-xl px-3 py-1 text-white font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-md whitespace-nowrap tabular-nums">
                       <Bell className="w-4 h-4 text-yellow-300 shrink-0" />
                       <span>
-                        [시험 시작 10분 전] 곧 {currentExam.periodName} ({currentExam.subjectNames}) 시작 · 입실 완료
+                        [시험 시작 10분 전] 곧 {currentExam.periodName} 시작 · 입실 완료
                       </span>
                     </div>
                   )}
@@ -2474,7 +2499,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               </div>
             ) : (
               <>
-                <div className="flex-1 text-center">
+                <div className="flex-1 min-w-0 overflow-hidden text-center">
                   <p
                     className={`${isMockAll ? 'text-sm sm:text-base md:text-lg lg:text-xl' : 'text-base sm:text-xl md:text-2xl lg:text-3xl'} font-black ${
                       currentExam.isEndingSoon
@@ -2482,7 +2507,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                         : currentExam.isStartingSoon
                         ? 'text-cyan-300'
                         : currentTheme.bottomNoticeText
-                    } tracking-wider sm:tracking-widest drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] whitespace-nowrap text-center`}
+                    } tracking-wider sm:tracking-widest drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] whitespace-nowrap truncate text-center`}
                   >
                     {currentExam.isEndingSoon
                       ? `※ [${currentExam.periodName} 시험 종료 ${alertMinutes}분 전] OMR 답안지 마킹 실수가 없는지 최종 확인하시기 바랍니다 ※`
@@ -3017,42 +3042,42 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 {/* 실시간 시험 진행 상태 표시 (사용자 요청: Progress Bar 및 상태박스 모두 제거) */}
 
                 {/* 1. 과목명 (Extra Large High-Visibility Headline) */}
-                <div className="bg-gradient-to-b from-slate-900 via-[#0c121d] to-slate-950 rounded-3xl p-5 sm:p-7 border-4 border-yellow-400 shadow-[0_10px_35px_rgba(0,0,0,0.95)] text-center relative overflow-hidden group">
-                  <h3 className="text-[clamp(1.5rem,4vw,4rem)] font-black text-yellow-300 tracking-tight drop-shadow-[0_4px_12px_rgba(0,0,0,0.95)] leading-tight">
+                <div className="bg-gradient-to-b from-slate-900 via-[#0c121d] to-slate-950 rounded-3xl p-4 sm:p-5 border-4 border-yellow-400 shadow-[0_10px_35px_rgba(0,0,0,0.95)] text-center relative overflow-hidden group">
+                  <h3 className="text-[clamp(1.5rem,3.6vw,3.5rem)] font-black text-yellow-300 tracking-tight drop-shadow-[0_4px_12px_rgba(0,0,0,0.95)] leading-tight truncate">
                     {primarySubject.subjectCode && !primarySubject.name.includes('(')
                       ? `${primarySubject.name}(${primarySubject.subjectCode})`
                       : primarySubject.name}
                   </h3>
                 </div>
 
-                {/* 2. 입실 시간, 시험시간, 시험 장소, 남은 시간 (4 Core Blocks) */}
+                {/* 2. 입실 시간, 현재 시간, 시험 시간, 남은 시험 시간 (4 Core Blocks - 고정 높이 및 줄바꿈 완전 차단) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   {/* 입실 시간 */}
-                  <div className="bg-white rounded-2xl p-4 sm:p-5 border-3 border-slate-300 shadow-xl flex items-center gap-4">
-                    <div className="w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
-                      <DoorOpen className="w-7 h-7 sm:w-9 sm:h-9" />
+                  <div className="bg-white rounded-2xl p-4 border-3 border-slate-300 shadow-xl flex items-center gap-3.5 h-[88px] sm:h-[96px] overflow-hidden">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                      <DoorOpen className="w-6 h-6 sm:w-8 sm:h-8" />
                     </div>
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <div className="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-wider">
                         입실 시간
                       </div>
-                      <div className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-950 font-mono tracking-tight">
+                      <div className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-950 font-mono tabular-nums tracking-tight whitespace-nowrap truncate">
                         {primarySubject.entryTime ? primarySubject.entryTime.replace('입실', '').trim() : '09:20'}
                       </div>
                     </div>
                   </div>
 
                   {/* 현재 시간 */}
-                  <div className="bg-white rounded-2xl p-4 sm:p-5 border-3 border-slate-300 shadow-xl flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-4 min-w-0">
-                      <div className="w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
-                        <Clock className="w-7 h-7 sm:w-9 sm:h-9" />
+                  <div className="bg-white rounded-2xl p-4 border-3 border-slate-300 shadow-xl flex items-center justify-between gap-3.5 h-[88px] sm:h-[96px] overflow-hidden">
+                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                        <Clock className="w-6 h-6 sm:w-8 sm:h-8" />
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-wider">
                           현재 시간
                         </div>
-                        <div className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-950 truncate tracking-tight font-mono">
+                        <div className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-950 whitespace-nowrap truncate tracking-tight font-mono tabular-nums">
                           {currentTime}
                         </div>
                       </div>
@@ -3060,19 +3085,19 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                   </div>
 
                   {/* 시험 시간 */}
-                  <div className="bg-white rounded-2xl p-4 sm:p-5 border-3 border-slate-300 shadow-xl flex items-center gap-4">
-                    <div className="w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-md">
-                      <Clock className="w-7 h-7 sm:w-9 sm:h-9" />
+                  <div className="bg-white rounded-2xl p-4 border-3 border-slate-300 shadow-xl flex items-center gap-3.5 h-[88px] sm:h-[96px] overflow-hidden">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-md">
+                      <Clock className="w-6 h-6 sm:w-8 sm:h-8" />
                     </div>
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <div className="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-wider">
                         시험 시간
                       </div>
-                      <div className="flex items-baseline gap-2.5 flex-wrap">
-                        <span className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-950 font-mono tracking-tight">
-                          {primarySubject.time}
+                      <div className="flex items-baseline gap-2 whitespace-nowrap overflow-hidden">
+                        <span className="text-xl sm:text-2xl md:text-3xl font-black text-slate-950 font-mono tabular-nums tracking-tight">
+                          {primarySubject.time.replace(/\s+/g, '')}
                         </span>
-                        <span className="text-lg sm:text-xl md:text-2xl font-black text-amber-700">
+                        <span className="text-sm sm:text-base md:text-lg font-black text-amber-700 shrink-0">
                           (총 {primarySubject.duration || 60}분)
                         </span>
                       </div>
@@ -3080,20 +3105,20 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                   </div>
 
                   {/* 남은 시험 시간 */}
-                  <div className="bg-slate-950 rounded-2xl p-4 sm:p-5 border-3 border-slate-700 shadow-xl flex items-center gap-4">
-                    <div className="w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-cyan-600 text-white flex items-center justify-center shrink-0 shadow-md">
-                      <Timer className="w-7 h-7 sm:w-9 sm:h-9 text-yellow-300" />
+                  <div className="bg-slate-950 rounded-2xl p-4 border-3 border-slate-700 shadow-xl flex items-center gap-3.5 h-[88px] sm:h-[96px] overflow-hidden">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-cyan-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                      <Timer className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-300" />
                     </div>
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <div className="text-xs sm:text-sm font-black text-slate-400 uppercase tracking-wider">
                         남은 시험 시간
                       </div>
-                      <div className="flex items-baseline gap-2.5 flex-wrap">
-                        <span className="text-2xl sm:text-3xl md:text-4xl font-black text-cyan-300 font-mono tracking-tight drop-shadow-xs">
+                      <div className="flex items-baseline gap-2 whitespace-nowrap overflow-hidden">
+                        <span className="text-xl sm:text-2xl md:text-3xl font-black text-cyan-300 font-mono tabular-nums tracking-tight drop-shadow-xs">
                           {currentExam.remainingFormatted}
                         </span>
-                        <span className="text-base sm:text-xl font-black text-emerald-400 font-mono">
-                          (진행률 : {currentExam.percent}%)
+                        <span className="text-xs sm:text-sm md:text-base font-black text-emerald-400 font-mono tabular-nums shrink-0">
+                          (진행률 {currentExam.percent.toFixed(1)}%)
                         </span>
                       </div>
                     </div>
@@ -3102,21 +3127,21 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
                 {/* 고정 높이 상태 안내 바 (종료 10분 전 / 시작 10분 전 / 일반 진행 시 레이아웃 높이 변화 0px 유지) */}
                 {currentExam.isEndingSoon ? (
-                  <div className="bg-rose-600 border-3 border-yellow-300 rounded-2xl py-3 px-4 text-center text-white font-black text-base sm:text-xl shadow-lg flex items-center justify-center gap-2.5">
-                    <AlertTriangle className="w-6 h-6 text-yellow-300 shrink-0" />
+                  <div className="bg-rose-600 border-2 border-yellow-300 rounded-2xl px-4 h-[48px] sm:h-[52px] text-center text-white font-black text-sm sm:text-lg shadow-lg flex items-center justify-center gap-2.5 overflow-hidden">
+                    <AlertTriangle className="w-5 h-5 text-yellow-300 shrink-0" />
                     <span className="truncate">
                       ※ 시험 종료 {alertMinutes}분 전! OMR 답안지 마킹 실수가 없는지 최종 확인하세요 ※
                     </span>
                   </div>
                 ) : currentExam.isStartingSoon && !currentExam.subjectNames.includes('자습') ? (
-                  <div className="bg-cyan-700 border-3 border-yellow-300 rounded-2xl py-3 px-4 text-center text-white font-black text-base sm:text-xl shadow-lg flex items-center justify-center gap-2.5">
-                    <Bell className="w-6 h-6 text-yellow-300 shrink-0" />
+                  <div className="bg-cyan-700 border-2 border-yellow-300 rounded-2xl px-4 h-[48px] sm:h-[52px] text-center text-white font-black text-sm sm:text-lg shadow-lg flex items-center justify-center gap-2.5 overflow-hidden">
+                    <Bell className="w-5 h-5 text-yellow-300 shrink-0" />
                     <span className="truncate">
                       [시험 시작 10분 전] 곧 {currentExam.periodName} ({currentExam.subjectNames}) 시험이 시작됩니다 · 입실 및 착석 완료
                     </span>
                   </div>
                 ) : (
-                  <div className="bg-slate-900/90 border-2 border-slate-700/80 rounded-2xl py-3 px-4 text-center text-slate-200 font-bold text-sm sm:text-base shadow-inner flex items-center justify-center gap-2">
+                  <div className="bg-slate-900/90 border-2 border-slate-700/80 rounded-2xl px-4 h-[48px] sm:h-[52px] text-center text-slate-200 font-bold text-sm sm:text-base shadow-inner flex items-center justify-center gap-2 overflow-hidden">
                     <Check className="w-5 h-5 text-emerald-400 shrink-0" />
                     <span className="truncate">
                       {otherElectives.length > 0
@@ -3136,9 +3161,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             <div
               className={`w-full text-center py-2.5 px-4 ${currentTheme.bottomNoticeBg} rounded-xl border-2 ${currentTheme.bottomNoticeBorder} shadow-lg flex items-center justify-between gap-3 group relative`}
             >
-              <div className="flex-1 text-center">
+              <div className="flex-1 min-w-0 overflow-hidden text-center">
                 <p
-                  className={`text-base sm:text-xl md:text-2xl lg:text-3xl font-black ${currentTheme.bottomNoticeText} tracking-wider sm:tracking-widest drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] whitespace-nowrap text-center`}
+                  className={`text-base sm:text-xl md:text-2xl lg:text-3xl font-black ${currentTheme.bottomNoticeText} tracking-wider sm:tracking-widest drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] whitespace-nowrap truncate text-center`}
                 >
                   {daySchedule.bottomNotice || '※ 시험 시작 10분 전까지 입실을 완료하여 주시기 바랍니다 ※'}
                 </p>
@@ -3171,10 +3196,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse shrink-0" />
 
           {/* Seconds Clock Display */}
-          <div className="flex items-center gap-2.5 bg-slate-950 px-4 py-2 rounded-2xl border-2 border-emerald-500/80 text-emerald-300 font-mono text-lg sm:text-2xl md:text-3xl font-black tracking-widest shadow-[0_0_25px_rgba(16,185,129,0.35)]">
+          <div className="flex items-center gap-2.5 bg-slate-950 px-4 py-2 rounded-2xl border-2 border-emerald-500/80 text-emerald-300 font-mono tabular-nums text-lg sm:text-2xl md:text-3xl font-black tracking-widest shadow-[0_0_25px_rgba(16,185,129,0.35)]">
             <Clock className="w-6 h-6 text-emerald-400 animate-pulse shrink-0" />
             <span className="whitespace-nowrap drop-shadow-[0_0_10px_rgba(16,185,129,0.6)]">
-              현재 시간 : {currentTime}
+              현재 시간 : <span className="inline-block min-w-[8ch] text-center">{currentTime}</span>
             </span>
           </div>
 
@@ -3470,9 +3495,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             </span>
 
             {/* Time Comparison: 현재 시간 vs 시험 종료 시간 */}
-            <div className="flex items-center gap-2 bg-slate-900 px-3 py-1 rounded-xl border border-slate-700/80 text-xs font-bold text-slate-300 font-mono shadow-inner">
+            <div className="flex items-center gap-2 bg-slate-900 px-3 py-1 rounded-xl border border-slate-700/80 text-xs font-bold text-slate-300 font-mono tabular-nums shadow-inner whitespace-nowrap">
               <span className="text-slate-400">현재</span>
-              <span className="text-emerald-400 font-black">{currentTime}</span>
+              <span className="text-emerald-400 font-black inline-block min-w-[8ch] text-center">{currentTime}</span>
               <span className="text-slate-500">➔</span>
               <span className="text-slate-400">종료</span>
               <span className="text-amber-400 font-black">{currentExam.endTime}</span>
@@ -3480,19 +3505,19 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           </div>
 
           {/* Right: Remaining Countdown Box and Progress Percentage */}
-          <div className="flex items-center gap-2.5 self-end lg:self-auto flex-wrap">
+          <div className="flex items-center gap-2.5 self-end lg:self-auto shrink-0">
             {/* Visual Countdown Box */}
             <div
-              className={`px-3.5 py-1 rounded-xl border flex items-center gap-2 shadow-inner ${
+              className={`px-3.5 py-1 rounded-xl border flex items-center gap-2 shadow-inner whitespace-nowrap ${
                 currentExam.isEndingSoon
                   ? 'bg-rose-900/90 border-rose-500 text-rose-100 animate-pulse'
                   : 'bg-slate-900 border-slate-700 text-cyan-300'
               }`}
             >
-              <Timer className={`w-4 h-4 ${currentExam.isEndingSoon ? 'text-yellow-300' : 'text-cyan-400'}`} />
+              <Timer className={`w-4 h-4 shrink-0 ${currentExam.isEndingSoon ? 'text-yellow-300' : 'text-cyan-400'}`} />
               <span className="text-xs font-bold text-slate-300">남은 시간:</span>
               <span
-                className={`font-mono font-black text-sm sm:text-base tracking-wider ${
+                className={`font-mono tabular-nums font-black text-sm sm:text-base tracking-wider inline-block min-w-[8.5ch] text-right ${
                   currentExam.isEndingSoon ? 'text-yellow-300' : 'text-cyan-300'
                 }`}
               >
@@ -3501,10 +3526,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             </div>
 
             {/* Progress Percentage Badge */}
-            <div className="bg-slate-900 px-3 py-1 rounded-xl border border-slate-700 text-xs font-bold flex items-center gap-1.5 shadow-inner">
+            <div className="bg-slate-900 px-3 py-1 rounded-xl border border-slate-700 text-xs font-bold flex items-center gap-1.5 shadow-inner whitespace-nowrap">
               <span className="text-slate-400">진행률:</span>
-              <span className="text-emerald-400 font-mono font-black text-sm">
-                {currentExam.percent}%
+              <span className="text-emerald-400 font-mono tabular-nums font-black text-sm inline-block min-w-[5.2ch] text-right">
+                {currentExam.percent.toFixed(1)}%
               </span>
             </div>
           </div>
