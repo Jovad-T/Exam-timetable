@@ -343,8 +343,11 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  const isInitialCloudLoadDoneRef = React.useRef<boolean>(false);
+
   React.useEffect(() => {
     if (!schoolSlug) return;
+    isInitialCloudLoadDoneRef.current = false;
     fetchSchoolScheduleFromCloud(schoolSlug)
       .then(({ scheduleData: cloudData, schoolName: cloudName, logoUrl, alertSettings: cloudAlertSettings, classTotals: cloudClassTotals, maxClasses: cloudMaxClasses }) => {
         if (cloudData && Array.isArray(cloudData) && cloudData.length > 0) {
@@ -354,6 +357,11 @@ export default function App() {
             return cleanedCloudData;
           });
           try { localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cleanedCloudData)); } catch {}
+        } else if (!isFirestoreQuotaExceeded()) {
+          console.info(`[FirebaseSync] No cloud schedule found for "${schoolSlug}". Seeding Firestore with current local schedule...`);
+          saveSchoolScheduleToCloud(schoolSlug, scheduleData, schoolName, schoolLogo, alertSettings, classTotals, maxClasses)
+            .then(() => setCloudSyncStatus('synced'))
+            .catch(() => setCloudSyncStatus('offline'));
         }
         if (cloudName) {
           setSchoolName((prev) => (prev === cloudName ? prev : cloudName));
@@ -382,8 +390,11 @@ export default function App() {
           try { localStorage.setItem('max_classes', String(cloudMaxClasses)); } catch {}
         }
       })
-      .catch((err) => { console.error('Failed to fetch initial data from cloud:', err); })
-      .finally(() => { setCloudSyncStatus('synced'); });
+      .catch((err) => { console.error('[FirebaseSync] Failed to fetch initial data from cloud:', err); })
+      .finally(() => {
+        isInitialCloudLoadDoneRef.current = true;
+        setCloudSyncStatus('synced');
+      });
 
     const unsubscribe = subscribeSchoolSchedule(
       schoolSlug,
@@ -418,6 +429,7 @@ export default function App() {
           setMaxClasses((prev) => (prev === cloudMaxClasses ? prev : cloudMaxClasses));
           try { localStorage.setItem('max_classes', String(cloudMaxClasses)); } catch {}
         }
+        isInitialCloudLoadDoneRef.current = true;
         setCloudSyncStatus('synced');
       },
       (name, logo) => {
@@ -479,23 +491,6 @@ export default function App() {
     }, 0);
   };
 
-  React.useEffect(() => {
-    if (!schoolSlug) return;
-    try {
-      localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(scheduleData));
-    } catch {}
-
-    if (appRole === 'admin' && cloudSyncStatus !== 'offline' && !isFirestoreQuotaExceeded()) {
-      const timer = setTimeout(() => {
-        setCloudSyncStatus('syncing');
-        saveSchoolScheduleToCloud(schoolSlug, scheduleData, schoolName, schoolLogo, alertSettings, classTotals, maxClasses)
-          .then(() => setCloudSyncStatus('synced'))
-          .catch(() => setCloudSyncStatus('offline'));
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [scheduleData, schoolSlug, schoolName, schoolLogo, appRole, alertSettings]);
-
   // 교실 모드 URL 또는 관련 URL 파라미터/localStorage 감지 시 자동으로 전체화면 활성화 및 상단바 제거
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -531,6 +526,27 @@ export default function App() {
   const [classTotals, setClassTotals] = useState<Record<string, string>>(() => {
     return safeParse<Record<string, string>>(`class_totals_${schoolSlug}`, {});
   });
+
+  React.useEffect(() => {
+    if (!schoolSlug) return;
+    try {
+      localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(scheduleData));
+    } catch {}
+
+    if (
+      appRole === 'admin' &&
+      isInitialCloudLoadDoneRef.current &&
+      !isFirestoreQuotaExceeded()
+    ) {
+      const timer = setTimeout(() => {
+        setCloudSyncStatus('syncing');
+        saveSchoolScheduleToCloud(schoolSlug, scheduleData, schoolName, schoolLogo, alertSettings, classTotals, maxClasses)
+          .then(() => setCloudSyncStatus('synced'))
+          .catch(() => setCloudSyncStatus('offline'));
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+  }, [scheduleData, schoolSlug, schoolName, schoolLogo, appRole, alertSettings, classTotals, maxClasses]);
 
   const handleUpdateAlertSettings = React.useCallback((newSettings: ExamAlertSettings) => {
     setAlertSettings(newSettings);

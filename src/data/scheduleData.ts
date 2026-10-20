@@ -38,17 +38,22 @@ export function cleanScheduleData(data: ScheduleData): ScheduleData {
   const filtered = data.filter((day) => !isSuneungSchedule(day));
 
   const upgraded = filtered.map((day) => {
-    // 2. Auto-upgrade any stale Mock Exam schedule to the date-agnostic mock bell schedule
+    // 2. Preserve user-customized mock exam schedule subjects while normalizing metadata
     if (
       day.id === 'day-mock-g12' ||
       day.date === '모의고사' ||
       (day.fullTitle && (day.fullTitle.includes('전국연합학력평가') || day.fullTitle.includes('모의고사')))
     ) {
+      const hasCustomSchedule = Array.isArray(day.schedule) && day.schedule.length > 0;
       return {
         ...mockDaySchedule,
-        fullTitle: '전국연합학력평가',
-        notice: '',
-        bottomNotice: '',
+        ...day,
+        id: 'day-mock-g12',
+        date: '모의고사',
+        fullTitle: day.fullTitle && !day.fullTitle.includes('10월 20일') ? day.fullTitle : '전국연합학력평가',
+        notice: cleanNoticeText(day.notice),
+        bottomNotice: day.bottomNotice ?? '',
+        schedule: hasCustomSchedule ? day.schedule : mockDaySchedule.schedule,
       };
     }
 
@@ -59,12 +64,9 @@ export function cleanScheduleData(data: ScheduleData): ScheduleData {
   });
 
   // Ensure date-agnostic mockDaySchedule is always present as the first item
-  const hasMock = upgraded.some((d) => d.id === 'day-mock-g12' || d.date === '모의고사');
+  const mockItem = upgraded.find((d) => d.id === 'day-mock-g12' || d.date === '모의고사') || mockDaySchedule;
 
-  const prefix: ScheduleData = [];
-  if (!hasMock) prefix.push(mockDaySchedule);
-
-  return [...prefix, ...upgraded.filter((d) => d.id !== 'day-mock-g12' && d.date !== '모의고사')];
+  return [mockItem, ...upgraded.filter((d) => d.id !== 'day-mock-g12' && d.date !== '모의고사')];
 }
 
 /**
