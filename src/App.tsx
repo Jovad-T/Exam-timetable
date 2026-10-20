@@ -33,6 +33,7 @@ import { InitialClassSetupModal } from './components/InitialClassSetupModal';
 import { ScheduleUploadCard } from './components/ScheduleUploadCard';
 import { SchoolSettingsCard } from './components/SchoolSettingsCard';
 import { ShareSchoolModal } from './components/ShareSchoolModal';
+import { ElectronUpdateBanner, ElectronUpdateCard } from './components/ElectronUpdateBanner';
 import { Sparkles, Calendar, BookOpen, Monitor, Code, RefreshCw, CheckCircle2, Palette, Hash, Grid, Cloud, Trash2, Sliders, Eye, EyeOff, Layers, Filter, Plus, Home, GraduationCap, Award, Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import { cleanSlug, generateSchoolSlug } from './utils/slugUtils';
 import { getTodayActiveTabId, findTodayScheduleDay, isTodayScheduleDay } from './utils/dateUtils';
@@ -1022,6 +1023,7 @@ export default function App() {
             setIsInitialClassSetupOpen(false);
           }}
         />
+        <ElectronUpdateBanner />
       </>
     );
   }
@@ -1062,6 +1064,7 @@ export default function App() {
           }} />
         )}
         <ImageUploaderModal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} onExtractSuccess={handleExtractSuccess} />
+        <ElectronUpdateBanner />
       </div>
     );
   }
@@ -1074,6 +1077,7 @@ export default function App() {
         ? 'bg-[#071a12] text-white overflow-hidden' 
         : 'bg-slate-100 text-slate-800 pb-16'
     } ${isFullscreen ? 'pb-0' : ''}`}>
+      <ElectronUpdateBanner />
       
       {!isFullscreen && (
         <div className="print:hidden">
@@ -1219,6 +1223,7 @@ export default function App() {
             {isSettingsExpanded && (
               <div className="space-y-6 pt-4 animate-fadeIn print:block">
                 <SchoolSettingsCard schoolName={schoolName} schoolSlug={schoolSlug} onSaveSchoolInfo={handleUpdateSchoolInfo} cloudSyncStatus={cloudSyncStatus} onOpenShareModal={() => setIsShareModalOpen(true)} onOpenClassroomMode={() => { changeAppRole('classroom'); setViewMode('board'); }} />
+                <ElectronUpdateCard />
                 <ScheduleUploadCard onOpenUpload={() => setIsUploadModalOpen(true)} onSwitchToBoard={() => { changeAppRole('classroom'); setViewMode('board'); }} />
                 <SchoolLogoCard schoolLogo={schoolLogo} onChangeLogo={handleUpdateSchoolLogo} fullTitle={currentDaySchedule?.fullTitle} />
                 <GeminiSettingsCard />

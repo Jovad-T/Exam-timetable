@@ -1,0 +1,38 @@
+appId: com.exam.timetable
+productName: Exam-Timetable
+copyright: Copyright © 2026 Exam-Timetable
+
+directories:
+  output: release
+  buildResources: public
+
+files:
+  - dist/**/*
+  - electron-main.js
+  - electron-preload.js
+  - public/app-icon.ico
+  - package.json
+  - node_modules/electron-updater/**/*
+
+win:
+  icon: public/app-icon.ico
+  artifactName: "${productName}-Setup-${version}.${ext}"
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+
+publish:
+  - provider: github
+    owner: your-github-username
+    repo: your-github-repo-name
+    releaseType: release
