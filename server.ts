@@ -302,27 +302,23 @@ app.post('/api/parse-roster', async (req, res) => {
     const parts: any[] = [];
     const isPdf = (mimeType && mimeType.includes('pdf')) || (fileBase64 && fileBase64.includes('application/pdf'));
 
-    if (extractedText) {
+    if (extractedText && String(extractedText).trim().length > 20) {
       parts.push({
-        text: `다음은 업로드된 전교 학생 명렬표/인원 현황 파일에서 추출된 데이터입니다:\n\n${extractedText.slice(0, 120000)}\n\n위 데이터를 정밀 분석하여 학년별·반별 총원(학생 수)을 JSON으로 추출해 주세요.`,
+        text: `다음은 업로드된 전교 학생 명렬표/인원 현황 파일에서 추출된 데이터입니다:\n\n${String(extractedText).slice(0, 80000)}\n\n위 데이터를 정밀 분석하여 학년별·반별 총원(학생 수)을 JSON으로 추출해 주세요.`,
       });
-    }
-
-    if (fileBase64) {
+    } else if (fileBase64) {
       const base64Data = fileBase64
         .replace(/^data:image\/\w+;base64,/, '')
         .replace(/^data:application\/pdf;base64,/, '');
       const effectiveMimeType = isPdf ? 'application/pdf' : (mimeType || 'image/jpeg');
       parts.push({ inlineData: { mimeType: effectiveMimeType, data: base64Data } });
-      if (!extractedText) {
-        parts.push({
-          text: `이 전교 학생 명렬표/학급 인원 현황 문서를 정밀 분석하여 학년별·반별 총원(학생 수)을 JSON으로 추출해 주세요.`,
-        });
-      }
+      parts.push({
+        text: `이 전교 학생 명렬표/학급 인원 현황 문서를 정밀 분석하여 학년별·반별 총원(학생 수)을 JSON으로 추출해 주세요.`,
+      });
     }
 
     const response = await clientAI.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: { parts },
       config: {
         systemInstruction,
@@ -381,9 +377,13 @@ app.post('/api/parse-roster', async (req, res) => {
     });
   } catch (error: any) {
     console.error('Roster Parsing Error:', error);
-    return res.status(500).json({
+    const errMsg = String(error?.message || '');
+    const isQuota = errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.toLowerCase().includes('quota');
+    return res.status(isQuota ? 429 : 500).json({
       success: false,
-      error: error.message || '명렬표 파일 분석 중 오류가 발생했습니다.',
+      error: isQuota
+        ? 'Gemini API 호출 할당량(Quota)을 초과했습니다. 잠시 후 다시 시도하거나 엑셀(.xlsx, .xls, .csv) 또는 텍스트 PDF 형식으로 첨부해 주세요.'
+        : (error.message || '명렬표 파일 분석 중 오류가 발생했습니다.'),
     });
   }
 });

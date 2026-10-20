@@ -26,12 +26,8 @@ export async function extractScheduleWithClientGemini(params: ExtractParams): Pr
 
   const reqModel = (modelChoice || '').toLowerCase();
   let geminiModel = 'gemini-3.8-flash';
-  if (reqModel.includes('pro')) {
-    geminiModel = 'gemini-1.5-pro';
-  } else if (reqModel.includes('2.0')) {
-    geminiModel = 'gemini-2.0-flash';
-  } else if (reqModel.includes('1.5')) {
-    geminiModel = 'gemini-1.5-flash';
+  if (reqModel.includes('lite')) {
+    geminiModel = 'gemini-3.1-flash-lite';
   } else {
     geminiModel = 'gemini-3.8-flash';
   }
