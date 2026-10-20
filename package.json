@@ -71,5 +71,13 @@
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2"
+  },
+  "allowScripts": {
+    "@firebase/util": true,
+    "@google/genai": true,
+    "electron": true,
+    "electron-winstaller": true,
+    "esbuild": true,
+    "protobufjs": true
   }
 }
