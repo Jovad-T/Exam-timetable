@@ -91,15 +91,13 @@ export default async function handler(req: any, res: any) {
 
     // 2. Map model to valid public Gemini models for reliability on Vercel
     const reqModel = (modelChoice || '').toLowerCase();
-    let geminiModel = 'gemini-3.8-flash';
+    let geminiModel = 'gemini-3-flash-preview';
     if (reqModel.includes('pro')) {
-      geminiModel = 'gemini-1.5-pro';
-    } else if (reqModel.includes('2.0')) {
-      geminiModel = 'gemini-2.0-flash';
-    } else if (reqModel.includes('1.5')) {
-      geminiModel = 'gemini-1.5-flash';
+      geminiModel = 'gemini-3.1-pro-preview';
+    } else if (reqModel.includes('lite')) {
+      geminiModel = 'gemini-3.1-flash-lite-preview';
     } else {
-      geminiModel = 'gemini-3.8-flash';
+      geminiModel = 'gemini-3-flash-preview';
     }
 
     const systemInstruction = `
