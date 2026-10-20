@@ -2,11 +2,37 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
   return {
     base: './',
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(), 
+      tailwindcss(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        devOptions: {
+          enabled: true,
+        },
+        manifest: {
+          name: 'AI School Timetable',
+          short_name: 'SchoolBoard',
+          description: 'Digital electronic board for school exams.',
+          theme_color: '#080c13',
+          background_color: '#080c13',
+          display: 'standalone',
+          icons: [
+            {
+              src: '/app-icon.svg',
+              sizes: 'any',
+              type: 'image/svg+xml',
+              purpose: 'any',
+            },
+          ],
+        },
+      }),
+    ],
     resolve: {
       alias: {
         '@': path.resolve('.'),
