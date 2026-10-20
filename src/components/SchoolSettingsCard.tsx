@@ -338,7 +338,7 @@ export const SchoolSettingsCard: React.FC<SchoolSettingsCardProps> = ({
               </div>
 
               <div className="flex items-center bg-slate-50 border-2 border-slate-200 focus-within:border-indigo-600 rounded-xl px-3 py-2 text-xs font-bold text-slate-500 focus-within:bg-white transition">
-                <span className="text-indigo-600 font-mono shrink-0 select-none">#school:</span>
+                <span className="text-indigo-600 font-mono shrink-0 select-none">/</span>
                 <input
                   type="text"
                   value={slugInput}
@@ -362,7 +362,7 @@ export const SchoolSettingsCard: React.FC<SchoolSettingsCardProps> = ({
                   className="w-full bg-transparent text-slate-900 font-black px-1.5 py-0.5 text-sm focus:outline-none font-mono"
                   required
                 />
-                <span className="text-slate-400 font-mono text-[11px] shrink-0 select-none">:(mode)</span>
+                <span className="text-slate-400 font-mono text-[11px] shrink-0 select-none">/classroom · /admin</span>
               </div>
               <p className="text-[11px] text-slate-500 flex items-center justify-between">
                 <span>학교명 입력 시 영문으로 자동 변환되며, 직접 수정도 가능합니다.</span>

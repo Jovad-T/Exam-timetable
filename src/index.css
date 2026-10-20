@@ -3,11 +3,12 @@
 html, body, #root {
   margin: 0;
   padding: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  min-height: 100vh;
   box-sizing: border-box;
-  overflow: hidden; /* 가로, 세로 스크롤 모두 완벽히 차단 */
-  background-color: #071a12; /* 최상단 배경색을 앱과 동일한 다크 그린으로 칠해 하얀 틈 원천 차단 */
+  overflow-x: hidden;
+  overflow-y: auto;
+  background-color: #071a12;
 }
 
 *, *:before, *:after {

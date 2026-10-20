@@ -1323,49 +1323,34 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       </div>
     );
 
-  // 전체(1~4교시) 선택 여부: 4개 교시 카드가 한 화면 안에 깔끔하게 모두 들어가도록 높이 및 스케일 동적 맞춤
+  // 전체(1~4교시) 선택 여부 및 실제 컨텐츠 높이를 기반으로 한 화면 안에 모든 내용이 들어가도록 동적 스케일 맞춤
   const isMockAll = isMockSchedule(daySchedule) && selectedMockPeriodId === 'all';
-  const BASE_HEIGHT = isMockAll ? 700 : 880;
+  const defaultBaseHeight = isMockAll ? 720 : 860;
+  const BASE_HEIGHT = Math.max(defaultBaseHeight, measuredBaseHeight);
 
   // Fullscreen Safe Margins:
-  // 상단 여백을 충분히 확보하여 전자칠판 상단 프레임 및 제목이 화면 위로 잘리거나 튀어나가지 않도록 설정
-  const topReservedSpace = isFullscreen ? (isMockAll ? 22.5 : 45) : 0;
-  const bottomReservedSpace = isFullscreen ? 36 : 0;
-  const sideReservedSpace = isFullscreen ? 40 : 0;
+  // 교실 배포용 전체화면에서 상단바 제거 및 상하 여백을 최소화하여 칠판 전체가 한 화면 안에 완벽히 들어오도록 설정
+  const topReservedSpace = 0;
+  const bottomReservedSpace = isFullscreen ? 8 : 0;
+  const sideReservedSpace = isFullscreen ? 16 : 0;
 
   const availableWidth = Math.max(360, windowSize.width - sideReservedSpace);
   const availableHeight = Math.max(300, windowSize.height - (topReservedSpace + bottomReservedSpace));
 
-  const targetScale = Math.min(availableHeight / BASE_HEIGHT, availableWidth / BASE_WIDTH);
-  const targetVerticalScale = targetScale;
-  const targetHorizontalScale = targetScale;
+  const targetVerticalScale = availableHeight / BASE_HEIGHT;
+  const targetHorizontalScale = availableWidth / BASE_WIDTH;
+  const targetScale = Math.min(targetVerticalScale, targetHorizontalScale);
 
   let autoCalculatedScale: number;
   let dynamicBaseWidth: number;
 
   if (fullscreenAspectMode === 'photo') {
-    // 칠판 컨테이너 비율(BASE_WIDTH/BASE_HEIGHT)과 화면 비율(availableWidth/availableHeight)을 비교하여
-    // 어느 한쪽도 잘리지 않도록 더 작은 비율을 선택하여 자동 스케일링
-    const containerAspect = BASE_WIDTH / BASE_HEIGHT;
-    const screenAspect = availableWidth / availableHeight;
-
-    if (screenAspect > containerAspect) {
-      // 화면이 더 가로로 길면 높이 기준으로 맞춤
-      autoCalculatedScale = targetVerticalScale;
-    } else {
-      // 화면이 더 세로로 길면 가로 기준으로 맞춤
-      autoCalculatedScale = targetHorizontalScale;
-    }
-    
-    // 상하좌우 안전 여백을 위한 스케일 배율 적용
-    autoCalculatedScale *= 0.94;
-    
+    autoCalculatedScale = targetScale * 0.985;
     dynamicBaseWidth = BASE_WIDTH;
   } else {
-    // [선택 모드] 가로 전체 확장: 와이드 화면 가로를 꽉 채우도록 베이스 너비 확장
     const idealBaseWidth = availableWidth / targetVerticalScale;
     dynamicBaseWidth = Math.round(Math.max(1380, idealBaseWidth));
-    autoCalculatedScale = targetVerticalScale * 0.94;
+    autoCalculatedScale = targetVerticalScale * 0.985;
   }
 
   const effectiveScale = scaleMode === 'auto' ? autoCalculatedScale : customScale;
@@ -1463,14 +1448,12 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
             {/* Badges: Date, Clock and Sound Alert Button */}
             <div className="flex items-center gap-2 flex-wrap min-w-0">
-              <span className="text-xs sm:text-sm md:text-base font-black text-yellow-300 bg-yellow-400/20 px-3 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs whitespace-nowrap">
-                <Calendar className="w-4 h-4 text-yellow-300 shrink-0" />
-                <span>
-                  {isMockSchedule(daySchedule)
-                    ? '모의고사 실시일'
-                    : currentFullDate}
+              {!isMockSchedule(daySchedule) && (
+                <span className="text-xs sm:text-sm md:text-base font-black text-yellow-300 bg-yellow-400/20 px-3 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs whitespace-nowrap">
+                  <Calendar className="w-4 h-4 text-yellow-300 shrink-0" />
+                  <span>{currentFullDate}</span>
                 </span>
-              </span>
+              )}
               <span className="text-xs sm:text-sm md:text-base font-black text-emerald-300 bg-emerald-950/70 px-3 py-1 rounded-xl border border-emerald-500/50 flex items-center gap-1.5 shadow-xs font-mono whitespace-nowrap">
                 <Clock className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
                 <span>{currentTime}</span>
@@ -2617,14 +2600,12 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 </h2>
               </div>
 
-              <span className="text-xs sm:text-sm md:text-base font-extrabold text-yellow-300 bg-yellow-400/20 px-3 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs whitespace-nowrap">
-                <Calendar className="w-4 h-4 text-yellow-300" />
-                <span>
-                  {isMockSchedule(daySchedule)
-                    ? '전국연합학력평가'
-                    : currentFullDate}
+              {!isMockSchedule(daySchedule) && (
+                <span className="text-xs sm:text-sm md:text-base font-extrabold text-yellow-300 bg-yellow-400/20 px-3 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs whitespace-nowrap">
+                  <Calendar className="w-4 h-4 text-yellow-300" />
+                  <span>{currentFullDate}</span>
                 </span>
-              </span>
+              )}
 
               {/* 전자칠판 화면 밝기 조절 스크롤바 (아이들 눈부심 방지) */}
               {renderBrightnessController('board')}
@@ -3561,251 +3542,16 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
     </div>
   );
 
-  // If in FULLSCREEN mode:
-  // 사용자 요청: "감지 해상도 부분은 안 보이게 해주고 마우스가 가면 나타나게 해줄래? 그 아래 부분이 윗부분까지 채워줘."
-  // 해상도 바를 마우스 호버 시에만 슬라이드 다운으로 나타나게 하고, 평소에는 완전 숨김 처리
-  // 상단 패딩을 최소화(pt-2)하여 칠판과 시계가 화면 상단까지 빈 공간 없이 꽉 차도록 확장
+  // If in FULLSCREEN mode (교실 배포용 전체화면):
+  // 상단바를 완전히 제거하고 그 공간만큼 위로 올려서 전자칠판 전체가 화면 안에 딱 맞게 들어가도록 구성
   if (isFullscreen) {
     return (
       <div
-        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center overflow-auto select-none pt-2 pb-2 px-2 transition-colors duration-500`}
-        onMouseMove={(e) => {
-          // 화면 최상단 55px 이내로 마우스가 올라오면 해상도 및 컨트롤러 노출
-          if (e.clientY <= 55) {
-            setIsHoveringTop(true);
-          } else if (e.clientY > 90 && !isInteractingTopBar) {
-            setIsHoveringTop(false);
-          }
-        }}
+        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center justify-start overflow-hidden select-none pt-1 pb-1 px-1 m-0 transition-colors duration-500`}
       >
-        {/* Fullscreen Floating Resolution & Auto-Fit Controller: 마우스 오버 시에만 나타남 */}
+        {/* Scaled Blackboard Container - 상단바 제거 공간만큼 위로 밀착 정렬 */}
         <div
-          onMouseEnter={() => {
-            setIsHoveringTop(true);
-            setIsInteractingTopBar(true);
-          }}
-          onMouseLeave={() => {
-            setIsInteractingTopBar(false);
-            setIsHoveringTop(false);
-          }}
-          className={`fixed top-0 left-0 right-0 z-50 flex flex-col items-center transition-all duration-300 ease-out pointer-events-none ${
-            isHoveringTop
-              ? 'translate-y-0 opacity-100 pointer-events-auto'
-              : '-translate-y-full opacity-0 pointer-events-none'
-          }`}
-        >
-          <div className="mt-2.5 bg-slate-950/95 backdrop-blur-md border border-slate-700/90 text-white px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-2.5 shadow-2xl pointer-events-auto max-w-[95vw] overflow-x-auto">
-            <div className="flex items-center gap-1.5 text-emerald-400 shrink-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span>
-                감지 해상도: {windowSize.width}×{windowSize.height} ({getAspectRatioString(windowSize.width, windowSize.height)})
-              </span>
-            </div>
-
-            <span className="text-slate-600 hidden sm:inline">|</span>
-
-            {/* 칠판 배경 텍스처 선택기 (흑연 다크 / 딥 에메랄드 / 미드나잇) */}
-            <div className="flex items-center gap-1 shrink-0 bg-slate-900/90 p-0.5 rounded-lg border border-slate-700/80">
-              <Palette className="w-3.5 h-3.5 text-amber-400 ml-1 hidden sm:inline shrink-0" />
-              <span className="text-[10px] text-slate-400 font-bold px-0.5 hidden md:inline">질감:</span>
-              {(['obsidian', 'emerald', 'midnight'] as BoardTheme[]).map((tKey) => {
-                const cfg = THEME_CONFIGS[tKey];
-                return (
-                  <button
-                    key={tKey}
-                    onClick={() => handleUpdateBoardTheme(tKey)}
-                    className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
-                      boardTheme === tKey
-                        ? 'bg-amber-400 text-slate-950 shadow-xs'
-                        : 'text-slate-300 hover:text-white hover:bg-slate-800'
-                    }`}
-                    title={`${cfg.name} - ${cfg.desc}`}
-                  >
-                    <span>{cfg.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <span className="text-slate-600 hidden sm:inline">|</span>
-
-            {/* 전자칠판 화면 밝기 조절 스크롤바 (아이들 눈부심 방지) */}
-            {renderBrightnessController('compact')}
-
-            {/* Fullscreen Exam Mode / Date Switcher */}
-            {onChangeExamMode && (
-              <>
-                <span className="text-slate-600 hidden sm:inline">|</span>
-                <div className="flex items-center gap-1 shrink-0 bg-slate-900/90 p-0.5 rounded-lg border border-slate-700/80">
-                  <button
-                    onClick={() => onChangeExamMode('regular')}
-                    className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
-                      examMode === 'regular' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    정기고사
-                  </button>
-                  <button
-                    onClick={() => onChangeExamMode('mock')}
-                    className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
-                      examMode === 'mock' ? 'bg-purple-600 text-white' : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    모의고사
-                  </button>
-                </div>
-              </>
-            )}
-
-            {allDays && allDays.length > 1 && onSelectDay && (
-              <>
-                <span className="text-slate-600 hidden sm:inline">|</span>
-                <div className="flex items-center gap-1 shrink-0 bg-slate-900/90 p-0.5 rounded-lg border border-slate-700/80">
-                  <span className="text-[10px] text-slate-400 font-bold px-1 hidden md:inline">시험일:</span>
-                  {allDays.map((d) => {
-                    const isSelected = daySchedule.id === d.id || daySchedule.date === d.date;
-                    const isToday = isTodayScheduleDay(d);
-                    const isMk = isMockSchedule(d);
-                    const isReg = isRegularSchedule(d);
-
-                    return (
-                      <button
-                        key={d.id || d.date}
-                        onClick={() => onSelectDay(d.id || d.date)}
-                        className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
-                          isSelected
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : isToday
-                            ? 'bg-amber-950/80 text-yellow-300 border border-yellow-500/50 hover:bg-amber-900'
-                            : 'text-slate-300 hover:text-white hover:bg-slate-800'
-                        }`}
-                        title={d.fullTitle || `${d.date} 시간표`}
-                      >
-                        <span>{isMk ? '모의고사' : d.date}</span>
-                        {isMk && (
-                          <span className="text-[9px] bg-purple-400 text-white px-1 rounded-xs font-black">
-                            모의
-                          </span>
-                        )}
-                        {isReg && (
-                          <span className="text-[9px] bg-emerald-500/30 text-emerald-300 px-1 rounded-xs font-black">
-                            정기
-                          </span>
-                        )}
-                        {isToday && (
-                          <span className="text-[9px] bg-yellow-400 text-slate-950 font-black px-1 rounded-xs">
-                            오늘
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-
-
-
-            {/* Simulation / Test Mode Switcher in Fullscreen */}
-            <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-lg border border-slate-700/80 text-xs shrink-0">
-              <span className="text-amber-400 text-[10px] font-bold px-1 hidden md:inline">테스트:</span>
-              <button
-                type="button"
-                onClick={() => setSimMode('realtime')}
-                className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
-                  simMode === 'realtime' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:text-white'
-                }`}
-                title="실제 시스템 시간 모드"
-              >
-                실시간
-              </button>
-              <button
-                type="button"
-                onClick={() => setSimMode('p1')}
-                className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
-                  simMode === 'p1' ? 'bg-amber-600 text-white' : 'text-slate-300 hover:text-white'
-                }`}
-                title="1교시 진행 중 테스트"
-              >
-                1교시중
-              </button>
-              <button
-                type="button"
-                onClick={() => setSimMode('p2')}
-                className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
-                  simMode === 'p2' ? 'bg-amber-600 text-white' : 'text-slate-300 hover:text-white'
-                }`}
-                title="2교시 진행 중 테스트"
-              >
-                2교시중
-              </button>
-              <button
-                type="button"
-                onClick={() => setSimMode('warningAlert')}
-                className={`px-2 py-0.5 rounded-md text-[10px] font-black transition cursor-pointer ${
-                  simMode === 'warningAlert' ? 'bg-rose-600 text-white' : 'text-slate-300 hover:text-white'
-                }`}
-                title="시험 임박 경고 테스트"
-              >
-                종료임박
-              </button>
-            </div>
-
-            <span className="text-slate-600 hidden sm:inline">|</span>
-
-            <span className="text-slate-300 shrink-0 hidden sm:inline">
-              배율: <strong className="text-emerald-400 font-mono">{Math.round(effectiveScale * 100)}%</strong>
-            </span>
-
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                onClick={() => {
-                  const current = scaleMode === 'auto' ? autoCalculatedScale : customScale;
-                  setScaleMode('custom');
-                  setCustomScale(Math.max(0.3, Number((current - 0.05).toFixed(2))));
-                }}
-                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 text-xs transition cursor-pointer font-bold"
-                title="축소"
-              >
-                -
-              </button>
-              <button
-                onClick={() => setScaleMode('auto')}
-                className={`px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer ${
-                  scaleMode === 'auto'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'bg-slate-800 hover:bg-slate-700 text-emerald-400'
-                }`}
-                title="화면에 맞춰 자동 배율 리셋"
-              >
-                자동
-              </button>
-              <button
-                onClick={() => {
-                  const current = scaleMode === 'auto' ? autoCalculatedScale : customScale;
-                  setScaleMode('custom');
-                  setCustomScale(Math.min(1.8, Number((current + 0.05).toFixed(2))));
-                }}
-                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 text-xs transition cursor-pointer font-bold"
-                title="확대"
-              >
-                +
-              </button>
-            </div>
-
-            <button
-              onClick={toggleFullscreen}
-              className="text-rose-300 hover:text-white flex items-center gap-1 text-[11px] bg-rose-950/80 px-2.5 py-0.5 rounded-lg border border-rose-800/80 transition cursor-pointer shrink-0"
-            >
-              <Minimize2 className="w-3 h-3" />
-              <span>창 모드</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Scaled Blackboard Container - 상단 여백을 안정적으로 확보하고 자연스럽게 정렬 */}
-        <div
-          className="relative shrink-0 flex items-center justify-center my-auto"
+          className="relative shrink-0 flex items-start justify-center mx-auto"
           style={{
             width: `${scaledWidth}px`,
             height: `${scaledHeight}px`,
@@ -3919,7 +3665,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
   // Normal Window Mode Layout
   return (
-    <div ref={!isFullscreen ? boardContainerRef : undefined} className="max-w-[1380px] mx-auto w-full px-2 sm:px-4 space-y-3">
+    <div ref={!isFullscreen ? boardContainerRef : undefined} className="max-w-[1380px] mx-auto w-full px-0 sm:px-0 space-y-2">
       {renderClockAndControls()}
       <div
         style={{

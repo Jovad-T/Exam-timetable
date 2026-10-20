@@ -61,6 +61,14 @@ export default function App() {
   const [schoolSlug, setSchoolSlug] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       try {
+        const pathParts = window.location.pathname.split('/').filter(Boolean);
+        if (pathParts.length >= 2 && (pathParts[pathParts.length - 1] === 'admin' || pathParts[pathParts.length - 1] === 'classroom')) {
+          const slugFromPath = cleanSlug(decodeURIComponent(pathParts[pathParts.length - 2]), true);
+          if (slugFromPath) return slugFromPath;
+        }
+        const params = new URLSearchParams(window.location.search);
+        const qSchool = params.get('school');
+        if (qSchool) return cleanSlug(qSchool, true) || 'korea-high';
         const hash = decodeURIComponent(window.location.hash.replace('#', ''));
         if (hash.startsWith('school:')) {
           const parts = hash.split(':');
@@ -192,12 +200,35 @@ export default function App() {
   };
 
   const [copied, setCopied] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<'board' | 'developer'>('board');
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [viewMode, setViewMode] = useState<'board' | 'developer'>('developer');
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const path = window.location.pathname.replace(/\/+$/, '');
+        const params = new URLSearchParams(window.location.search);
+        const hash = decodeURIComponent(window.location.hash.replace('#', ''));
+        const savedRole = localStorage.getItem('current_app_role');
+        const autoFs = localStorage.getItem('classroom_auto_fullscreen');
+        if (
+          path.endsWith('/classroom') ||
+          params.get('mode') === 'classroom' ||
+          params.get('fullscreen') === 'true' ||
+          params.get('fullscreen') === '1' ||
+          hash.includes(':classroom') ||
+          hash === 'classroom' ||
+          savedRole === 'classroom' ||
+          autoFs === 'true'
+        ) {
+          return true;
+        }
+      } catch {}
+    }
+    return false;
+  });
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'offline'>(() => {
     return isFirestoreQuotaExceeded() ? 'offline' : 'synced';
   });
-  const [isSettingsExpanded, setIsSettingsExpanded] = useState<boolean>(false);
+  const [isSettingsExpanded, setIsSettingsExpanded] = useState<boolean>(true);
 
   const [alertSettings, setAlertSettings] = useState<ExamAlertSettings>(() => {
     return safeParse<ExamAlertSettings>('exam_alert_settings', {
@@ -230,18 +261,40 @@ export default function App() {
   const [appRole, setAppRole] = useState<'selector' | 'classroom' | 'admin'>(() => {
     if (typeof window !== 'undefined') {
       try {
+        const path = window.location.pathname.replace(/\/+$/, '');
+        const params = new URLSearchParams(window.location.search);
         const hash = decodeURIComponent(window.location.hash.replace('#', ''));
-        if (hash.startsWith('school:')) {
-          const parts = hash.split(':');
-          const r = parts[2] as any;
-          if (r === 'classroom' || r === 'admin' || r === 'selector') return r;
+
+        if (path.endsWith('/admin') || params.get('mode') === 'admin' || hash.includes(':admin') || hash === 'admin') {
+          return 'admin';
         }
-        if (hash === 'selector' || hash === 'classroom' || hash === 'admin') {
-          return hash;
+
+        // URL 파라미터(?exam=regular|mock, ?direct=1, ?fullscreen=1) 또는 localStorage에 이미 교실 설정이 완료된 경우 즉시 교실 전체화면 진입
+        const examParam = params.get('exam') || params.get('examMode');
+        const directParam = params.get('direct') === '1' || params.get('fullscreen') === '1' || params.get('mode') === 'classroom';
+        const savedRole = localStorage.getItem('current_app_role');
+        const activeSlug = (() => {
+          const pathParts = path.split('/').filter(Boolean);
+          if (pathParts.length >= 2 && pathParts[pathParts.length - 1] === 'classroom') {
+            return cleanSlug(decodeURIComponent(pathParts[pathParts.length - 2]), true) || 'korea-high';
+          }
+          return params.get('school') || localStorage.getItem('current_school_slug') || 'korea-high';
+        })();
+        const hasSavedClassroomConfig = Boolean(localStorage.getItem(`class_attendance_settings_${activeSlug}`));
+
+        if (
+          examParam === 'regular' ||
+          examParam === 'mock' ||
+          directParam ||
+          hash.includes(':classroom') ||
+          hash === 'classroom' ||
+          (path.endsWith('/classroom') && (savedRole === 'classroom' || hasSavedClassroomConfig))
+        ) {
+          return 'classroom';
         }
-        const savedRole = localStorage.getItem('current_app_role') as any;
-        if (savedRole === 'classroom' || savedRole === 'admin') {
-          return savedRole;
+
+        if (path.endsWith('/classroom')) {
+          return 'selector';
         }
       } catch {}
     }
@@ -249,14 +302,56 @@ export default function App() {
   });
 
   const changeAppRole = (role: 'selector' | 'classroom' | 'admin', slug: string = schoolSlug) => {
+    const cleanTargetSlug = cleanSlug(slug, true) || 'korea-high';
     setAppRole(role);
-    setSchoolSlug(slug);
+    setSchoolSlug(cleanTargetSlug);
+    if (role === 'admin') {
+      setViewMode('developer');
+      setIsFullscreen(false);
+    } else if (role === 'classroom') {
+      setViewMode('board');
+      setIsFullscreen(true);
+    } else if (role === 'selector') {
+      setIsFullscreen(false);
+    }
     if (typeof window !== 'undefined') {
+      const targetEndpoint = role === 'admin' ? 'admin' : 'classroom';
+      const path = `/${cleanTargetSlug}/${targetEndpoint}`;
+      if (window.location.pathname !== path) {
+        window.history.pushState({}, '', path);
+      }
       try {
         localStorage.setItem('current_app_role', role);
+        localStorage.setItem('current_school_slug', cleanTargetSlug);
+        localStorage.setItem('classroom_auto_fullscreen', role === 'classroom' ? 'true' : 'false');
       } catch {}
     }
   };
+
+  React.useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname.replace(/\/+$/, '');
+      const pathParts = path.split('/').filter(Boolean);
+      if (pathParts.length >= 2 && (pathParts[pathParts.length - 1] === 'admin' || pathParts[pathParts.length - 1] === 'classroom')) {
+        const slugFromPath = cleanSlug(decodeURIComponent(pathParts[pathParts.length - 2]), true);
+        if (slugFromPath) setSchoolSlug(slugFromPath);
+      }
+      if (path.endsWith('/admin')) {
+        setAppRole('admin');
+        setViewMode('developer');
+        setIsFullscreen(false);
+      } else if (path.endsWith('/classroom')) {
+        setAppRole('classroom');
+        setViewMode('board');
+        setIsFullscreen(true);
+      } else {
+        setAppRole('selector');
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   React.useEffect(() => {
     if (!schoolSlug) return;
@@ -328,6 +423,13 @@ export default function App() {
 
     const currentRole = appRole === 'classroom' ? 'classroom' : 'admin';
     setAppRole(currentRole);
+    if (typeof window !== 'undefined') {
+      const targetEndpoint = currentRole === 'admin' ? 'admin' : 'classroom';
+      const newPath = `/${processedSlug}/${targetEndpoint}`;
+      if (window.location.pathname !== newPath) {
+        window.history.pushState({}, '', newPath);
+      }
+    }
 
     setTimeout(() => {
       setCloudSyncStatus('syncing');
@@ -369,9 +471,21 @@ export default function App() {
     }
   }, [scheduleData, schoolSlug, schoolName, schoolLogo, appRole, alertSettings]);
 
+  // 교실 모드 URL 또는 관련 URL 파라미터/localStorage 감지 시 자동으로 전체화면 활성화 및 상단바 제거
   React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const examParam = params.get('exam') || params.get('examMode');
+    if (examParam === 'regular' || examParam === 'mock') {
+      handleSelectExamMode(examParam);
+    }
+
     if (appRole === 'classroom') {
       setIsFullscreen(true);
+      setViewMode('board');
+      try {
+        localStorage.setItem('classroom_auto_fullscreen', 'true');
+      } catch {}
       if (typeof document !== 'undefined' && !document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(() => {});
       }
@@ -398,18 +512,27 @@ export default function App() {
 
   React.useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      // 교실 모드일 때는 브라우저 네이티브 전체화면 여부와 무관하게 항상 전체화면 레이아웃(상단바 제거) 유지
+      if (appRole === 'classroom') {
+        setIsFullscreen(true);
+      } else {
+        setIsFullscreen(Boolean(document.fullscreenElement));
+      }
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
+  }, [appRole]);
 
   const handleToggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch((e) => console.log(e));
+      setIsFullscreen(true);
+      document.documentElement.requestFullscreen().catch(() => {});
     } else {
       if (document.exitFullscreen) {
-        document.exitFullscreen().catch((e) => console.log(e));
+        document.exitFullscreen().catch(() => {});
+      }
+      if (appRole !== 'classroom') {
+        setIsFullscreen(false);
       }
     }
   };
@@ -673,9 +796,9 @@ export default function App() {
 
   if (appRole === 'classroom') {
     return (
-      <div className={`min-h-screen bg-slate-950 text-white font-sans ${isFullscreen ? 'p-0 m-0' : 'pb-10'}`}>
+      <div className="w-screen h-screen overflow-hidden bg-[#071a12] text-white font-sans p-0 m-0">
         <ElectronicBoard
-          daySchedule={currentDaySchedule} allDays={modeFilteredSchedules} onSelectDay={(dayId) => setActiveTab(dayId)} examMode={examMode} onChangeExamMode={handleSelectExamMode} onOpenUploadModal={() => setIsUploadModalOpen(true)} isFullscreen={isFullscreen} onToggleFullscreen={handleToggleFullscreen} onUpdateBottomNotice={handleUpdateBottomNotice} onUpdateTopNotice={handleUpdateTopNotice} alertSettings={alertSettings} onChangeAlertSettings={handleUpdateAlertSettings} selectedGrade={selectedGrade} onSelectGrade={setSelectedGrade} schoolLogo={schoolLogo} onUpdateSchoolLogo={handleUpdateSchoolLogo} schoolName={schoolName} boardTheme={boardTheme} onUpdateBoardTheme={handleUpdateBoardTheme} maxClasses={maxClasses}
+          daySchedule={currentDaySchedule} allDays={modeFilteredSchedules} onSelectDay={(dayId) => setActiveTab(dayId)} examMode={examMode} onChangeExamMode={handleSelectExamMode} onOpenUploadModal={() => setIsUploadModalOpen(true)} isFullscreen={true} onToggleFullscreen={handleToggleFullscreen} onUpdateBottomNotice={handleUpdateBottomNotice} onUpdateTopNotice={handleUpdateTopNotice} alertSettings={alertSettings} onChangeAlertSettings={handleUpdateAlertSettings} selectedGrade={selectedGrade} onSelectGrade={setSelectedGrade} schoolLogo={schoolLogo} onUpdateSchoolLogo={handleUpdateSchoolLogo} schoolName={schoolName} boardTheme={boardTheme} onUpdateBoardTheme={handleUpdateBoardTheme} maxClasses={maxClasses}
           onSwitchToAdmin={() => { changeAppRole('admin'); setViewMode('developer'); }}
           onSwitchToSelector={() => { changeAppRole('selector'); }}
           onUpdateTargetClass={(periodIdx, subIdx, newTargetClass) => {
@@ -778,17 +901,20 @@ export default function App() {
       <main className={
         viewMode === 'board' || isFullscreen
           ? "w-full p-0 m-0 flex-1 overflow-hidden flex flex-col" 
-          : "w-full px-3 sm:px-5 lg:px-8 pt-6 space-y-6 overflow-x-hidden flex-1"
+          : "w-full max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 pt-6 space-y-6 flex-1"
       }>
         
         {viewMode === 'board' ? (
-          <ElectronicBoard
-            daySchedule={currentDaySchedule} allDays={modeFilteredSchedules} onSelectDay={(dayId) => setActiveTab(dayId)} examMode={examMode} onChangeExamMode={handleSelectExamMode} onOpenUploadModal={() => setIsUploadModalOpen(true)} isFullscreen={isFullscreen} onToggleFullscreen={handleToggleFullscreen} onUpdateBottomNotice={handleUpdateBottomNotice} onUpdateTopNotice={handleUpdateTopNotice} alertSettings={alertSettings} onChangeAlertSettings={handleUpdateAlertSettings} selectedGrade={selectedGrade} onSelectGrade={setSelectedGrade} schoolLogo={schoolLogo} onUpdateSchoolLogo={handleUpdateSchoolLogo} schoolName={schoolName} boardTheme={boardTheme} onUpdateBoardTheme={handleUpdateBoardTheme}
-            onUpdateTargetClass={(periodIdx, subIdx, newTargetClass) => {
-              const dayIdx = scheduleData.findIndex((d) => d.id === currentDaySchedule.id || d.date === currentDaySchedule.date);
-              if (dayIdx !== -1) handleQuickEditTargetClass(dayIdx, periodIdx, subIdx, newTargetClass);
-            }}
-          />
+          <div className="relative flex-1 flex flex-col">
+            <ElectronicBoard
+              daySchedule={currentDaySchedule} allDays={modeFilteredSchedules} onSelectDay={(dayId) => setActiveTab(dayId)} examMode={examMode} onChangeExamMode={handleSelectExamMode} onOpenUploadModal={() => setIsUploadModalOpen(true)} isFullscreen={isFullscreen} onToggleFullscreen={handleToggleFullscreen} onUpdateBottomNotice={handleUpdateBottomNotice} onUpdateTopNotice={handleUpdateTopNotice} alertSettings={alertSettings} onChangeAlertSettings={handleUpdateAlertSettings} selectedGrade={selectedGrade} onSelectGrade={setSelectedGrade} schoolLogo={schoolLogo} onUpdateSchoolLogo={handleUpdateSchoolLogo} schoolName={schoolName} boardTheme={boardTheme} onUpdateBoardTheme={handleUpdateBoardTheme}
+              onSwitchToAdmin={() => { setViewMode('developer'); setIsFullscreen(false); }}
+              onUpdateTargetClass={(periodIdx, subIdx, newTargetClass) => {
+                const dayIdx = scheduleData.findIndex((d) => d.id === currentDaySchedule.id || d.date === currentDaySchedule.date);
+                if (dayIdx !== -1) handleQuickEditTargetClass(dayIdx, periodIdx, subIdx, newTargetClass);
+              }}
+            />
+          </div>
         ) : (
           <>
             <TimetableGrid

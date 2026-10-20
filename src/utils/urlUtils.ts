@@ -35,9 +35,8 @@ export function getBaseUrl(overrideDomain?: string): string {
     if (origin.includes('ais-dev-')) {
       origin = origin.replace('ais-dev-', 'ais-pre-');
     }
-    const pathname = window.location.pathname.replace(/\/+$/, '');
     if (origin && origin !== 'null') {
-      return `${origin}${pathname}`;
+      return origin;
     }
   }
 
@@ -74,11 +73,11 @@ export function getSchoolUrl(
   const base = getBaseUrl(overrideDomain);
   const activeSlug = cleanSlug(schoolSlug, true) || 'korea-high';
 
-  if (role === 'selector') {
-    return `${base}/#selector`;
+  if (role === 'admin') {
+    return `${base}/${activeSlug}/admin`;
   }
 
-  return `${base}/#school:${activeSlug}:${role}`;
+  return `${base}/${activeSlug}/classroom`;
 }
 
 /**
