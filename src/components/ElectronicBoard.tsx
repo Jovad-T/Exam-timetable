@@ -2649,17 +2649,63 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       attendance.grade,
       attendance.classNum
     );
-    const primarySubject =
-      classMatchedSubjects[0] ||
-      targetSubjects[0] || {
-        id: 'sub-def',
-        name: '시험 과목',
-        subjectCode: '',
-        time: '09:20~10:20',
-        duration: 60,
-        entryTime: '09:10',
-        targetClass: `${attendance.grade}학년 ${attendance.classNum}반 교실`,
+    const korea = getKoreaDate();
+    const nowSec = korea.hours * 3600 + korea.minutes * 60 + korea.seconds;
+
+    const parseSecs = (timeStr: string) => {
+      if (!timeStr || !timeStr.includes('~')) return { start: 0, end: 0 };
+      const [s, e] = timeStr.split('~').map(x => x.trim());
+      const [sh, sm] = s.split(':').map(Number);
+      const [eh, em] = e.split(':').map(Number);
+      return {
+        start: (sh || 0) * 3600 + (sm || 0) * 60,
+        end: (eh || 0) * 3600 + (em || 0) * 60,
       };
+    };
+
+    const pool = classMatchedSubjects.length > 0 ? classMatchedSubjects : targetSubjects;
+    let selectedSubject = pool[0] || {
+      id: 'sub-def',
+      name: '시험 과목',
+      subjectCode: '',
+      time: '09:20~10:20',
+      duration: 60,
+      entryTime: '09:10',
+      targetClass: `${attendance.grade}학년 ${attendance.classNum}반 교실`,
+    };
+
+    if (pool.length > 1) {
+      const ongoing = pool.find(sub => {
+        const { start, end } = parseSecs(sub.time);
+        return nowSec >= start && nowSec <= end;
+      });
+      if (ongoing) {
+        selectedSubject = ongoing;
+      } else {
+        const upcoming = pool.find(sub => {
+          const { start } = parseSecs(sub.time);
+          return nowSec < start;
+        });
+        if (upcoming) {
+          selectedSubject = upcoming;
+        } else {
+          selectedSubject = pool[pool.length - 1];
+        }
+      }
+    }
+    const primarySubject = selectedSubject;
+
+    const subTimes = parseSecs(primarySubject.time);
+    const isSubjectUpcoming = nowSec < subTimes.start;
+    const isSubjectEnded = nowSec > subTimes.end;
+    const subjectRemainingSec = Math.max(0, subTimes.end - nowSec);
+    const subjectRemainingFormatted = isSubjectUpcoming 
+      ? `${primarySubject.time.split('~')[0].trim()} 시작 대기` 
+      : (isSubjectEnded ? '시험 종료' : formatRemaining(subjectRemainingSec));
+    const subjectTotalSec = Math.max(1, subTimes.end - subTimes.start);
+    const subjectElapsedSec = Math.max(0, nowSec - subTimes.start);
+    const subjectPercent = Math.min(100, Math.max(0, (subjectElapsedSec / subjectTotalSec) * 100));
+
     const otherElectives = targetSubjects.filter((s) => !classMatchedSubjects.includes(s));
 
     const isCurrentActivePeriod =
@@ -3122,89 +3168,91 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
                 {/* 실시간 시험 진행 상태 표시 (사용자 요청: Progress Bar 및 상태박스 모두 제거) */}
 
-                {/* 1. 과목명 (Extra Large High-Visibility Headline) */}
-                <div className="bg-gradient-to-b from-slate-900 via-[#0c121d] to-slate-950 rounded-3xl p-4 sm:p-5 border-4 border-yellow-400 shadow-[0_10px_35px_rgba(0,0,0,0.95)] text-center relative overflow-hidden group">
-                  <h3 className="text-[clamp(1.5rem,3.6vw,3.5rem)] font-black text-yellow-300 tracking-tight drop-shadow-[0_4px_12px_rgba(0,0,0,0.95)] leading-tight truncate">
-                    {primarySubject.subjectCode && !primarySubject.name.includes('(')
-                      ? `${primarySubject.name}(${primarySubject.subjectCode})`
-                      : primarySubject.name}
-                  </h3>
-                </div>
-
-                {/* 2. 입실 시간, 현재 시간, 시험 시간, 남은 시험 시간 (4 Core Blocks - 고정 높이 및 줄바꿈 완전 차단) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  {/* 입실 시간 */}
-                  <div className="bg-white rounded-2xl p-4 border-3 border-slate-300 shadow-xl flex items-center gap-3.5 h-[88px] sm:h-[96px] overflow-hidden">
-                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
-                      <DoorOpen className="w-6 h-6 sm:w-8 sm:h-8" />
+                    {/* 1. 과목명 (Extra Large High-Visibility Headline) */}
+                    <div className="bg-gradient-to-b from-slate-900 via-[#0c121d] to-slate-950 rounded-3xl p-4 sm:p-5 border-4 border-yellow-400 shadow-[0_10px_35px_rgba(0,0,0,0.95)] text-center relative overflow-hidden group">
+                      <h3 className="text-[clamp(1.5rem,3.6vw,3.5rem)] font-black text-yellow-300 tracking-tight drop-shadow-[0_4px_12px_rgba(0,0,0,0.95)] leading-tight truncate">
+                        {primarySubject.subjectCode && !primarySubject.name.includes('(')
+                          ? `${primarySubject.name}(${primarySubject.subjectCode})`
+                          : primarySubject.name}
+                      </h3>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-wider">
-                        입실 시간
-                      </div>
-                      <div className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-950 font-mono tabular-nums tracking-tight whitespace-nowrap truncate">
-                        {primarySubject.entryTime ? primarySubject.entryTime.replace('입실', '').trim() : '09:20'}
-                      </div>
-                    </div>
-                  </div>
 
-                  {/* 현재 시간 */}
-                  <div className="bg-white rounded-2xl p-4 border-3 border-slate-300 shadow-xl flex items-center justify-between gap-3.5 h-[88px] sm:h-[96px] overflow-hidden">
-                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
-                        <Clock className="w-6 h-6 sm:w-8 sm:h-8" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-wider">
-                          현재 시간
+                    {/* 2. 입실 시간, 현재 시간, 시험 시간, 남은 시험 시간 (4 Core Blocks - 고정 높이 및 줄바꿈 완전 차단) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      {/* 입실 시간 */}
+                      <div className="bg-white rounded-2xl p-4 border-3 border-slate-300 shadow-xl flex items-center gap-3.5 h-[88px] sm:h-[96px] overflow-hidden">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                          <DoorOpen className="w-6 h-6 sm:w-8 sm:h-8" />
                         </div>
-                        <div className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-950 whitespace-nowrap truncate tracking-tight font-mono tabular-nums">
-                          {currentTime}
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-wider">
+                            입실 시간
+                          </div>
+                          <div className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-950 font-mono tabular-nums tracking-tight whitespace-nowrap truncate">
+                            {primarySubject.entryTime ? primarySubject.entryTime.replace('입실', '').trim() : '09:20'}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
 
-                  {/* 시험 시간 */}
-                  <div className="bg-white rounded-2xl p-4 border-3 border-slate-300 shadow-xl flex items-center gap-3.5 h-[88px] sm:h-[96px] overflow-hidden">
-                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-md">
-                      <Clock className="w-6 h-6 sm:w-8 sm:h-8" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-wider">
-                        시험 시간
+                      {/* 현재 시간 */}
+                      <div className="bg-white rounded-2xl p-4 border-3 border-slate-300 shadow-xl flex items-center justify-between gap-3.5 h-[88px] sm:h-[96px] overflow-hidden">
+                        <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                            <Clock className="w-6 h-6 sm:w-8 sm:h-8" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-wider">
+                              현재 시간
+                            </div>
+                            <div className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-950 whitespace-nowrap truncate tracking-tight font-mono tabular-nums">
+                              {currentTime}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-baseline gap-2 whitespace-nowrap overflow-hidden">
-                        <span className="text-xl sm:text-2xl md:text-3xl font-black text-slate-950 font-mono tabular-nums tracking-tight">
-                          {primarySubject.time.replace(/\s+/g, '')}
-                        </span>
-                        <span className="text-sm sm:text-base md:text-lg font-black text-amber-700 shrink-0">
-                          (총 {primarySubject.duration || 60}분)
-                        </span>
-                      </div>
-                    </div>
-                  </div>
 
-                  {/* 남은 시험 시간 */}
-                  <div className="bg-slate-950 rounded-2xl p-4 border-3 border-slate-700 shadow-xl flex items-center gap-3.5 h-[88px] sm:h-[96px] overflow-hidden">
-                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-cyan-600 text-white flex items-center justify-center shrink-0 shadow-md">
-                      <Timer className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-300" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs sm:text-sm font-black text-slate-400 uppercase tracking-wider">
-                        남은 시험 시간
+                      {/* 시험 시간 */}
+                      <div className="bg-white rounded-2xl p-4 border-3 border-slate-300 shadow-xl flex items-center gap-3.5 h-[88px] sm:h-[96px] overflow-hidden">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-md">
+                          <Clock className="w-6 h-6 sm:w-8 sm:h-8" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-wider">
+                            시험 시간
+                          </div>
+                          <div className="flex items-baseline gap-2 whitespace-nowrap overflow-hidden">
+                            <span className="text-xl sm:text-2xl md:text-3xl font-black text-slate-950 font-mono tabular-nums tracking-tight">
+                              {primarySubject.time.replace(/\s+/g, '')}
+                            </span>
+                            <span className="text-sm sm:text-base md:text-lg font-black text-amber-700 shrink-0">
+                              (총 {primarySubject.duration || 60}분)
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-baseline gap-2 whitespace-nowrap overflow-hidden">
-                        <span className="text-xl sm:text-2xl md:text-3xl font-black text-cyan-300 font-mono tabular-nums tracking-tight drop-shadow-xs">
-                          {currentExam.remainingFormatted}
-                        </span>
-                        <span className="text-xs sm:text-sm md:text-base font-black text-emerald-400 font-mono tabular-nums shrink-0">
-                          (진행률 {currentExam.percent.toFixed(1)}%)
-                        </span>
+
+                      {/* 남은 시험 시간 */}
+                      <div className="bg-slate-950 rounded-2xl p-4 border-3 border-slate-700 shadow-xl flex items-center gap-3.5 h-[88px] sm:h-[96px] overflow-hidden">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-cyan-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                          <Timer className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-300" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs sm:text-sm font-black text-slate-400 uppercase tracking-wider">
+                            남은 시험 시간
+                          </div>
+                          <div className="flex items-baseline gap-2 whitespace-nowrap overflow-hidden">
+                            <span className={`text-xl sm:text-2xl md:text-3xl font-black font-mono tabular-nums tracking-tight drop-shadow-xs ${isSubjectUpcoming ? 'text-yellow-300 text-base sm:text-xl' : 'text-cyan-300'}`}>
+                              {subjectRemainingFormatted}
+                            </span>
+                            {!isSubjectUpcoming && (
+                              <span className="text-xs sm:text-sm md:text-base font-black text-emerald-400 font-mono tabular-nums shrink-0">
+                                (진행률 {subjectPercent.toFixed(1)}%)
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
 
                 {/* 고정 높이 상태 안내 바 (종료 10분 전 / 시작 10분 전 / 일반 진행 시 레이아웃 높이 변화 0px 유지) */}
                 {currentExam.isEndingSoon ? (
