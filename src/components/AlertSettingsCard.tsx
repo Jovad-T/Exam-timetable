@@ -18,6 +18,10 @@ import {
   Trash2,
   Tag,
   Edit3,
+  Upload,
+  FileAudio,
+  ExternalLink,
+  X,
 } from 'lucide-react';
 import { audioAlert } from '../utils/audioAlert';
 
@@ -49,11 +53,36 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState<'시험시작' | '시험종료' | '주의사항' | '일반안내'>('시험시작');
   const [newText, setNewText] = useState('');
+  const [newAudioUrl, setNewAudioUrl] = useState<string | undefined>(undefined);
+  const [newAudioName, setNewAudioName] = useState<string | undefined>(undefined);
+  const [audioUploadNotice, setAudioUploadNotice] = useState<string | null>(null);
+
+  const readAudioFileAsDataUrl = (
+    file: File,
+    onLoaded: (dataUrl: string, fileName: string) => void
+  ) => {
+    // Firestore 1MB document limit protection: warn if single audio file exceeds 750KB
+    if (file.size > 750 * 1024) {
+      setAudioUploadNotice(
+        `파일 크기(${(file.size / 1024).toFixed(0)}KB)가 큽니다. 클라우드 동기화를 위해 750KB 이하의 짧은 MP3 파일(클로바 더빙 MP3 다운로드 권장)을 사용해 주세요.`
+      );
+      setTimeout(() => setAudioUploadNotice(null), 5000);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        onLoaded(reader.result, file.name);
+        setAudioUploadNotice(`'${file.name}' 음성 파일이 등록되었습니다!`);
+        setTimeout(() => setAudioUploadNotice(null), 3500);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleAddTemplate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newText.trim()) {
-      alert('템플릿 제목과 내용을 모두 입력해 주세요.');
       return;
     }
     const newItem: AnnouncementTemplate = {
@@ -61,39 +90,52 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
       category: newCategory,
       title: newTitle.trim(),
       text: newText.trim(),
+      ...(newAudioUrl ? { audioUrl: newAudioUrl, audioName: newAudioName } : {}),
     };
     const updated = [...currentTemplates, newItem];
     onChangeSettings({ ...settings, announcementTemplates: updated });
     setNewTitle('');
     setNewText('');
+    setNewAudioUrl(undefined);
+    setNewAudioName(undefined);
   };
 
   const handleDeleteTemplate = (id: string) => {
-    if (confirm('해당 안내 멘트 템플릿을 삭제하시겠습니까?')) {
-      const updated = currentTemplates.filter((t) => t.id !== id);
-      onChangeSettings({ ...settings, announcementTemplates: updated });
-    }
+    const updated = currentTemplates.filter((t) => t.id !== id);
+    onChangeSettings({ ...settings, announcementTemplates: updated });
   };
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editCategory, setEditCategory] = useState<'시험시작' | '시험종료' | '주의사항' | '일반안내'>('시험시작');
   const [editText, setEditText] = useState('');
+  const [editAudioUrl, setEditAudioUrl] = useState<string | undefined>(undefined);
+  const [editAudioName, setEditAudioName] = useState<string | undefined>(undefined);
 
   const handleStartEdit = (template: AnnouncementTemplate) => {
     setEditingId(template.id);
     setEditTitle(template.title);
     setEditCategory(template.category);
     setEditText(template.text);
+    setEditAudioUrl(template.audioUrl);
+    setEditAudioName(template.audioName);
   };
 
   const handleSaveEdit = (id: string) => {
     if (!editTitle.trim() || !editText.trim()) {
-      alert('템플릿 제목과 내용을 모두 입력해 주세요.');
       return;
     }
     const updated = currentTemplates.map((t) =>
-      t.id === id ? { ...t, title: editTitle.trim(), category: editCategory, text: editText.trim() } : t
+      t.id === id
+        ? {
+            ...t,
+            title: editTitle.trim(),
+            category: editCategory,
+            text: editText.trim(),
+            audioUrl: editAudioUrl,
+            audioName: editAudioName,
+          }
+        : t
     );
     onChangeSettings({ ...settings, announcementTemplates: updated });
     setEditingId(null);
@@ -122,6 +164,7 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
       rate: settings.ttsVoiceSpeed || 1.0,
       pitch: settings.ttsPitch || 1.0,
       voiceStyle: settings.ttsVoiceStyle || 'announcer',
+      audioUrl: settings.ttsAudioUrl,
       onEnd: () => setIsPlayingTts(false),
     });
     if (!success) {
@@ -135,7 +178,7 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
   };
 
   const handleCombinedTest = () => {
-    // 1st play chime bell, then after 1.8s speak the custom TTS announcement!
+    // 1st play chime bell, then after 1.8s speak the custom TTS announcement (or uploaded Clova Dubbing MP3)!
     setIsPlayingTest(true);
     audioAlert.playAlertSound(settings.soundType || 'chime', settings.volume || 0.7);
     setTimeout(() => {
@@ -147,6 +190,7 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
           rate: settings.ttsVoiceSpeed || 1.0,
           pitch: settings.ttsPitch || 1.0,
           voiceStyle: settings.ttsVoiceStyle || 'announcer',
+          audioUrl: settings.ttsAudioUrl,
           onEnd: () => setIsPlayingTts(false),
         });
       }
@@ -373,6 +417,22 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
         </button>
       </div>
 
+      {audioUploadNotice && (
+        <div className="bg-emerald-50 border-2 border-emerald-400 text-emerald-900 px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2">
+            <FileAudio className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{audioUploadNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAudioUploadNotice(null)}
+            className="text-emerald-700 hover:text-emerald-950 p-0.5 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* 4. 시험 시작 10분 전 자동 알림 및 '곧 시험이 시작됩니다' TTS 설정 */}
       <div className="bg-gradient-to-br from-cyan-50 via-blue-50/40 to-white rounded-2xl p-4 sm:p-5 border-2 border-cyan-300 space-y-3.5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-cyan-200/80">
@@ -390,7 +450,7 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-500">
-                각 교시 시험 시작 10분 전이 되면 자동으로 알림 배너가 켜지고, '곧 시험이 시작됩니다' TTS 음성이 방송됩니다.
+                각 교시 시험 시작 10분 전이 되면 자동으로 알림 배너가 켜지고, 클로바 더빙 MP3 또는 TTS 음성이 방송됩니다.
               </p>
             </div>
           </div>
@@ -411,7 +471,7 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
             <MessageSquare className="w-3.5 h-3.5 text-cyan-600" />
             <span>시험 시작 10분 전 TTS 방송 멘트 (자유롭게 수정 가능):</span>
@@ -423,10 +483,85 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
             placeholder="시험 시작 10분 전 안내할 멘트를 입력하세요..."
             className="w-full px-3.5 py-2.5 rounded-xl border-2 border-cyan-200 bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500 font-bold text-xs text-slate-900 leading-relaxed shadow-xs"
           />
+
+          {/* Clova Dubbing Audio Upload for 10-min Start Alert */}
+          <div className="bg-white/90 rounded-xl p-3 border border-cyan-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <FileAudio className="w-4 h-4 text-cyan-600 shrink-0" />
+              <div className="min-w-0">
+                <span className="text-xs font-black text-slate-800 block">
+                  시작 10분 전 클로바 더빙 음성 파일 (MP3/WAV) 등록
+                </span>
+                {settings.startTtsAudioUrl ? (
+                  <span className="text-[11px] font-bold text-emerald-700 truncate block">
+                    ✓ 등록됨: {settings.startTtsAudioName || '커스텀 시작 안내 음성.mp3'} (기계음 대신 이 파일이 방송됩니다)
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-slate-500 block">
+                    파일 미등록 시 위 텍스트가 기본 브라우저 TTS로 낭독됩니다.
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+              <label className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-black cursor-pointer transition flex items-center gap-1.5 shadow-2xs">
+                <Upload className="w-3.5 h-3.5" />
+                <span>{settings.startTtsAudioUrl ? '음성 파일 변경' : 'MP3/WAV 업로드'}</span>
+                <input
+                  type="file"
+                  accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg,audio/m4a,audio/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      readAudioFileAsDataUrl(file, (dataUrl, fileName) => {
+                        onChangeSettings({
+                          ...settings,
+                          startTtsAudioUrl: dataUrl,
+                          startTtsAudioName: fileName,
+                        });
+                      });
+                    }
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+              {settings.startTtsAudioUrl && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      audioAlert.playCustomAudio(settings.startTtsAudioUrl!, {
+                        volume: settings.volume || 0.9,
+                        rate: settings.ttsVoiceSpeed || 1.0,
+                      })
+                    }
+                    className="px-2.5 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1"
+                  >
+                    <Play className="w-3 h-3 fill-emerald-700" />
+                    <span>들어보기</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChangeSettings({
+                        ...settings,
+                        startTtsAudioUrl: undefined,
+                        startTtsAudioName: undefined,
+                      })
+                    }
+                    className="px-2.5 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-xl text-xs font-black transition cursor-pointer"
+                  >
+                    삭제
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* 5. TTS (Text-to-Speech) 음성 멘트 커스텀 설정 (사용자 요청 사항) */}
+      {/* 5. TTS (Text-to-Speech) 음성 멘트 커스텀 설정 및 네이버 클로바 더빙 MP3 등록 */}
       <div className="bg-gradient-to-br from-indigo-50 via-purple-50/40 to-white rounded-2xl p-4 sm:p-5 border-2 border-indigo-300 space-y-3.5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-indigo-200/80">
           <div className="flex items-center gap-2">
@@ -434,16 +569,16 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
               <Mic className="w-4 h-4" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h4 className="text-sm font-black text-slate-900">
-                  종료 10분 전 TTS 안내 멘트 방송 (원하는 문구 직접 입력)
+                  종료 {settings.alertMinutes}분 전 TTS 안내 멘트 & 클로바 더빙(MP3) 등록
                 </h4>
-                <span className="text-[10px] bg-purple-100 text-purple-800 font-extrabold px-2 py-0.5 rounded-full border border-purple-200">
-                  사용자 맞춤형 TTS
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full border border-emerald-300">
+                  네이버 클로바 더빙 호환
                 </span>
               </div>
               <p className="text-[11px] text-slate-500">
-                원하는 안내 문구를 텍스트로 적어주시면 브라우저 고품질 한국어 TTS 음성으로 자동 변환되어 교실에 방송됩니다.
+                네이버 클로바 더빙에서 다운로드한 MP3/WAV 파일을 등록하거나, 원하는 문구를 직접 입력해 방송할 수 있습니다.
               </p>
             </div>
           </div>
@@ -465,12 +600,124 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
           </div>
         </div>
 
+        {/* Naver Clova Dubbing MP3/WAV Direct Registration Box */}
+        <div className="bg-emerald-50/90 border-2 border-emerald-300 rounded-2xl p-3.5 sm:p-4 space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                <FileAudio className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs sm:text-sm font-black text-emerald-950">
+                    외부 AI 음성 (VoiceStudio, 클로바 더빙, 타입캐스트 등) 또는 MP3/녹음 등록
+                  </span>
+                  <a
+                    href="https://ai.kt.com/service/voice-studio"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-black text-rose-700 hover:text-rose-900 bg-white px-2 py-0.5 rounded-lg border border-rose-300 shadow-2xs transition"
+                  >
+                    <span>VoiceStudio</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <a
+                    href="https://clovadubbing.naver.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-700 hover:text-emerald-900 bg-white px-2 py-0.5 rounded-lg border border-emerald-300 shadow-2xs transition"
+                  >
+                    <span>클로바 더빙</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <a
+                    href="https://typecast.ai"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-black text-indigo-700 hover:text-indigo-900 bg-white px-2 py-0.5 rounded-lg border border-indigo-300 shadow-2xs transition"
+                  >
+                    <span>타입캐스트</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <p className="text-[11px] text-emerald-800 font-medium mt-0.5 leading-relaxed">
+                  <strong>보이스스튜디오(VoiceStudio), 클로바 더빙, 타입캐스트, Vrew</strong> 등에서 생성해 다운로드한 <strong>MP3, WAV, M4A</strong> 파일이나 <strong>스마트폰 음성 녹음본</strong>을 업로드하시면 전자칠판에서 그대로 고품질 재생됩니다.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+              <label className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black cursor-pointer transition flex items-center gap-1.5 shadow-xs">
+                <Upload className="w-3.5 h-3.5" />
+                <span>{settings.ttsAudioUrl ? ' 다른 오디오 파일로 변경' : 'AI 음성 / MP3 업로드'}</span>
+                <input
+                  type="file"
+                  accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg,audio/m4a,audio/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      readAudioFileAsDataUrl(file, (dataUrl, fileName) => {
+                        onChangeSettings({
+                          ...settings,
+                          ttsAudioUrl: dataUrl,
+                          ttsAudioName: fileName,
+                        });
+                      });
+                    }
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+
+              {settings.ttsAudioUrl && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onChangeSettings({
+                      ...settings,
+                      ttsAudioUrl: undefined,
+                      ttsAudioName: undefined,
+                    })
+                  }
+                  className="px-3 py-2 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 rounded-xl text-xs font-black transition cursor-pointer"
+                >
+                  파일 등록 해제
+                </button>
+              )}
+            </div>
+          </div>
+
+          {settings.ttsAudioUrl && (
+            <div className="bg-white rounded-xl px-3.5 py-2 border border-emerald-200 flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md shrink-0">
+                  우선 재생 중
+                </span>
+                <span className="font-black text-slate-800 truncate">
+                  {settings.ttsAudioName || '등록된 클로바 더빙 음성.mp3'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleTestTTS}
+                className="text-emerald-700 hover:text-emerald-900 font-black flex items-center gap-1 shrink-0 cursor-pointer"
+              >
+                <Play className="w-3.5 h-3.5 fill-emerald-600" />
+                <span>등록된 MP3 미리듣기</span>
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Text Input Area */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
               <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
-              <span>방송될 TTS 멘트 문구 (자유롭게 수정 가능):</span>
+              <span>
+                방송될 멘트 문구 (클로바 더빙 대본 겸용 / MP3 미등록 시 기본 TTS로 낭독):
+              </span>
             </label>
             <span className="text-[11px] text-slate-400 font-medium">
               {ttsMessage.length}자 입력됨
@@ -515,7 +762,7 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
         {/* Human-like TTS Voice Style & Emotion Expression */}
         <div className="space-y-1.5 pt-1">
           <span className="text-[11px] font-black text-slate-700 block">
-            🎙️ AI 낭독 감정 표현 및 스타일 선택 (차분함, 활기참, 경고조 등):
+            🎙️ 기본 브라우저 TTS 낭독 스타일 선택 (MP3 미등록 시 적용):
           </span>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             {[
@@ -582,17 +829,17 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-xs"
               >
                 <Square className="w-3.5 h-3.5 fill-white" />
-                <span>TTS 방송 중지</span>
+                <span>방송 중지</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={handleTestTTS}
                 className="flex items-center gap-1.5 px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-xs"
-                title="입력한 멘트 문구를 지금 바로 음성으로 들어봅니다"
+                title="등록된 클로바 더빙 MP3 또는 입력한 멘트 문구를 지금 바로 들어봅니다"
               >
                 <Volume2 className="w-3.5 h-3.5" />
-                <span>TTS 음성 미리듣기</span>
+                <span>{settings.ttsAudioUrl ? '등록된 클로바 MP3 미리듣기' : 'TTS 음성 미리듣기'}</span>
               </button>
             )}
           </div>
@@ -609,14 +856,14 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h4 className="text-base font-black text-slate-900">
-                  시험 안내 멘트 관리 (상황별 템플릿 저장소)
+                  시험 안내 멘트 관리 (상황별 템플릿 & 개별 MP3 보관함)
                 </h4>
                 <span className="text-xs bg-amber-100 text-amber-800 font-extrabold px-2.5 py-0.5 rounded-full border border-amber-200">
-                  관리자 맞춤형 템플릿
+                  클로바 더빙 파일 첨부 지원
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium">
-                시험 시작, 종료, 주의사항 등 상황별 안내 멘트를 미리 저장해두고, 관리 및 전자칠판에서 원클릭으로 불러와 방송할 수 있습니다.
+                각 상황별 안내 멘트마다 클로바 더빙에서 다운받은 MP3 파일을 함께 넣어두면, 전자칠판에서 클릭 즉시 해당 목소리로 방송됩니다.
               </p>
             </div>
           </div>
@@ -641,7 +888,7 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
             ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[320px] overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[360px] overflow-y-auto pr-1">
             {currentTemplates
               .filter((t) => templateFilterCat === '전체' || t.category === templateFilterCat)
               .map((template) => {
@@ -684,6 +931,43 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
                           placeholder="멘트 내용 입력..."
                           className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-900 focus:outline-none leading-relaxed"
                         />
+                        <div className="flex items-center justify-between gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200 text-[11px]">
+                          <span className="truncate font-bold text-slate-700">
+                            {editAudioName ? `🎵 ${editAudioName}` : '첨부된 MP3 파일 없음'}
+                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <label className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold cursor-pointer">
+                              <span>MP3 선택</span>
+                              <input
+                                type="file"
+                                accept="audio/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) {
+                                    readAudioFileAsDataUrl(f, (dataUrl, fileName) => {
+                                      setEditAudioUrl(dataUrl);
+                                      setEditAudioName(fileName);
+                                    });
+                                  }
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
+                            {editAudioUrl && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditAudioUrl(undefined);
+                                  setEditAudioName(undefined);
+                                }}
+                                className="px-2 py-1 bg-rose-100 text-rose-700 rounded-md font-bold cursor-pointer"
+                              >
+                                삭제
+                              </button>
+                            )}
+                          </div>
+                        </div>
                         <div className="flex items-center justify-end gap-1.5 pt-1">
                           <button
                             type="button"
@@ -705,7 +989,7 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
                       /* Normal Display */
                       <>
                         <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${
                               template.category === '시험시작' ? 'bg-cyan-100 text-cyan-800 border border-cyan-200' :
                               template.category === '시험종료' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
@@ -715,13 +999,19 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
                               {template.category}
                             </span>
                             <h5 className="text-xs font-black text-slate-900">{template.title}</h5>
+                            {template.audioUrl && (
+                              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded border border-emerald-300 flex items-center gap-1">
+                                <FileAudio className="w-3 h-3" />
+                                <span>MP3 등록됨</span>
+                              </span>
+                            )}
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 shrink-0">
                             <button
                               type="button"
                               onClick={() => handleStartEdit(template)}
                               className="text-slate-400 hover:text-indigo-600 p-1 rounded-md transition cursor-pointer"
-                              title="템플릿 수정"
+                              title="템플릿 수정 및 MP3 첨부"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
@@ -743,7 +1033,15 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
                         <div className="flex items-center justify-between pt-1">
                           <button
                             type="button"
-                            onClick={() => onChangeSettings({ ...settings, ttsMessage: template.text })}
+                            onClick={() =>
+                              onChangeSettings({
+                                ...settings,
+                                ttsMessage: template.text,
+                                ...(template.audioUrl
+                                  ? { ttsAudioUrl: template.audioUrl, ttsAudioName: template.audioName }
+                                  : {}),
+                              })
+                            }
                             className={`w-full py-1.5 px-3 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 ${
                               isApplied
                                 ? 'bg-amber-600 text-white shadow-sm'
@@ -751,7 +1049,13 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
                             }`}
                           >
                             <Volume2 className="w-3.5 h-3.5" />
-                            <span>{isApplied ? '현재 TTS 멘트에 적용됨' : '이 멘트를 TTS 방송으로 사용하기'}</span>
+                            <span>
+                              {isApplied
+                                ? '현재 TTS 멘트에 적용됨'
+                                : template.audioUrl
+                                ? '이 멘트 + 클로바 MP3 적용하기'
+                                : '이 멘트를 TTS 방송으로 사용하기'}
+                            </span>
                           </button>
                         </div>
                       </>
@@ -766,7 +1070,7 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
         <form onSubmit={handleAddTemplate} className="bg-white rounded-2xl p-4 border border-amber-200 space-y-3">
           <h5 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
             <Plus className="w-4 h-4 text-amber-600" />
-            <span>새로운 안내 멘트 템플릿 직접 추가하기</span>
+            <span>새로운 안내 멘트 템플릿 직접 추가하기 (클로바 더빙 MP3 첨부 가능)</span>
           </h5>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -807,10 +1111,44 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
             />
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
+            <div className="flex items-center gap-2">
+              <label className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-black cursor-pointer transition flex items-center gap-1.5">
+                <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{newAudioName ? `첨부됨: ${newAudioName}` : '클로바 더빙 MP3/WAV 파일 첨부 (선택)'}</span>
+                <input
+                  type="file"
+                  accept="audio/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      readAudioFileAsDataUrl(file, (dataUrl, fileName) => {
+                        setNewAudioUrl(dataUrl);
+                        setNewAudioName(fileName);
+                      });
+                    }
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+              {newAudioUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewAudioUrl(undefined);
+                    setNewAudioName(undefined);
+                  }}
+                  className="text-xs font-bold text-rose-600 hover:underline cursor-pointer"
+                >
+                  첨부 취소
+                </button>
+              )}
+            </div>
+
             <button
               type="submit"
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-md transition cursor-pointer flex items-center gap-1.5"
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>템플릿 저장하기</span>
@@ -821,3 +1159,4 @@ export const AlertSettingsCard: React.FC<AlertSettingsCardProps> = ({
     </div>
   );
 };
+

@@ -5,6 +5,7 @@
 
 class AudioAlertManager {
   private ctx: AudioContext | null = null;
+  private currentAudio: HTMLAudioElement | null = null;
 
   private getContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -123,8 +124,51 @@ class AudioAlertManager {
   }
 
   /**
-   * Speak TTS announcement in Korean (Web Speech API)
-   * 사용자 요청: "종료 10분 전 알림 멘트는 원하는 문구를 텍스트로 주면 TTS로 만들어서 넣을 수 있어?"
+   * Play custom uploaded audio file (MP3/WAV from Naver Clova Dubbing, etc.)
+   */
+  public playCustomAudio(
+    audioUrl: string,
+    options: {
+      volume?: number;
+      rate?: number;
+      onEnd?: () => void;
+    } = {}
+  ): boolean {
+    if (typeof window === 'undefined' || !audioUrl) return false;
+    try {
+      this.stopTTS();
+      const audio = new Audio(audioUrl);
+      audio.volume = Math.max(0.1, Math.min(1.0, options.volume ?? 1.0));
+      if (options.rate && options.rate >= 0.5 && options.rate <= 2.0) {
+        audio.playbackRate = options.rate;
+      }
+      audio.onended = () => {
+        if (this.currentAudio === audio) {
+          this.currentAudio = null;
+        }
+        options.onEnd?.();
+      };
+      audio.onerror = () => {
+        if (this.currentAudio === audio) {
+          this.currentAudio = null;
+        }
+        options.onEnd?.();
+      };
+      this.currentAudio = audio;
+      audio.play().catch((err) => {
+        console.warn('Custom audio playback error:', err);
+        this.currentAudio = null;
+        options.onEnd?.();
+      });
+      return true;
+    } catch (err) {
+      console.warn('playCustomAudio error:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Speak TTS announcement in Korean (Custom Clova Dubbing MP3/WAV first, fallback to Web Speech API)
    */
   public speakTTS(
     text: string,
@@ -133,15 +177,26 @@ class AudioAlertManager {
       rate?: number;
       pitch?: number;
       voiceStyle?: 'announcer' | 'friendly' | 'calm' | 'energetic' | 'warning';
+      audioUrl?: string;
       onEnd?: () => void;
     } = {}
   ) {
+    // 1. If a custom audio file (e.g. Naver Clova Dubbing MP3/WAV) is registered, play it first!
+    if (options.audioUrl && options.audioUrl.trim()) {
+      const played = this.playCustomAudio(options.audioUrl, {
+        volume: options.volume,
+        rate: options.rate,
+        onEnd: options.onEnd,
+      });
+      if (played) return true;
+    }
+
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       return false;
     }
 
     try {
-      window.speechSynthesis.cancel();
+      this.stopTTS();
 
       const trimmed = text.trim();
       if (!trimmed) return false;
@@ -213,9 +268,16 @@ class AudioAlertManager {
   }
 
   /**
-   * Stop any ongoing speech
+   * Stop any ongoing speech or custom audio
    */
   public stopTTS() {
+    if (this.currentAudio) {
+      try {
+        this.currentAudio.pause();
+        this.currentAudio.currentTime = 0;
+      } catch {}
+      this.currentAudio = null;
+    }
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
@@ -223,3 +285,4 @@ class AudioAlertManager {
 }
 
 export const audioAlert = new AudioAlertManager();
+

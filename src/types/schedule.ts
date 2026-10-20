@@ -44,6 +44,8 @@ export interface AnnouncementTemplate {
   category: '시험시작' | '시험종료' | '주의사항' | '일반안내';
   title: string;
   text: string;
+  audioUrl?: string;            // 네이버 클로바 더빙 등에서 다운로드한 MP3/WAV 오디오 데이터 URL
+  audioName?: string;           // 업로드된 오디오 파일명 (예: "종료10분전_클로바더빙.mp3")
 }
 
 export interface ExamAlertSettings {
@@ -54,10 +56,15 @@ export interface ExamAlertSettings {
   volume?: number;              // 음량 (0.1 ~ 1.0)
   ttsEnabled?: boolean;         // TTS 음성 안내 켜기/끄기 (사용자 요청: 원하는 문구 TTS 생성)
   ttsMessage?: string;          // TTS 안내 문구 텍스트
+  ttsAudioUrl?: string;         // 종료 N분 전 클로바 더빙 등 커스텀 음성 파일 (MP3/WAV Data URL)
+  ttsAudioName?: string;        // 종료 N분 전 업로드된 음성 파일명
   ttsVoiceSpeed?: number;       // 음성 재생 속도 (0.8 ~ 1.2)
   ttsVoiceStyle?: 'announcer' | 'friendly' | 'calm' | 'energetic' | 'warning'; // AI 사람다운 낭독 스타일 및 감정 표현 (차분함, 활기참, 경고조 등)
   ttsPitch?: number;            // 음성 고저 (0.8 ~ 1.2)
   startAlertEnabled?: boolean;  // 시험 시작 10분 전 자동 알림 켜기/끄기
   startTtsMessage?: string;     // 시험 시작 10분 전 TTS 멘트 ("곧 시험이 시작됩니다...")
+  startTtsAudioUrl?: string;    // 시험 시작 10분 전 클로바 더빙 등 커스텀 음성 파일 (MP3/WAV Data URL)
+  startTtsAudioName?: string;   // 시험 시작 10분 전 업로드된 음성 파일명
   announcementTemplates?: AnnouncementTemplate[]; // 사용자 맞춤형 시험 안내 멘트 템플릿 목록
 }
+

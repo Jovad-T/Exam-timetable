@@ -318,7 +318,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
     </div>
   );
 
-  const handleBroadcastTemplate = (text: string) => {
+  const handleBroadcastTemplate = (text: string, audioUrl?: string) => {
     setIsBroadcastingTemplate(true);
     const soundEnabled = alertSettings?.soundEnabled ?? true;
     const soundType = alertSettings?.soundType || 'chime';
@@ -335,6 +335,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
         volume: volume,
         rate: ttsSpeed,
         voiceStyle: ttsStyle,
+        audioUrl: audioUrl,
         onEnd: () => setIsBroadcastingTemplate(false),
       });
     }, soundEnabled ? 1800 : 100);
@@ -1002,6 +1003,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 rate: alertSettings?.ttsVoiceSpeed || 1.0,
                 pitch: alertSettings?.ttsPitch || 1.0,
                 voiceStyle: alertSettings?.ttsVoiceStyle || 'announcer',
+                audioUrl: alertSettings?.startTtsAudioUrl,
               });
             }, 1500);
           }
@@ -1104,6 +1106,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 audioAlert.speakTTS(msg, {
                   volume: alertSettings?.volume || 0.9,
                   rate: alertSettings?.ttsVoiceSpeed || 1.0,
+                  voiceStyle: alertSettings?.ttsVoiceStyle || 'announcer',
+                  audioUrl: alertSettings?.ttsAudioUrl,
                 });
               }, 1800);
             }
@@ -4029,13 +4033,19 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                       type="button"
                       disabled={isBroadcastingTemplate}
                       onClick={() => {
-                        handleBroadcastTemplate(template.text);
+                        handleBroadcastTemplate(template.text, template.audioUrl);
                         setIsTemplateModalOpen(false);
                       }}
                       className="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-black shadow-md transition cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
                     >
                       <Volume2 className="w-4 h-4" />
-                      <span>{isBroadcastingTemplate ? '방송 송출 중...' : '클릭 즉시 TTS 방송 송출'}</span>
+                      <span>
+                        {isBroadcastingTemplate
+                          ? '방송 송출 중...'
+                          : template.audioUrl
+                          ? '클릭 즉시 클로바 MP3 방송 송출'
+                          : '클릭 즉시 TTS 방송 송출'}
+                      </span>
                     </button>
                   </div>
                 ))}
