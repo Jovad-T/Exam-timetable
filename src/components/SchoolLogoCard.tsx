@@ -68,45 +68,50 @@ export const SchoolLogoCard: React.FC<SchoolLogoCardProps> = ({
       return;
     }
 
-    // Read original file as DataURL
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const rawDataUrl = event.target?.result as string;
-      if (!rawDataUrl) return;
-
-      setOriginalFileSrc(rawDataUrl);
+    setIsProcessing(true);
+    try {
+      // Create a compact resized original copy (256px) for fast toggling/re-applying
+      const originalResized = await makeImageBackgroundTransparent(file, {
+        tolerance: 0,
+        feather: 0,
+        maxDimension: 256,
+      });
+      setOriginalFileSrc(originalResized.dataUrl);
 
       if (autoRemoveBg) {
-        setIsProcessing(true);
-        try {
-          const result = await makeImageBackgroundTransparent(rawDataUrl, {
-            tolerance,
-            feather: 12,
-            maxDimension: 800,
-          });
+        const result = await makeImageBackgroundTransparent(originalResized.dataUrl, {
+          tolerance,
+          feather: 10,
+          maxDimension: 256,
+        });
 
-          onChangeLogo(result.dataUrl);
+        onChangeLogo(result.dataUrl);
 
-          if (result.isAlreadyTransparent) {
-            setSuccessMsg('학교 마크가 첨부되었습니다 (이미 투명 배경 PNG입니다).');
-          } else {
-            setSuccessMsg('✨ 학교 마크 배경이 자동으로 투명화되어 저장되었습니다!');
-          }
-        } catch {
-          // Fallback to raw data url if processing fails
-          onChangeLogo(rawDataUrl);
-          setSuccessMsg('학교 마크가 성공적으로 첨부되었습니다.');
-        } finally {
-          setIsProcessing(false);
-          setTimeout(() => setSuccessMsg(null), 3500);
+        if (result.isAlreadyTransparent) {
+          setSuccessMsg('학교 마크가 즉시 첨부되었습니다 (이미 투명 배경 PNG입니다).');
+        } else {
+          setSuccessMsg('✨ 학교 마크 배경이 즉시 투명화되어 저장되었습니다!');
         }
       } else {
-        onChangeLogo(rawDataUrl);
+        onChangeLogo(originalResized.dataUrl);
         setSuccessMsg('학교 마크가 원본 그대로 첨부되었습니다.');
-        setTimeout(() => setSuccessMsg(null), 3000);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      // Fallback via FileReader if needed
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const raw = ev.target?.result as string;
+        if (raw) {
+          setOriginalFileSrc(raw);
+          onChangeLogo(raw);
+          setSuccessMsg('학교 마크가 성공적으로 첨부되었습니다.');
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsProcessing(false);
+      setTimeout(() => setSuccessMsg(null), 3000);
+    }
   };
 
   // Re-process current image with different tolerance or mode
@@ -119,17 +124,17 @@ export const SchoolLogoCard: React.FC<SchoolLogoCardProps> = ({
     try {
       const result = await makeImageBackgroundTransparent(targetSource, {
         tolerance: newTolerance,
-        feather: 12,
-        maxDimension: 800,
+        feather: 10,
+        maxDimension: 256,
       });
 
       onChangeLogo(result.dataUrl);
-      setSuccessMsg(`✨ 감도(${newTolerance})를 적용하여 배경을 다시 투명화했습니다!`);
+      setSuccessMsg(`✨ 감도(${newTolerance})가 즉시 반영되었습니다!`);
     } catch {
       setSuccessMsg('투명화 처리에 실패했습니다.');
     } finally {
       setIsProcessing(false);
-      setTimeout(() => setSuccessMsg(null), 3000);
+      setTimeout(() => setSuccessMsg(null), 2500);
     }
   };
 
@@ -144,10 +149,11 @@ export const SchoolLogoCard: React.FC<SchoolLogoCardProps> = ({
         try {
           const result = await makeImageBackgroundTransparent(originalFileSrc, {
             tolerance,
-            feather: 12,
+            feather: 10,
+            maxDimension: 256,
           });
           onChangeLogo(result.dataUrl);
-          setSuccessMsg('✨ 배경 자동 투명화가 적용되었습니다.');
+          setSuccessMsg('✨ 배경 자동 투명화가 즉시 적용되었습니다.');
         } finally {
           setIsProcessing(false);
           setTimeout(() => setSuccessMsg(null), 2500);
