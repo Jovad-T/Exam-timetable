@@ -32,6 +32,12 @@ import {
   Coffee,
   Award,
   GraduationCap,
+  Home,
+  Monitor,
+  Move,
+  Minus,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import { ChalkCanvas } from './ChalkCanvas';
 import { audioAlert } from '../utils/audioAlert';
@@ -39,6 +45,7 @@ import { SubjectItem } from '../types/schedule';
 import { DEFAULT_ANNOUNCEMENT_TEMPLATES } from './AlertSettingsCard';
 import { getKoreaDate, isTodayScheduleDay } from '../utils/dateUtils';
 import { cleanNoticeText, isSuneungOrMockSchedule, isMockSchedule, isSuneungSchedule, isRegularSchedule } from '../data/scheduleData';
+import { ElectronWindowState } from './ElectronUpdateBanner';
 
 export const DAILY_ENCOURAGEMENT_QUOTES = [
   "오늘 흘린 땀방울은 내일의 찬란한 꿈을 이루는 가장 확실한 증거입니다. 힘내세요!",
@@ -457,7 +464,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             step="5"
             value={brightness}
             onChange={(e) => handleUpdateBrightness(Number(e.target.value))}
-            className="w-16 sm:w-20 md:w-24 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400 focus:outline-none"
+            className={`${size === 'board' ? 'w-14 sm:w-16' : 'w-16 sm:w-20 md:w-24'} h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400 focus:outline-none`}
             title={`전자칠판 화면 밝기 조절: ${brightness}%`}
           />
           <span className="text-[11px] font-mono font-black text-amber-300 w-7 sm:w-8 text-right shrink-0">
@@ -465,8 +472,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
           </span>
         </div>
 
-        {/* Quick presets */}
-        {size !== 'compact' && (
+        {/* Quick presets - normal 상단바에서만 표시하여 칠판 내부 헤더 가로 폭 절약 */}
+        {size === 'normal' && (
           <div className="hidden lg:flex items-center gap-1 pl-1 border-l border-slate-700/80 text-[10px]">
             {[100, 80, 60].map((val) => (
               <button
@@ -528,12 +535,23 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
   const [filterMyClassOnly, setFilterMyClassOnly] = useState<boolean>(true);
 
   // Screen resolution detection for auto-fitting chalkboard to single screen
-  const [windowSize, setWindowSize] = useState<{ width: number; height: number }>({
+  const [windowSize, setWindowSize] = useState<{ width: number; height: number; dpr: number }>({
     width: typeof window !== 'undefined' ? window.innerWidth : 1920,
     height: typeof window !== 'undefined' ? window.innerHeight : 1080,
+    dpr: typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
   });
   const [scaleMode, setScaleMode] = useState<'auto' | 'custom'>('auto');
   const [customScale, setCustomScale] = useState<number>(1);
+  const [measuredBoardHeight, setMeasuredBoardHeight] = useState<number>(0);
+
+  // Electron & Browser OS Window / Multi-monitor state
+  const [winState, setWinState] = useState<ElectronWindowState | null>(null);
+  const [isBrowserFullscreen, setIsBrowserFullscreen] = useState<boolean>(
+    typeof document !== 'undefined' ? !!document.fullscreenElement : false
+  );
+  const [monitorToast, setMonitorToast] = useState<string | null>(null);
+  const isElectron = typeof window !== 'undefined' && !!window.electronUpdater?.isElectron;
+  const isOSFullscreen = isElectron ? (winState?.isFullscreen ?? true) : isBrowserFullscreen;
 
   // Simulation mode for testing during off-school hours or demonstration
   const [simMode, setSimMode] = useState<'realtime' | 'break' | 'p1' | 'p2' | 'warningAlert'>('realtime');
@@ -575,20 +593,41 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
     );
   }, [daySchedule.bottomNotice]);
 
-  // Window resize listener (ignore tiny 1px subpixel/scrollbar fluctuations and lock body scroll in fullscreen)
+  // Window resize & Electron multi-monitor state listener
   useEffect(() => {
     const handleResize = () => {
+      setIsBrowserFullscreen(!!document.fullscreenElement);
       setWindowSize((prev) => {
         const w = window.innerWidth;
         const h = window.innerHeight;
-        if (Math.abs(w - prev.width) <= 1 && Math.abs(h - prev.height) <= 1) {
+        const dpr = window.devicePixelRatio || 1;
+        if (Math.abs(w - prev.width) <= 1 && Math.abs(h - prev.height) <= 1 && dpr === prev.dpr) {
           return prev;
         }
-        return { width: w, height: h };
+        return { width: w, height: h, dpr };
       });
     };
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    document.addEventListener('fullscreenchange', handleResize);
+
+    const api = window.electronUpdater;
+    let unsub: (() => void) | undefined;
+    if (api?.getWindowState) {
+      api.getWindowState().then((st) => {
+        if (st) setWinState(st);
+      }).catch(() => {});
+    }
+    if (api?.onWindowStateChange) {
+      unsub = api.onWindowStateChange((st) => {
+        setWinState(st);
+      });
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      document.removeEventListener('fullscreenchange', handleResize);
+      if (unsub) unsub();
+    };
   }, []);
 
   useEffect(() => {
@@ -1315,22 +1354,64 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
         : 'break_view'
       : screenMode;
 
-  // Toggle browser fullscreen
+  // Toggle OS / Electron / Browser fullscreen & draggable window mode
+  const handleToggleOSFullscreen = async () => {
+    if (isElectron && window.electronUpdater?.toggleFullscreen) {
+      const next = await window.electronUpdater.toggleFullscreen();
+      setWinState(next);
+      setScaleMode('auto');
+      if (!next.isFullscreen) {
+        setMonitorToast('창 모드로 전환되었습니다. 상단 바를 마우스로 잡고 다른 모니터(전자칠판)로 드래그하세요!');
+        setTimeout(() => setMonitorToast(null), 5000);
+      }
+      return;
+    }
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+      setIsBrowserFullscreen(true);
+      setInternalIsFullscreen(true);
+      setScaleMode('auto');
+    } else {
+      document.exitFullscreen?.().catch(() => {});
+      setIsBrowserFullscreen(false);
+      setScaleMode('auto');
+      setMonitorToast('창 모드로 전환되었습니다. 창을 다른 모니터(전자칠판)로 드래그한 뒤 [전체화면]을 누르세요.');
+      setTimeout(() => setMonitorToast(null), 5000);
+    }
+  };
+
+  const handleMoveToNextMonitor = async () => {
+    if (isElectron && window.electronUpdater?.moveToNextDisplay) {
+      const res = await window.electronUpdater.moveToNextDisplay();
+      if (res?.state) setWinState(res.state);
+      setScaleMode('auto');
+      if (res?.singleDisplay) {
+        setMonitorToast('추가 모니터가 감지되지 않아 드래그 가능한 [창 모드]로 전환했습니다. 상단 바를 잡고 이동하세요.');
+      } else {
+        setMonitorToast(`모니터 ${res?.state?.currentDisplayIndex || 2}번 화면으로 이동 및 해상도 자동 맞춤 완료!`);
+      }
+      setTimeout(() => setMonitorToast(null), 4000);
+      return;
+    }
+    if (document.fullscreenElement) {
+      await document.exitFullscreen?.().catch(() => {});
+      setIsBrowserFullscreen(false);
+    }
+    setMonitorToast('브라우저 상단 탭을 마우스로 잡고 다른 모니터(전자칠판)로 드래그한 뒤 [전체화면]을 누르세요!');
+    setTimeout(() => setMonitorToast(null), 5000);
+  };
+
+  // Toggle browser fullscreen (legacy fallback)
   const toggleFullscreen = () => {
+    if (isFullscreen) {
+      handleToggleOSFullscreen();
+      return;
+    }
     if (externalToggleFullscreen) {
       externalToggleFullscreen();
       return;
     }
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch((e) => console.log(e));
-      setInternalIsFullscreen(true);
-      setFullscreenAspectMode('wide');
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch((e) => console.log(e));
-      }
-      setInternalIsFullscreen(false);
-    }
+    handleToggleOSFullscreen();
   };
 
   // Preset bottom notices for quick admin editing
@@ -1354,9 +1435,22 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
   const boardContainerRef = useRef<HTMLDivElement>(null);
 
-  // Fullscreen Auto-Scaling & Aspect Ratio Calculation:
-  // 동적 배너(종료 10분 전 안내 등) 출현 시에도 화면 배율이나 가로 폭이 절대 흔들리지 않도록 고정 기준 해상도 사용
-  const BASE_WIDTH = 1380;
+  // Measure actual rendered height of boardContainerRef dynamically so any screen resolution fits with 0 clipping
+  useEffect(() => {
+    const el = boardContainerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const h = Math.round(entry.contentRect.height || el.offsetHeight || 0);
+        if (h > 200) {
+          setMeasuredBoardHeight((prev) => (Math.abs(prev - h) <= 2 ? prev : h));
+        }
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [effectiveScreen, daySchedule, selectedMockPeriodId, filterMyClassOnly, attendance.grade, attendance.classNum]);
+
   // Center Floating Notification Modal Helper
   const renderCenterNotificationModal = () =>
     activeCenterNotification && (
@@ -1403,43 +1497,99 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
       </div>
     );
 
-  // 전체(1~4교시) 선택 여부 및 화면 크기를 기반으로 흔들림 없는 고정 스케일 계산
+  // 실행된 컴퓨터의 해상도 자동 감지 및 최상의 배율(Optimal Scale) 계산
   const isMockAll = isMockSchedule(daySchedule) && selectedMockPeriodId === 'all';
-  const BASE_HEIGHT = isMockAll ? 790 : 860;
+  const fallbackBaseHeight = isMockAll ? 790 : 860;
+  const activeBoardHeight = measuredBoardHeight > 300 ? measuredBoardHeight : fallbackBaseHeight;
 
-  // Fullscreen Safe Margins:
-  // 교실 배포용 전체화면에서 상단바 제거 및 상하 여백을 최소화하여 칠판 전체가 한 화면 안에 완벽히 들어오도록 설정
-  const topReservedSpace = 0;
-  const bottomReservedSpace = isFullscreen ? 8 : 0;
-  const sideReservedSpace = isFullscreen ? 16 : 0;
+  // 창 모드(드래그 가능 모드)일 때는 상단 드래그 바 높이(40px)를 확보하고, 전체화면일 때는 여백을 최소화
+  const topDragBarHeight = isFullscreen && !isOSFullscreen ? 42 : 0;
+  const bottomReservedSpace = isFullscreen ? 12 : 0;
+  const sideReservedSpace = isFullscreen ? 20 : 0;
 
   const availableWidth = Math.max(360, windowSize.width - sideReservedSpace);
-  const availableHeight = Math.max(300, windowSize.height - (topReservedSpace + bottomReservedSpace));
+  const availableHeight = Math.max(300, windowSize.height - (topDragBarHeight + bottomReservedSpace));
 
-  const targetVerticalScale = availableHeight / BASE_HEIGHT;
-  const targetHorizontalScale = availableWidth / BASE_WIDTH;
-  const targetScale = Math.min(targetVerticalScale, targetHorizontalScale);
+  // 모니터 화면 비율(16:9, 16:10, 4:3, 21:9 등)에 맞춰 가장 보기 좋은 기준 가로폭 계산
+  const viewportAspect = availableWidth / availableHeight;
+  const dynamicBaseWidth =
+    fullscreenAspectMode === 'photo'
+      ? 1440
+      : Math.round(Math.max(1440, Math.min(1820, fallbackBaseHeight * Math.min(2.05, Math.max(1.55, viewportAspect)))));
 
-  let autoCalculatedScale: number;
-  let dynamicBaseWidth: number;
-
-  if (fullscreenAspectMode === 'photo') {
-    autoCalculatedScale = targetScale * 0.985;
-    dynamicBaseWidth = BASE_WIDTH;
-  } else {
-    const idealBaseWidth = availableWidth / targetVerticalScale;
-    dynamicBaseWidth = Math.round(Math.max(1380, Math.min(1920, idealBaseWidth)));
-    autoCalculatedScale = Math.min(targetVerticalScale, availableWidth / dynamicBaseWidth) * 0.985;
-  }
+  const scaleX = availableWidth / dynamicBaseWidth;
+  const scaleY = availableHeight / activeBoardHeight;
+  const autoCalculatedScale = Math.min(scaleX, scaleY) * 0.99;
 
   const effectiveScale = scaleMode === 'auto' ? autoCalculatedScale : customScale;
   const scaledWidth = Math.round(dynamicBaseWidth * effectiveScale);
-  const scaledHeight = Math.round(BASE_HEIGHT * effectiveScale);
+  const scaledHeight = Math.round(activeBoardHeight * effectiveScale);
+
+  const detectedPhysicalRes = winState
+    ? `${winState.physicalWidth}×${winState.physicalHeight}`
+    : `${Math.round(windowSize.width * windowSize.dpr)}×${Math.round(windowSize.height * windowSize.dpr)}`;
+
+  // 정기고사 / 모의고사 각 모드에 공통 표시되는 [첫 화면(모드 선택)], [창 모드/드래그], [모니터 이동] 컴팩트 컨트롤
+  const renderBoardHeaderQuickActions = () => (
+    <div className="flex items-center gap-1 flex-wrap shrink-0">
+      {/* 1. 첫 화면(모드 선택)으로 돌아가기 버튼 */}
+      {onSwitchToSelector && (
+        <button
+          type="button"
+          onClick={onSwitchToSelector}
+          className="px-2.5 py-1 rounded-xl text-xs font-black bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-300/80 shadow-xs transition cursor-pointer flex items-center gap-1 whitespace-nowrap"
+          title="정기고사 / 모의고사 선택 첫 화면으로 돌아가기"
+        >
+          <Home className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
+          <span>첫 화면</span>
+        </button>
+      )}
+
+      {/* 2. 전체화면 ↔ 창 모드(다른 모니터로 드래그 이동) 토글 버튼 */}
+      <button
+        type="button"
+        onClick={handleToggleOSFullscreen}
+        className={`px-2 py-1 rounded-xl text-xs font-black border transition cursor-pointer flex items-center gap-1 shadow-xs whitespace-nowrap ${
+          isOSFullscreen
+            ? 'bg-slate-800/95 hover:bg-slate-700 text-amber-300 border-amber-400/50'
+            : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-300 animate-pulse'
+        }`}
+        title={
+          isOSFullscreen
+            ? '창 모드로 전환하여 마우스로 다른 모니터(전자칠판)로 드래그 이동하기 (단축키: F11)'
+            : '현재 모니터에서 전체화면으로 꽉 차게 고정하기 (단축키: F11)'
+        }
+      >
+        {isOSFullscreen ? (
+          <>
+            <Minimize2 className="w-3 h-3 text-amber-300 shrink-0" />
+            <span>창 모드(드래그)</span>
+          </>
+        ) : (
+          <>
+            <Maximize2 className="w-3 h-3 text-white shrink-0" />
+            <span>전체화면</span>
+          </>
+        )}
+      </button>
+
+      {/* 3. 다른 모니터로 즉시 이동 버튼 */}
+      <button
+        type="button"
+        onClick={handleMoveToNextMonitor}
+        className="px-2 py-1 rounded-xl text-xs font-black bg-cyan-900/90 hover:bg-cyan-700 text-cyan-200 hover:text-white border border-cyan-500/50 transition cursor-pointer flex items-center gap-1 shadow-xs whitespace-nowrap"
+        title="연결된 다른 모니터(전자칠판)로 화면을 즉시 이동합니다"
+      >
+        <Monitor className="w-3 h-3 text-cyan-300 shrink-0" />
+        <span>모니터 이동</span>
+      </button>
+    </div>
+  );
 
   // Render the core chalkboard content
   const renderChalkboardContent = () => (
     <div
-      className={`relative rounded-3xl ${isMockAll ? 'p-2 sm:p-3 md:p-3.5' : 'p-3 sm:p-4 md:p-5'} ${currentTheme.frameBg} ${currentTheme.frameBorder} border-4 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.92),inset_0_1px_2px_rgba(255,255,255,0.18)] flex flex-col justify-between aspect-[16/9] w-[95%] mx-auto`}
+      className={`relative rounded-3xl ${isMockAll ? 'p-2 sm:p-3 md:p-3.5' : 'p-3 sm:p-4 md:p-5'} ${currentTheme.frameBg} ${currentTheme.frameBorder} border-4 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.92),inset_0_1px_2px_rgba(255,255,255,0.18)] flex flex-col justify-between w-full mx-auto overflow-hidden`}
     >
       {/* Metallic Frame Corner Accents */}
       <div
@@ -1457,7 +1607,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
       {/* Luxurious Dark Mode Chalkboard Canvas */}
       <div
-        className={`${currentTheme.canvasBg} rounded-2xl ${isMockAll ? 'p-2.5 sm:p-3 md:p-3.5' : 'p-3.5 sm:p-4.5 md:p-5'} border-4 ${currentTheme.canvasBorder} shadow-[inset_0_4px_30px_rgba(0,0,0,0.92)] text-white relative flex flex-col justify-between select-none`}
+        className={`${currentTheme.canvasBg} rounded-2xl ${isMockAll ? 'p-2.5 sm:p-3 md:p-3.5' : 'p-3.5 sm:p-4.5 md:p-5'} border-4 ${currentTheme.canvasBorder} shadow-[inset_0_4px_30px_rgba(0,0,0,0.92)] text-white relative flex flex-col justify-between select-none overflow-hidden`}
       >
         {/* Direct Electronic Board Drawing Layer */}
         <ChalkCanvas
@@ -1477,12 +1627,12 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
         {/* Top Banner Header */}
         <div
-          className={`relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 ${isMockAll ? 'pb-2' : 'pb-3'} border-b-2 ${currentTheme.headerBorder}`}
+          className={`relative z-10 flex flex-wrap items-center justify-between gap-2 ${isMockAll ? 'pb-2' : 'pb-3'} border-b-2 ${currentTheme.headerBorder} w-full overflow-hidden`}
         >
           {/* School Emblem & Title */}
-          <div className="flex items-center gap-3 min-w-0 flex-1 flex-wrap">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1 flex-wrap">
             {/* Emblem and School Title locked together on the same line */}
-            <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+            <div className="flex items-center gap-2.5 shrink-0 max-w-full">
               {/* School Emblem */}
               {schoolLogo ? (
                 <div
@@ -1513,9 +1663,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               {/* Title right next to emblem */}
               <div className="flex items-center gap-2 min-w-0 flex-wrap">
                 {schoolName && !daySchedule.fullTitle?.includes(schoolName) && (
-                  <span className="text-yellow-300 font-black text-sm sm:text-lg md:text-2xl whitespace-nowrap">{schoolName}</span>
+                  <span className="text-yellow-300 font-black text-sm sm:text-lg md:text-xl lg:text-2xl whitespace-nowrap">{schoolName}</span>
                 )}
-                <span className="text-sm sm:text-lg md:text-2xl font-black text-white tracking-tight drop-shadow-xs break-keep">
+                <span className="text-sm sm:text-lg md:text-xl lg:text-2xl font-black text-white tracking-tight drop-shadow-xs break-keep">
                   {isMockSchedule(daySchedule)
                     ? '전국연합학력평가'
                     : isSuneungOrMockSchedule(daySchedule)
@@ -1525,16 +1675,16 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               </div>
             </div>
 
-            {/* Badges: Date, Clock and Sound Alert Button */}
-            <div className="flex items-center gap-2 flex-wrap min-w-0">
+            {/* Badges: Date, Clock, Brightness, Sound */}
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
               {!isMockSchedule(daySchedule) && (
-                <span className="text-xs sm:text-sm md:text-base font-black text-yellow-300 bg-yellow-400/20 px-3 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs whitespace-nowrap">
-                  <Calendar className="w-4 h-4 text-yellow-300 shrink-0" />
+                <span className="text-xs sm:text-sm font-black text-yellow-300 bg-yellow-400/20 px-2.5 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs whitespace-nowrap">
+                  <Calendar className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
                   <span>{currentFullDate}</span>
                 </span>
               )}
-              <span className="text-xs sm:text-sm md:text-base font-black text-emerald-300 bg-emerald-950/70 px-3 py-1 rounded-xl border border-emerald-500/50 flex items-center gap-1.5 shadow-xs font-mono tabular-nums whitespace-nowrap">
-                <Clock className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
+              <span className="text-xs sm:text-sm font-black text-emerald-300 bg-emerald-950/70 px-2.5 py-1 rounded-xl border border-emerald-500/50 flex items-center gap-1.5 shadow-xs font-mono tabular-nums whitespace-nowrap">
+                <Clock className="w-3.5 h-3.5 text-emerald-400 animate-pulse shrink-0" />
                 <span className="inline-block min-w-[8ch] text-center">{currentTime}</span>
               </span>
 
@@ -1551,7 +1701,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                       soundEnabled: !alertSettings.soundEnabled,
                     });
                   }}
-                  className={`px-2.5 py-1 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-1 shadow-xs border whitespace-nowrap ${
+                  className={`px-2 py-1 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1 shadow-xs border whitespace-nowrap ${
                     alertSettings.soundEnabled
                       ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400'
                       : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-600'
@@ -1571,20 +1721,15 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                   )}
                 </button>
               )}
-
-              {/* 모의고사 모드: '전체' 고정 모드로 동작하도록 버튼 제거 */}
-              {isMockSchedule(daySchedule) && (
-                <div className="hidden"></div>
-              )}
             </div>
           </div>
 
           {/* Right Top Notice Banner */}
           {cleanNoticeText(daySchedule.notice)?.trim() ? (
             <div
-              className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-3.5 py-2 flex items-center gap-2 text-xs sm:text-sm md:text-base font-black text-yellow-300 shadow-md shrink-0 whitespace-normal break-words max-w-full`}
+              className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-3 py-1.5 flex items-center gap-2 text-xs sm:text-sm font-black text-yellow-300 shadow-md min-w-0 max-w-full`}
             >
-              <span className="text-yellow-200 font-black break-words drop-shadow-xs">
+              <span className="text-yellow-200 font-black truncate drop-shadow-xs">
                 {cleanNoticeText(daySchedule.notice)}
               </span>
               <span
@@ -1929,6 +2074,9 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                           </>
                         )}
                       </button>
+
+                      {/* 첫 화면(모드 선택), 창 모드(드래그), 모니터 이동 버튼 */}
+                      {renderBoardHeaderQuickActions()}
                 </div>
               </div>
 
@@ -2713,7 +2861,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
     return (
       <div
-        className={`relative rounded-3xl ${isMockAll ? 'p-2 sm:p-3 md:p-3.5' : 'p-3 sm:p-4 md:p-5'} ${currentTheme.frameBg} ${currentTheme.frameBorder} border-4 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.92),inset_0_1px_2px_rgba(255,255,255,0.18)] flex flex-col justify-between aspect-[16/9] w-[95%] mx-auto`}
+        className={`relative rounded-3xl ${isMockAll ? 'p-2 sm:p-3 md:p-3.5' : 'p-3 sm:p-4 md:p-5'} ${currentTheme.frameBg} ${currentTheme.frameBorder} border-4 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.92),inset_0_1px_2px_rgba(255,255,255,0.18)] flex flex-col justify-between w-full mx-auto overflow-hidden`}
       >
         {/* Metallic Frame Corner Accents */}
         <div
@@ -2731,7 +2879,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
         {/* Luxurious Dark Mode Chalkboard Canvas */}
         <div
-          className={`${currentTheme.canvasBg} rounded-2xl ${isMockAll ? 'p-2.5 sm:p-3 md:p-3.5' : 'p-3.5 sm:p-4.5 md:p-5'} border-4 ${currentTheme.canvasBorder} shadow-[inset_0_4px_30px_rgba(0,0,0,0.92)] text-white relative flex flex-col justify-between select-none`}
+          className={`${currentTheme.canvasBg} rounded-2xl ${isMockAll ? 'p-2.5 sm:p-3 md:p-3.5' : 'p-3.5 sm:p-4.5 md:p-5'} border-4 ${currentTheme.canvasBorder} shadow-[inset_0_4px_30px_rgba(0,0,0,0.92)] text-white relative flex flex-col justify-between select-none overflow-hidden`}
         >
           {/* Direct Electronic Board Drawing Layer */}
           <ChalkCanvas
@@ -2748,14 +2896,14 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
 
           {/* Top Banner Header */}
           <div
-            className={`relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 ${isMockAll ? 'pb-2' : 'pb-3'} border-b-2 ${currentTheme.headerBorder}`}
+            className={`relative z-10 flex flex-wrap items-center justify-between gap-2 ${isMockAll ? 'pb-2' : 'pb-3'} border-b-2 ${currentTheme.headerBorder} w-full overflow-hidden`}
           >
             {/* School Emblem & Title */}
-            <div className="flex items-center gap-3 shrink-0 flex-wrap">
-              <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1 flex-wrap">
+              <div className="flex items-center gap-2.5 shrink-0 max-w-full">
                 {schoolLogo ? (
                   <div
-                    className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full border-2 border-yellow-400 p-1 flex items-center justify-center shadow-lg shrink-0 overflow-hidden transition-colors ${
+                    className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full border-2 border-yellow-400 p-1 flex items-center justify-center shadow-lg shrink-0 overflow-hidden transition-colors ${
                       emblemBgMode === 'transparent'
                         ? 'bg-slate-900/60 backdrop-blur-xs'
                         : 'bg-white/95'
@@ -2770,19 +2918,19 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                   </div>
                 ) : (
                   <div
-                    className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-red-700 border-2 border-yellow-400 flex items-center justify-center shadow-lg shrink-0"
+                    className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-red-700 border-2 border-yellow-400 flex items-center justify-center shadow-lg shrink-0"
                   >
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-yellow-300/80 flex items-center justify-center text-yellow-300 font-extrabold text-xs sm:text-sm tracking-tighter">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-yellow-300/80 flex items-center justify-center text-yellow-300 font-extrabold text-xs tracking-tighter">
                       高
                     </div>
                   </div>
                 )}
 
-                <h2 className="text-lg sm:text-2xl md:text-3xl font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] flex items-center gap-2 flex-wrap">
+                <h2 className="text-sm sm:text-lg md:text-xl lg:text-2xl font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] flex items-center gap-2 flex-wrap">
                   {schoolName && !daySchedule.fullTitle?.includes(schoolName) && (
-                    <span className="text-yellow-300 font-black">{schoolName}</span>
+                    <span className="text-yellow-300 font-black whitespace-nowrap">{schoolName}</span>
                   )}
-                  <span>
+                  <span className="break-keep">
                     {isMockSchedule(daySchedule)
                       ? '전국연합학력평가'
                       : isSuneungOrMockSchedule(daySchedule)
@@ -2793,8 +2941,8 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               </div>
 
               {!isMockSchedule(daySchedule) && (
-                <span className="text-xs sm:text-sm md:text-base font-extrabold text-yellow-300 bg-yellow-400/20 px-3 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs whitespace-nowrap">
-                  <Calendar className="w-4 h-4 text-yellow-300" />
+                <span className="text-xs sm:text-sm font-extrabold text-yellow-300 bg-yellow-400/20 px-2.5 py-1 rounded-xl border border-yellow-400/40 flex items-center gap-1.5 shadow-xs whitespace-nowrap">
+                  <Calendar className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
                   <span>{currentFullDate}</span>
                 </span>
               )}
@@ -2806,18 +2954,18 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
             {/* Right Top Notice Banner */}
             {cleanNoticeText(daySchedule.notice)?.trim() ? (
               <div
-                className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-4 py-2 flex items-center gap-2 text-xs sm:text-sm md:text-base font-black text-yellow-300 shadow-md shrink-0 whitespace-normal break-words max-w-full`}
+                className={`${currentTheme.topNoticeBg} border-2 ${currentTheme.topNoticeBorder} rounded-xl px-3 py-1.5 flex items-center gap-2 text-xs sm:text-sm font-black text-yellow-300 shadow-md min-w-0 max-w-full`}
               >
-                <span className="text-yellow-200 font-black break-words drop-shadow-xs">
+                <span className="text-yellow-200 font-black truncate drop-shadow-xs">
                   {cleanNoticeText(daySchedule.notice)}
                 </span>
-                <span className="inline-block w-3.5 h-5 bg-white/90 rotate-12 rounded-xs ml-1 shadow-xs shrink-0" />
+                <span className="inline-block w-3 h-4 bg-white/90 rotate-12 rounded-xs ml-1 shadow-xs shrink-0" />
               </div>
             ) : null}
           </div>
 
           {/* Screen Mode & Period Switcher Bar */}
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3 my-2.5 bg-black/40 backdrop-blur-md p-2 rounded-2xl border border-slate-700/80">
+          <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 my-2 bg-black/40 backdrop-blur-md p-2 rounded-2xl border border-slate-700/80">
             {/* View Mode Buttons */}
             <div className="flex items-center gap-1.5 flex-wrap">
               <button
@@ -2873,56 +3021,60 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
               </button>
             </div>
 
-            {/* Period Picker Chips & Sound Toggle for 2nd screen */}
-            <div className="flex items-center gap-2 bg-slate-950/80 px-2.5 py-1 rounded-xl border border-slate-700">
-              <span className="text-[11px] font-black text-slate-400 mr-1">표시 교시:</span>
-              {daySchedule.schedule.map((p, idx) => {
-                const isSelected = focusedPeriodIdx === idx;
-                const isLiveNow = currentExam.activePeriodIndex === idx && currentExam.statusType === 'ongoing';
-                return (
-                  <button
-                    key={p.id || p.period}
-                    type="button"
-                    onClick={() => setFocusedPeriodIdx(idx)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1 ${
-                      isSelected
-                        ? 'bg-yellow-400 text-slate-950 shadow-md font-black ring-2 ring-yellow-300/60'
-                        : 'text-slate-300 hover:text-white hover:bg-slate-800'
-                    }`}
-                  >
-                    <span>{p.period}</span>
-                    {isLiveNow && (
-                      <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
-                    )}
-                  </button>
-                );
-              })}
-              <div className="h-4 w-px bg-slate-700 mx-1" />
-              <button
-                type="button"
-                onClick={() => {
-                  const newSound = !isSoundEnabled;
-                  if (onChangeAlertSettings && alertSettings) {
-                    onChangeAlertSettings({ ...alertSettings, soundEnabled: newSound });
-                  }
-                  if (newSound) {
-                    audioAlert.playAlertSound(alertSettings?.soundType || 'chime', alertSettings?.volume || 0.7);
-                  }
-                }}
-                className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-black transition cursor-pointer ${
-                  isSoundEnabled
-                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/40'
-                    : 'bg-slate-800 text-slate-400 border border-slate-700'
-                }`}
-                title={`시험 종료 알림음: ${isSoundEnabled ? '켜짐' : '꺼짐'}`}
-              >
-                {isSoundEnabled ? (
-                  <Volume2 className="w-3 h-3 text-emerald-400" />
-                ) : (
-                  <VolumeX className="w-3 h-3 text-slate-400" />
-                )}
-                <span>{isSoundEnabled ? '소리 ON' : '소리 OFF'}</span>
-              </button>
+            {/* Period Picker Chips, Sound Toggle & Mode/Monitor Quick Actions */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 bg-slate-950/80 px-2.5 py-1 rounded-xl border border-slate-700">
+                <span className="text-[11px] font-black text-slate-400 mr-1">표시 교시:</span>
+                {daySchedule.schedule.map((p, idx) => {
+                  const isSelected = focusedPeriodIdx === idx;
+                  const isLiveNow = currentExam.activePeriodIndex === idx && currentExam.statusType === 'ongoing';
+                  return (
+                    <button
+                      key={p.id || p.period}
+                      type="button"
+                      onClick={() => setFocusedPeriodIdx(idx)}
+                      className={`px-2 py-1 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1 ${
+                        isSelected
+                          ? 'bg-yellow-400 text-slate-950 shadow-md font-black ring-2 ring-yellow-300/60'
+                          : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                      }`}
+                    >
+                      <span>{p.period}</span>
+                      {isLiveNow && (
+                        <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
+                      )}
+                    </button>
+                  );
+                })}
+                <div className="h-4 w-px bg-slate-700 mx-1" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newSound = !isSoundEnabled;
+                    if (onChangeAlertSettings && alertSettings) {
+                      onChangeAlertSettings({ ...alertSettings, soundEnabled: newSound });
+                    }
+                    if (newSound) {
+                      audioAlert.playAlertSound(alertSettings?.soundType || 'chime', alertSettings?.volume || 0.7);
+                    }
+                  }}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black transition cursor-pointer ${
+                    isSoundEnabled
+                      ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/40'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700'
+                  }`}
+                  title={`시험 종료 알림음: ${isSoundEnabled ? '켜짐' : '꺼짐'}`}
+                >
+                  {isSoundEnabled ? (
+                    <Volume2 className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <VolumeX className="w-3 h-3 text-slate-400" />
+                  )}
+                  <span>{isSoundEnabled ? '소리 ON' : '소리 OFF'}</span>
+                </button>
+              </div>
+
+              {renderBoardHeaderQuickActions()}
             </div>
           </div>
 
@@ -3736,36 +3888,121 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
     </div>
   );
 
-  // If in FULLSCREEN mode (교실 배포용 전체화면):
-  // 상단바를 완전히 제거하고 그 공간만큼 위로 올려서 전자칠판 전체가 화면 안에 딱 맞게 들어가도록 구성
+  // If in FULLSCREEN / Classroom Kiosk mode (교실 배포용 화면):
+  // 실행된 컴퓨터의 해상도를 자동 감지하여 최상의 배율로 중앙 정렬 표시하며, 창 모드 전환 시 상단 드래그 바를 통해 다른 모니터로 자유롭게 드래그 이동 지원
   if (isFullscreen) {
     return (
       <div
-        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center justify-start overflow-hidden select-none pt-1 pb-1 px-1 m-0 transition-colors duration-500`}
+        className={`fixed inset-0 z-50 ${currentTheme.fullscreenBg} w-screen h-screen flex flex-col items-center justify-between overflow-hidden select-none m-0 transition-colors duration-500`}
       >
-        {/* Scaled Blackboard Container - 상단바 제거 공간만큼 위로 밀착 정렬 */}
-        <div
-          className="relative shrink-0 flex items-start justify-center mx-auto"
-          style={{
-            width: `${scaledWidth}px`,
-            height: `${scaledHeight}px`,
-          }}
-        >
+        {/* 창 모드(드래그 이동 모드) 활성화 시 상단 드래그 핸들 바 표시 */}
+        {!isOSFullscreen && (
           <div
-            ref={boardContainerRef}
-            style={{
-              width: `${dynamicBaseWidth}px`,
-              transform: `scale(${effectiveScale})`,
-              transformOrigin: 'top left',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              filter: brightness < 100 ? `brightness(${brightness}%)` : undefined,
-              transition: 'filter 0.2s ease',
-            }}
-            className="flex flex-col space-y-2 select-none -mt-[5px] mb-[2px]"
+            style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+            onDoubleClick={handleToggleOSFullscreen}
+            className="w-full h-[40px] bg-indigo-950/95 border-b border-indigo-400/60 px-3 sm:px-4 flex items-center justify-between gap-2 shrink-0 z-50 cursor-move shadow-lg"
           >
-            {effectiveScreen === 'break_view' ? renderChalkboardContent() : renderFocusedExamScreen()}
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="flex items-center gap-1.5 text-xs font-black text-yellow-300 bg-indigo-900/90 border border-indigo-400/50 px-2.5 py-0.5 rounded-lg truncate">
+                <Move className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
+                <span className="truncate">
+                  여기를 마우스로 잡고 다른 모니터(전자칠판)로 드래그하세요 (더블클릭: 전체화면)
+                </span>
+              </span>
+              <span className="hidden lg:inline-flex items-center gap-1 text-[11px] font-mono font-bold text-emerald-300 bg-slate-900/90 px-2 py-0.5 rounded-md border border-emerald-500/40">
+                <Monitor className="w-3 h-3 text-emerald-400" />
+                <span>
+                  해상도: {detectedPhysicalRes} · 자동 최적 배율 {Math.round(effectiveScale * 100)}%
+                </span>
+              </span>
+            </div>
+
+            <div
+              style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              className="flex items-center gap-1.5 shrink-0"
+            >
+              {onSwitchToSelector && (
+                <button
+                  type="button"
+                  onClick={onSwitchToSelector}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-black border border-slate-600 transition cursor-pointer flex items-center gap-1"
+                >
+                  <Home className="w-3.5 h-3.5 text-yellow-300" />
+                  <span>첫 화면(모드 선택)</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleMoveToNextMonitor}
+                className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-black border border-cyan-400 transition cursor-pointer flex items-center gap-1"
+              >
+                <Monitor className="w-3.5 h-3.5" />
+                <span>다른 모니터로 즉시 이동</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleToggleOSFullscreen}
+                className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black border border-emerald-300 shadow-md transition cursor-pointer flex items-center gap-1 animate-pulse"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span>현재 모니터에서 전체화면 (F11)</span>
+              </button>
+              {isElectron && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => window.electronUpdater?.minimizeWindow?.()}
+                    className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
+                    title="최소화"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.electronUpdater?.exitApp?.()}
+                    className="px-2 py-1 rounded-lg bg-rose-700 hover:bg-rose-600 text-white text-xs font-black border border-rose-500 transition cursor-pointer flex items-center gap-1"
+                    title="종료"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {monitorToast && (
+          <div className="fixed top-12 left-1/2 -translate-x-1/2 z-50 bg-amber-400 text-slate-950 font-black text-xs sm:text-sm px-5 py-2.5 rounded-2xl shadow-2xl border-2 border-white flex items-center gap-2 animate-bounce">
+            <Move className="w-4 h-4 text-slate-950 shrink-0" />
+            <span>{monitorToast}</span>
+          </div>
+        )}
+
+        {/* Scaled Blackboard Container - 컴퓨터 해상도에 맞춰 최적 배율로 정중앙 배치 */}
+        <div className="flex-1 w-full flex items-center justify-center overflow-hidden px-2 py-1">
+          <div
+            className="relative shrink-0 flex items-start justify-center mx-auto"
+            style={{
+              width: `${scaledWidth}px`,
+              height: `${scaledHeight}px`,
+            }}
+          >
+            <div
+              ref={boardContainerRef}
+              style={{
+                width: `${dynamicBaseWidth}px`,
+                transform: `scale(${effectiveScale})`,
+                transformOrigin: 'top left',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                filter: brightness < 100 ? `brightness(${brightness}%)` : undefined,
+                transition: 'filter 0.2s ease',
+              }}
+              className="flex flex-col select-none"
+            >
+              {effectiveScreen === 'break_view' ? renderChalkboardContent() : renderFocusedExamScreen()}
+            </div>
           </div>
         </div>
 

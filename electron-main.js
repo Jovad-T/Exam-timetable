@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const http = require('http');
@@ -281,6 +281,170 @@ function registerUpdaterIpcHandlers() {
   });
 }
 
+function getWindowState() {
+  try {
+    const displays = screen.getAllDisplays();
+    if (!mainWindowRef || mainWindowRef.isDestroyed()) {
+      const primary = screen.getPrimaryDisplay();
+      const sf = primary?.scaleFactor || 1;
+      return {
+        isFullscreen: true,
+        isMaximized: false,
+        displayCount: displays.length,
+        currentDisplayIndex: 1,
+        width: primary?.bounds?.width || 1920,
+        height: primary?.bounds?.height || 1080,
+        physicalWidth: Math.round((primary?.bounds?.width || 1920) * sf),
+        physicalHeight: Math.round((primary?.bounds?.height || 1080) * sf),
+        scaleFactor: sf,
+      };
+    }
+
+    const winBounds = mainWindowRef.getBounds();
+    const currentDisplay = screen.getDisplayMatching(winBounds) || screen.getPrimaryDisplay();
+    const currentIdx = Math.max(0, displays.findIndex((d) => d.id === currentDisplay.id));
+    const sf = currentDisplay?.scaleFactor || 1;
+
+    return {
+      isFullscreen: mainWindowRef.isFullScreen(),
+      isMaximized: mainWindowRef.isMaximized(),
+      displayCount: displays.length,
+      currentDisplayIndex: currentIdx + 1,
+      width: currentDisplay.bounds.width,
+      height: currentDisplay.bounds.height,
+      physicalWidth: Math.round(currentDisplay.bounds.width * sf),
+      physicalHeight: Math.round(currentDisplay.bounds.height * sf),
+      scaleFactor: sf,
+    };
+  } catch (err) {
+    return {
+      isFullscreen: true,
+      isMaximized: false,
+      displayCount: 1,
+      currentDisplayIndex: 1,
+      width: 1920,
+      height: 1080,
+      physicalWidth: 1920,
+      physicalHeight: 1080,
+      scaleFactor: 1,
+    };
+  }
+}
+
+function broadcastWindowState() {
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    mainWindowRef.webContents.send('window:state', getWindowState());
+  }
+}
+
+function setWindowDraggableMode(mainWindow) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const currentDisplay = screen.getDisplayMatching(mainWindow.getBounds()) || screen.getPrimaryDisplay();
+  const workArea = currentDisplay.workArea || currentDisplay.bounds;
+  const targetW = Math.max(1024, Math.round(workArea.width * 0.84));
+  const targetH = Math.max(640, Math.round(workArea.height * 0.84));
+  const targetX = workArea.x + Math.round((workArea.width - targetW) / 2);
+  const targetY = workArea.y + Math.round((workArea.height - targetH) / 2);
+
+  mainWindow.setFullScreen(false);
+  if (mainWindow.isMaximized()) {
+    mainWindow.unmaximize();
+  }
+  mainWindow.setResizable(true);
+  mainWindow.setMovable(true);
+  mainWindow.setBounds({ x: targetX, y: targetY, width: targetW, height: targetH }, true);
+}
+
+function registerWindowIpcHandlers() {
+  ipcMain.handle('window:get-state', () => {
+    return getWindowState();
+  });
+
+  ipcMain.handle('window:toggle-fullscreen', () => {
+    if (!mainWindowRef || mainWindowRef.isDestroyed()) return getWindowState();
+    const currentlyFullscreen = mainWindowRef.isFullScreen();
+    if (currentlyFullscreen) {
+      setWindowDraggableMode(mainWindowRef);
+    } else {
+      mainWindowRef.setFullScreen(true);
+    }
+    setTimeout(broadcastWindowState, 80);
+    return getWindowState();
+  });
+
+  ipcMain.handle('window:set-fullscreen', (_event, shouldBeFullscreen) => {
+    if (!mainWindowRef || mainWindowRef.isDestroyed()) return getWindowState();
+    if (shouldBeFullscreen) {
+      mainWindowRef.setFullScreen(true);
+    } else {
+      setWindowDraggableMode(mainWindowRef);
+    }
+    setTimeout(broadcastWindowState, 80);
+    return getWindowState();
+  });
+
+  ipcMain.handle('window:move-to-next-display', () => {
+    if (!mainWindowRef || mainWindowRef.isDestroyed()) {
+      return { ok: false, state: getWindowState() };
+    }
+    const displays = screen.getAllDisplays();
+    if (displays.length <= 1) {
+      // 모니터가 1개뿐인 경우 드래그 이동이 가능한 창 모드로 전환
+      if (mainWindowRef.isFullScreen()) {
+        setWindowDraggableMode(mainWindowRef);
+      }
+      setTimeout(broadcastWindowState, 80);
+      return { ok: true, singleDisplay: true, state: getWindowState() };
+    }
+
+    const currentDisplay = screen.getDisplayMatching(mainWindowRef.getBounds()) || screen.getPrimaryDisplay();
+    const currentIdx = Math.max(0, displays.findIndex((d) => d.id === currentDisplay.id));
+    const nextDisplay = displays[(currentIdx + 1) % displays.length];
+    const wasFullscreen = mainWindowRef.isFullScreen();
+
+    if (wasFullscreen) {
+      mainWindowRef.setFullScreen(false);
+    }
+    if (mainWindowRef.isMaximized()) {
+      mainWindowRef.unmaximize();
+    }
+
+    const workArea = nextDisplay.workArea || nextDisplay.bounds;
+    const targetW = Math.max(1024, Math.round(workArea.width * 0.85));
+    const targetH = Math.max(640, Math.round(workArea.height * 0.85));
+    const targetX = workArea.x + Math.round((workArea.width - targetW) / 2);
+    const targetY = workArea.y + Math.round((workArea.height - targetH) / 2);
+
+    mainWindowRef.setBounds({ x: targetX, y: targetY, width: targetW, height: targetH });
+
+    if (wasFullscreen) {
+      setTimeout(() => {
+        if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+          mainWindowRef.setFullScreen(true);
+          mainWindowRef.webContents.setZoomFactor(1.0);
+          broadcastWindowState();
+        }
+      }, 120);
+    } else {
+      setTimeout(() => {
+        if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+          mainWindowRef.webContents.setZoomFactor(1.0);
+          broadcastWindowState();
+        }
+      }, 80);
+    }
+
+    return { ok: true, singleDisplay: false, state: getWindowState() };
+  });
+
+  ipcMain.handle('window:minimize', () => {
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+      mainWindowRef.minimize();
+    }
+    return { ok: true };
+  });
+}
+
 function startLocalServer(distDir, callback) {
   try {
     const server = http.createServer((req, res) => {
@@ -354,11 +518,20 @@ function startLocalServer(distDir, callback) {
 }
 
 function createWindow(targetUrl) {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const workArea = primaryDisplay?.workArea || primaryDisplay?.bounds || { width: 1920, height: 1080, x: 0, y: 0 };
+
   const mainWindow = new BrowserWindow({
-    width: 1920,
-    height: 1080,
+    x: workArea.x,
+    y: workArea.y,
+    width: workArea.width,
+    height: workArea.height,
+    minWidth: 960,
+    minHeight: 540,
     fullscreen: true,
-    frame: false, // Borderless kiosk mode for electronic blackboard
+    frame: false, // Borderless kiosk/blackboard mode with custom draggable header bar in window mode
+    resizable: true,
+    movable: true,
     autoHideMenuBar: true,
     backgroundColor: '#0f172a',
     webPreferences: {
@@ -378,18 +551,37 @@ function createWindow(targetUrl) {
     mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
   }
 
-  // Trigger GitHub Release update check once the main window finishes launching & loading UI
+  // Trigger GitHub Release update check & normalize zoom factor once the main window finishes launching
   mainWindow.webContents.on('did-finish-load', () => {
+    try {
+      mainWindow.webContents.setZoomFactor(1.0);
+    } catch {}
     broadcastUpdateStatus({});
+    broadcastWindowState();
     if (!hasTriggeredInitialLaunchCheck) {
       hasTriggeredInitialLaunchCheck = true;
       triggerUpdateCheck();
     }
   });
 
-  // F12 키로 개발자 도구 토글 (디버깅 지원)
+  mainWindow.on('enter-full-screen', () => broadcastWindowState());
+  mainWindow.on('leave-full-screen', () => broadcastWindowState());
+  mainWindow.on('maximize', () => broadcastWindowState());
+  mainWindow.on('unmaximize', () => broadcastWindowState());
+  mainWindow.on('resized', () => broadcastWindowState());
+  mainWindow.on('moved', () => broadcastWindowState());
+
+  // F11 키로 창 모드(드래그 이동) ↔ 전체화면 토글, F12 키로 개발자 도구 토글
   mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.key === 'F12' && input.type === 'keyDown') {
+    if (input.key === 'F11' && input.type === 'keyDown') {
+      if (mainWindow.isFullScreen()) {
+        setWindowDraggableMode(mainWindow);
+      } else {
+        mainWindow.setFullScreen(true);
+      }
+      setTimeout(broadcastWindowState, 80);
+      event.preventDefault();
+    } else if (input.key === 'F12' && input.type === 'keyDown') {
       mainWindow.webContents.toggleDevTools();
       event.preventDefault();
     }
@@ -406,6 +598,11 @@ app.whenReady().then(() => {
 
   configureAutoUpdater();
   registerUpdaterIpcHandlers();
+  registerWindowIpcHandlers();
+
+  screen.on('display-added', () => broadcastWindowState());
+  screen.on('display-removed', () => broadcastWindowState());
+  screen.on('display-metrics-changed', () => broadcastWindowState());
 
   startLocalServer(distPath, (err, port, server) => {
     if (!err && port) {

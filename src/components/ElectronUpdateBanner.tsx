@@ -20,6 +20,18 @@ export interface UpdaterState {
   };
 }
 
+export interface ElectronWindowState {
+  isFullscreen: boolean;
+  isMaximized: boolean;
+  displayCount: number;
+  currentDisplayIndex: number;
+  width: number;
+  height: number;
+  physicalWidth: number;
+  physicalHeight: number;
+  scaleFactor: number;
+}
+
 declare global {
   interface Window {
     electronUpdater?: {
@@ -34,6 +46,12 @@ declare global {
       }) => Promise<{ ok: boolean; error?: string; state?: UpdaterState }>;
       onStatusChange: (cb: (state: UpdaterState) => void) => () => void;
       exitApp: () => void;
+      getWindowState?: () => Promise<ElectronWindowState>;
+      toggleFullscreen?: () => Promise<ElectronWindowState>;
+      setFullscreen?: (val: boolean) => Promise<ElectronWindowState>;
+      moveToNextDisplay?: () => Promise<{ ok: boolean; singleDisplay?: boolean; state: ElectronWindowState }>;
+      minimizeWindow?: () => Promise<{ ok: boolean }>;
+      onWindowStateChange?: (cb: (state: ElectronWindowState) => void) => () => void;
     };
   }
 }

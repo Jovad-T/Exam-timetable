@@ -12,6 +12,16 @@ contextBridge.exposeInMainWorld('electronUpdater', {
     return () => ipcRenderer.removeListener('updater:status', listener);
   },
   exitApp: () => ipcRenderer.send('app-exit'),
+  getWindowState: () => ipcRenderer.invoke('window:get-state'),
+  toggleFullscreen: () => ipcRenderer.invoke('window:toggle-fullscreen'),
+  setFullscreen: (val) => ipcRenderer.invoke('window:set-fullscreen', val),
+  moveToNextDisplay: () => ipcRenderer.invoke('window:move-to-next-display'),
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
+  onWindowStateChange: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('window:state', listener);
+    return () => ipcRenderer.removeListener('window:state', listener);
+  },
 });
 
 window.addEventListener('DOMContentLoaded', () => {
