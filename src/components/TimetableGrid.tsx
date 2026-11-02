@@ -745,7 +745,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                                 </td>
                               </tr>
                             ) : (
-                              filteredSubjects.map((sub) => {
+                              filteredSubjects.map((sub, sIdx) => {
                                 const actualSubIdx = period.subjects.findIndex(
                                   (s) => s === sub || (s.name === sub.name && s.time === sub.time && s.targetClass === sub.targetClass)
                                 );
@@ -753,7 +753,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                                 if (isMockSchedule(day)) {
                                   return (
                                     <tr
-                                      key={sub.id || `${sub.name}-${sub.time}`}
+                                      key={sub.id ? `${sub.id}-${sIdx}` : `${sub.name}-${sub.time}-${sIdx}`}
                                       className="hover:bg-purple-50/40 transition"
                                     >
                                       <td className="py-3 px-3 font-black text-slate-900 text-sm">
@@ -801,7 +801,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
 
                                 return (
                                   <tr
-                                    key={sub.id || `${sub.name}-${sub.time}-${sub.targetClass}`}
+                                    key={sub.id ? `${sub.id}-${sIdx}` : `${sub.name}-${sub.time}-${sub.targetClass || ''}-${sIdx}`}
                                     className="hover:bg-indigo-50/40 transition"
                                   >
                                     <td className="py-3 px-3 font-black text-slate-900 text-sm">
@@ -901,7 +901,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                     ) : (
                       /* Card Grid View */
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                        {filteredSubjects.map((subject) => {
+                        {filteredSubjects.map((subject, sIdx) => {
                           const actualSubIdx = period.subjects.findIndex(
                             (s) => s === subject || (s.name === subject.name && s.time === subject.time && s.targetClass === subject.targetClass)
                           );
@@ -910,7 +910,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                           if (isMockSchedule(day)) {
                             return (
                               <div
-                                key={subject.id || `${subject.name}-${subject.time}`}
+                                key={subject.id ? `${subject.id}-${sIdx}` : `${subject.name}-${subject.time}-${sIdx}`}
                                 className="bg-white rounded-2xl border-2 border-slate-200 p-4 shadow-sm hover:border-purple-300 transition flex flex-col justify-between space-y-3"
                               >
                                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -961,7 +961,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
 
                           return (
                             <div
-                              key={subject.id || `${subject.name}-${subject.time}`}
+                              key={subject.id ? `${subject.id}-${sIdx}` : `${subject.name}-${subject.time}-${subject.targetClass || ''}-${sIdx}`}
                               className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs hover:border-indigo-300 transition flex flex-col justify-between"
                             >
                               <div>

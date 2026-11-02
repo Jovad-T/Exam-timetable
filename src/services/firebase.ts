@@ -105,14 +105,20 @@ export interface FirestoreErrorInfo {
   };
 }
 
-// Quota management helpers (reset stale quota flags on fresh app load so cross-environment sync is never permanently blocked)
+// Quota management helpers (prevent write backoff loops when free daily quota limit is reached)
 let quotaExceededMemoryFlag = false;
 
 if (typeof window !== 'undefined') {
   try {
-    if (localStorage.getItem('firestore_quota_exceeded') !== null) {
-      console.info(`${LOG_PREFIX} Clearing stale localStorage 'firestore_quota_exceeded' flag on startup`);
-      localStorage.removeItem('firestore_quota_exceeded');
+    const quotaTimestamp = localStorage.getItem('firestore_quota_exceeded');
+    if (quotaTimestamp) {
+      const elapsed = Date.now() - parseInt(quotaTimestamp, 10);
+      // Suppress network requests for 30 minutes if quota was exceeded
+      if (!isNaN(elapsed) && elapsed < 30 * 60 * 1000) {
+        quotaExceededMemoryFlag = true;
+      } else {
+        localStorage.removeItem('firestore_quota_exceeded');
+      }
     }
   } catch {}
 }
@@ -172,7 +178,8 @@ export async function withFirestoreRetry<T>(
       const errMsg = error instanceof Error ? error.message : String(error);
 
       if (isQuotaError(error)) {
-        console.warn(`${LOG_PREFIX} [${operationName}] Quota exhausted detected on attempt ${attempt}`, {
+        markFirestoreQuotaExceeded();
+        console.warn(`${LOG_PREFIX} [${operationName}] Quota exhausted detected on attempt ${attempt}. Switching to local storage mode.`, {
           code: errCode,
           message: errMsg,
         });
@@ -199,11 +206,29 @@ export async function withFirestoreRetry<T>(
 }
 
 export function isFirestoreQuotaExceeded(): boolean {
-  return quotaExceededMemoryFlag;
+  if (quotaExceededMemoryFlag) return true;
+  if (typeof window !== 'undefined') {
+    try {
+      const quotaTimestamp = localStorage.getItem('firestore_quota_exceeded');
+      if (quotaTimestamp) {
+        const elapsed = Date.now() - parseInt(quotaTimestamp, 10);
+        if (!isNaN(elapsed) && elapsed < 30 * 60 * 1000) {
+          quotaExceededMemoryFlag = true;
+          return true;
+        }
+      }
+    } catch {}
+  }
+  return false;
 }
 
 export function markFirestoreQuotaExceeded(): void {
   quotaExceededMemoryFlag = true;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('firestore_quota_exceeded', String(Date.now()));
+    } catch {}
+  }
   try {
     disableNetwork(db).catch(() => {});
   } catch {}
@@ -619,12 +644,13 @@ export async function fetchSchoolScheduleFromCloud(
               const candSchoolRef = doc(db, 'schools', candidate.id);
               schoolSnap = await getDocFromServer(candSchoolRef).catch(() => getDoc(candSchoolRef));
             }
-            // If we matched by school name or sajik, mirror the document under normalizedSlug so both slugs stay in sync
+            // If we matched by school name or sajik, mirror the document under normalizedSlug only if quota is available
             if (
-              !cleanSearchName ||
-              candSchoolNameClean === cleanSearchName ||
-              cleanSearchName.includes('사직') ||
-              normalizedSlug === 'sajik-girls-high'
+              !isFirestoreQuotaExceeded() &&
+              (!cleanSearchName ||
+                candSchoolNameClean === cleanSearchName ||
+                cleanSearchName.includes('사직') ||
+                normalizedSlug === 'sajik-girls-high')
             ) {
               try {
                 await setDoc(doc(db, 'schools', normalizedSlug, 'schedules', 'current'), {
@@ -639,7 +665,11 @@ export async function fetchSchoolScheduleFromCloud(
                   updatedAt: new Date().toISOString(),
                 });
                 resolvedSlug = normalizedSlug;
-              } catch {}
+              } catch (setErr) {
+                if (isQuotaError(setErr)) {
+                  markFirestoreQuotaExceeded();
+                }
+              }
             }
             break;
           }
