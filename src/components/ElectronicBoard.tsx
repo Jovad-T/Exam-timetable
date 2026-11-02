@@ -783,17 +783,17 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
     }
     const target = (subject.targetClass || '').trim();
 
-    // 1. If target is empty, '전체', or '공통' -> matches all classes in all grades
-    if (!target || target === '전체' || target === '공통') {
-      return { isMatch: true, isExplicit: true, isElective: false };
-    }
-
-    // 2. Grade check: if target explicitly mentions another grade (e.g. "1학년", "3학년")
+    // 1. Grade check: if target explicitly mentions another grade (e.g. "1학년 전체", "3학년")
     const currentGradeStr = `${grade}학년`;
     const otherGrades = ['1학년', '2학년', '3학년'].filter((g) => g !== currentGradeStr);
     const mentionsOtherGrade = otherGrades.some((g) => target.includes(g));
     if (mentionsOtherGrade && !target.includes(currentGradeStr)) {
       return { isMatch: false, isExplicit: true, isElective: false };
+    }
+
+    // 2. If target is empty, '전체', '전학년', or '공통' (or e.g. '2학년 전체') -> matches all classes in this grade
+    if (!target || target === '전체' || target === '전학년' || target === '공통' || target === `${currentGradeStr} 전체`) {
+      return { isMatch: true, isExplicit: true, isElective: false };
     }
 
     // 3. '행정학급' -> matches the home-room class for this grade

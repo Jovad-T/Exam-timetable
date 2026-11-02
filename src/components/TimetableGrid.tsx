@@ -528,12 +528,12 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                 const filteredSubjects = isSuneungOrMockSchedule(day)
                   ? period.subjects
                   : period.subjects.filter((sub) => {
-                      if (sub.targetClass.includes(selectedGrade)) return true;
-                      if (sub.targetClass.includes('전체') || sub.targetClass.includes('공통')) return true;
+                      const target = (sub.targetClass || '').trim();
+                      if (target.includes(selectedGrade)) return true;
                       const otherGrades = ['1학년', '2학년', '3학년'].filter((g) => g !== selectedGrade);
-                      const mentionsOtherGrade = otherGrades.some((g) => sub.targetClass.includes(g));
-                      if (!mentionsOtherGrade) return true;
-                      return false;
+                      const mentionsOtherGrade = otherGrades.some((g) => target.includes(g));
+                      if (mentionsOtherGrade) return false;
+                      return true;
                     });
 
                 const isBreak = period.period.includes('휴식') || period.period.includes('쉬는');
@@ -698,7 +698,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                         </span>
                         <h4 className="text-base font-black text-slate-900">{period.period}</h4>
                         <span className="text-xs bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded-full">
-                          {isMockSchedule(day) ? '모의고사 타종 모드' : `${period.subjects.length}개 항목 등록됨`}
+                          {isMockSchedule(day) ? '모의고사 타종 모드' : `${filteredSubjects.length}개 항목 등록됨`}
                         </span>
                       </div>
 
@@ -747,7 +747,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                             ) : (
                               filteredSubjects.map((sub) => {
                                 const actualSubIdx = period.subjects.findIndex(
-                                  (s) => s.name === sub.name && s.time === sub.time
+                                  (s) => s === sub || (s.name === sub.name && s.time === sub.time && s.targetClass === sub.targetClass)
                                 );
 
                                 if (isMockSchedule(day)) {
@@ -801,7 +801,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
 
                                 return (
                                   <tr
-                                    key={sub.id || `${sub.name}-${sub.time}`}
+                                    key={sub.id || `${sub.name}-${sub.time}-${sub.targetClass}`}
                                     className="hover:bg-indigo-50/40 transition"
                                   >
                                     <td className="py-3 px-3 font-black text-slate-900 text-sm">
@@ -903,7 +903,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                         {filteredSubjects.map((subject) => {
                           const actualSubIdx = period.subjects.findIndex(
-                            (s) => s.name === subject.name && s.time === subject.time
+                            (s) => s === subject || (s.name === subject.name && s.time === subject.time && s.targetClass === subject.targetClass)
                           );
                           const isEngSub = subject.name.includes('영어');
 
