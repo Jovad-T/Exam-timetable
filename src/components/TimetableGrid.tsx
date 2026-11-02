@@ -540,7 +540,8 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                 const isLunch = period.period.includes('점심') || period.period.includes('중식');
                 const isMorningAssembly = period.period.includes('입실') || period.period.includes('조례');
                 const isCleanup = period.period.includes('채점') || period.period.includes('청소');
-                const isEnglish = period.period.includes('3교시') && (isSuneungOrMockSchedule(day) || period.subjects.some((s) => s.name.includes('영어')));
+                // 영어 무타종 원칙(13:10 본령 금지 및 듣기평가 직결)은 모의고사/수능에만 적용
+                const isEnglish = isSuneungOrMockSchedule(day) && (period.period.includes('3교시') || period.subjects.some((s) => s.name.includes('영어')));
 
                 if (isMorningAssembly || isCleanup) {
                   const sub0 = period.subjects[0];

@@ -1099,10 +1099,10 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
         const isEndingSoon = remaining <= effectiveAlertThresholdSec && remaining > 0;
 
         // Check if exam just started (within first 15 seconds)
-        const startCenterKey = `center-start-${active.periodName}-${active.startTime}`;
+        // [규칙] 영어 무타종 원칙(13:10 정각 본령 금지 및 듣기평가 직결)은 모의고사/수능 일정에만 적용
         const isEnglishListening =
-          (active.startTime === '13:10' || active.subjectNames.includes('영어') || active.periodName.includes('3교시')) &&
-          (active.subjectNames.includes('듣기') || isSuneungOrMockSchedule(daySchedule) || active.startTime === '13:10');
+          isSuneungOrMockSchedule(daySchedule) &&
+          (active.startTime === '13:10' || active.subjectNames.includes('듣기') || (active.periodName.includes('3교시') && active.subjectNames.includes('영어')));
 
         if (effectiveNowSec - active.startSec <= 15 && lastCenterNotificationKeyRef.current !== startCenterKey && !active.subjectNames.includes('자습')) {
           lastCenterNotificationKeyRef.current = startCenterKey;
@@ -2091,7 +2091,7 @@ export const ElectronicBoard: React.FC<ElectronicBoardProps> = ({
                 const isCurrentActivePeriod =
                   currentExam.activePeriodIndex === pIdx && currentExam.statusType === 'ongoing';
 
-                const isEnglish = period.period.includes('3교시') && (isSuneungOrMockSchedule(daySchedule) || period.subjects.some((s) => s.name.includes('영어')));
+                const isEnglish = isSuneungOrMockSchedule(daySchedule) && (period.period.includes('3교시') || period.subjects.some((s) => s.name.includes('영어')));
                 const isG4 = period.id === 'p-mk-4' || period.period.includes('4교시');
 
                 // 모의고사 모드 전용: 1교시 국어 영역을 예비령 왼쪽에 넣은 1줄 4단 구성 (1~4교시 통일 레이아웃)
