@@ -426,11 +426,9 @@ export default function App() {
             return cleanedCloudData;
           });
           try { localStorage.setItem(`schedule_data_${schoolSlug}`, JSON.stringify(cleanedCloudData)); } catch {}
-        } else if (!isFirestoreQuotaExceeded()) {
-          console.info(`[FirebaseSync] No cloud schedule found for "${schoolSlug}". Seeding Firestore with current local schedule...`);
-          saveSchoolScheduleToCloud(schoolSlug, scheduleData, schoolName, schoolLogo, alertSettings, classTotals, maxClasses)
-            .then(() => setCloudSyncStatus('synced'))
-            .catch(() => setCloudSyncStatus('offline'));
+        } else {
+          console.info(`[FirebaseSync] No cloud schedule found for "${schoolSlug}". Using local storage schedule.`);
+          setCloudSyncStatus('synced');
         }
         if (cloudName) {
           setSchoolName((prev) => (prev === cloudName ? prev : cloudName));
@@ -559,8 +557,10 @@ export default function App() {
           try { localStorage.setItem('max_classes', String(cloudExisting.maxClasses)); } catch {}
         }
         setCloudSyncStatus('synced');
-      } else {
+      } else if (!isFirestoreQuotaExceeded()) {
         await saveSchoolScheduleToCloud(processedSlug, scheduleData, cleanName, schoolLogo, alertSettings, classTotals, maxClasses);
+        setCloudSyncStatus('synced');
+      } else {
         setCloudSyncStatus('synced');
       }
     } catch {
@@ -632,9 +632,10 @@ export default function App() {
         localStorage.setItem('exam_alert_settings', JSON.stringify(newSettings));
       } catch {}
     }
-    if (appRole === 'admin' && schoolSlug) {
+    if (appRole === 'admin' && schoolSlug && !isFirestoreQuotaExceeded()) {
       const dataToSave = scheduleData || defaultScheduleData;
-      saveSchoolScheduleToCloud(schoolSlug, dataToSave, schoolName, schoolLogo, newSettings, classTotals, maxClasses);
+      saveSchoolScheduleToCloud(schoolSlug, dataToSave, schoolName, schoolLogo, newSettings, classTotals, maxClasses)
+        .catch(() => setCloudSyncStatus('offline'));
     }
   }, [appRole, schoolSlug, scheduleData, schoolName, schoolLogo, classTotals, maxClasses]);
 
@@ -738,7 +739,7 @@ export default function App() {
       }
 
       handleUpdateClassTotals(mergedTotals);
-      if (appRole === 'admin' && schoolSlug) {
+      if (appRole === 'admin' && schoolSlug && !isFirestoreQuotaExceeded()) {
         saveSchoolScheduleToCloud(
           schoolSlug,
           scheduleData || defaultScheduleData,
@@ -747,7 +748,7 @@ export default function App() {
           alertSettings,
           mergedTotals,
           nextMaxClasses
-        );
+        ).catch(() => setCloudSyncStatus('offline'));
       }
 
       const gradeSummaries: string[] = [];
@@ -1250,11 +1251,11 @@ export default function App() {
               onChangeAdminTab={handleChangeAdminTab}
               regularSchedules={regularSchedulesList}
               mockSchedules={mockSchedulesList}
-              activeTab={activeTab}
+              activeDayTab={activeTab}
               onSelectDayTab={handleSelectAdminDayTab}
-              onOpenUploadModal={() => setIsUploadModalOpen(true)}
+              onOpenUpload={() => setIsUploadModalOpen(true)}
               onResetMockSchedule={handleResetMockSchedule}
-              onPreviewInBoard={(mode) => {
+              onLaunchClassroom={(mode: 'regular' | 'mock') => {
                 handleSelectExamMode(mode);
                 setViewMode('board');
               }}

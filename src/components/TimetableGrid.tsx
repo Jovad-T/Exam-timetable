@@ -525,10 +525,12 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                     : day.schedule.filter((p) => p.id === selectedMockPeriodId))
                 : day.schedule
               ).map((period, periodIdx) => {
-                const filteredSubjects = isSuneungOrMockSchedule(day)
+                const filteredSubjects = isMockSchedule(day)
                   ? period.subjects
                   : period.subjects.filter((sub) => {
                       const target = (sub.targetClass || '').trim();
+                      if (!target) return true;
+                      if (target === '전체' || target === '전 학년' || target === '공통') return true;
                       if (target.includes(selectedGrade)) return true;
                       const otherGrades = ['1학년', '2학년', '3학년'].filter((g) => g !== selectedGrade);
                       const mentionsOtherGrade = otherGrades.some((g) => target.includes(g));
@@ -540,8 +542,8 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                 const isLunch = period.period.includes('점심') || period.period.includes('중식');
                 const isMorningAssembly = period.period.includes('입실') || period.period.includes('조례');
                 const isCleanup = period.period.includes('채점') || period.period.includes('청소');
-                // 영어 무타종 원칙(13:10 본령 금지 및 듣기평가 직결)은 모의고사/수능에만 적용
-                const isEnglish = isSuneungOrMockSchedule(day) && (period.period.includes('3교시') || period.subjects.some((s) => s.name.includes('영어')));
+                // 영어 무타종 원칙(13:10 본령 금지 및 듣기평가 직결)은 전국연합학력평가(모의고사)에만 적용
+                const isEnglish = isMockSchedule(day) && (period.period.includes('3교시') || period.subjects.some((s) => s.name.includes('영어')));
 
                 if (isMorningAssembly || isCleanup) {
                   const sub0 = period.subjects[0];

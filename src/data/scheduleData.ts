@@ -76,7 +76,6 @@ export function isSuneungOrMockSchedule(day?: DayExamSchedule | null): boolean {
   if (!day) return false;
   const title = (day.fullTitle || '').toLowerCase();
   const id = (day.id || '').toLowerCase();
-  const notice = (day.notice || '').toLowerCase();
   return (
     title.includes('수능') ||
     title.includes('모의고사') ||
@@ -84,7 +83,6 @@ export function isSuneungOrMockSchedule(day?: DayExamSchedule | null): boolean {
     title.includes('12156') ||
     id.includes('suneung') ||
     id.includes('mock') ||
-    notice.includes('듣기평가') ||
     day.date === '모의고사' ||
     day.date === '11/13'
   );

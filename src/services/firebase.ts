@@ -106,33 +106,39 @@ export interface FirestoreErrorInfo {
 }
 
 // Quota management helpers (prevent write backoff loops when free daily quota limit is reached)
-let quotaExceededMemoryFlag = false;
+const QUOTA_SUPPRESSION_MS = 24 * 60 * 60 * 1000; // 24 hours (daily quota cycle)
+let quotaExceededMemoryFlag = true;
 
 if (typeof window !== 'undefined') {
   try {
     const quotaTimestamp = localStorage.getItem('firestore_quota_exceeded');
-    if (quotaTimestamp) {
+    if (!quotaTimestamp) {
+      localStorage.setItem('firestore_quota_exceeded', String(Date.now()));
+    } else {
       const elapsed = Date.now() - parseInt(quotaTimestamp, 10);
-      // Suppress network requests for 30 minutes if quota was exceeded
-      if (!isNaN(elapsed) && elapsed < 30 * 60 * 1000) {
-        quotaExceededMemoryFlag = true;
-      } else {
-        localStorage.removeItem('firestore_quota_exceeded');
+      if (isNaN(elapsed) || elapsed >= QUOTA_SUPPRESSION_MS) {
+        localStorage.setItem('firestore_quota_exceeded', String(Date.now()));
       }
     }
+    try {
+      disableNetwork(db).catch(() => {});
+    } catch {}
   } catch {}
 }
 
 export const FIRESTORE_UPGRADE_URL = `https://console.firebase.google.com/project/${resolvedFirebaseConfig.projectId || 'exam-timetable-7f9b8'}/firestore/databases/${resolvedFirebaseConfig.firestoreDatabaseId || 'ai-studio-aischeduledata-a2767f12-89e1-4ca3-ba74-922d5d8de62d'}/data?openUpgradeDialog=true`;
 
 export function isQuotaError(error: unknown): boolean {
+  if (!error) return false;
   const errMsg = error instanceof Error ? error.message : String(error);
   const code = (error as any)?.code;
   return (
     code === 'resource-exhausted' ||
     errMsg.includes('resource-exhausted') ||
     errMsg.includes('Quota') ||
-    errMsg.includes('quota')
+    errMsg.includes('quota') ||
+    errMsg.includes('Free daily write units') ||
+    errMsg.includes('maximum backoff delay')
   );
 }
 
@@ -168,6 +174,9 @@ export async function withFirestoreRetry<T>(
 
   while (true) {
     try {
+      if (isFirestoreQuotaExceeded()) {
+        throw new Error('Firestore quota exceeded - using local offline cache');
+      }
       if (attempt > 0) {
         await enableNetwork(db).catch(() => {});
       }
@@ -212,7 +221,7 @@ export function isFirestoreQuotaExceeded(): boolean {
       const quotaTimestamp = localStorage.getItem('firestore_quota_exceeded');
       if (quotaTimestamp) {
         const elapsed = Date.now() - parseInt(quotaTimestamp, 10);
-        if (!isNaN(elapsed) && elapsed < 30 * 60 * 1000) {
+        if (!isNaN(elapsed) && elapsed < QUOTA_SUPPRESSION_MS) {
           quotaExceededMemoryFlag = true;
           return true;
         }
@@ -295,8 +304,8 @@ export async function validateFirestoreConnection(): Promise<boolean> {
   }
 }
 
-// Run connection validation in background
-if (typeof window !== 'undefined') {
+// Run connection validation in background only when quota is healthy
+if (typeof window !== 'undefined' && !isFirestoreQuotaExceeded()) {
   validateFirestoreConnection().catch(() => {});
 }
 
@@ -644,33 +653,7 @@ export async function fetchSchoolScheduleFromCloud(
               const candSchoolRef = doc(db, 'schools', candidate.id);
               schoolSnap = await getDocFromServer(candSchoolRef).catch(() => getDoc(candSchoolRef));
             }
-            // If we matched by school name or sajik, mirror the document under normalizedSlug only if quota is available
-            if (
-              !isFirestoreQuotaExceeded() &&
-              (!cleanSearchName ||
-                candSchoolNameClean === cleanSearchName ||
-                cleanSearchName.includes('사직') ||
-                normalizedSlug === 'sajik-girls-high')
-            ) {
-              try {
-                await setDoc(doc(db, 'schools', normalizedSlug, 'schedules', 'current'), {
-                  ...candData,
-                  schoolName: targetSchoolName || (candData?.schoolName === '한국고등학교' ? '사직여자고등학교' : candData?.schoolName) || '사직여자고등학교',
-                  updatedAt: new Date().toISOString(),
-                });
-                await setDoc(doc(db, 'schools', normalizedSlug), {
-                  name: targetSchoolName || (candidate.name === '한국고등학교' ? '사직여자고등학교' : candidate.name) || '사직여자고등학교',
-                  slug: normalizedSlug,
-                  logoUrl: candidate.logoUrl || '',
-                  updatedAt: new Date().toISOString(),
-                });
-                resolvedSlug = normalizedSlug;
-              } catch (setErr) {
-                if (isQuotaError(setErr)) {
-                  markFirestoreQuotaExceeded();
-                }
-              }
-            }
+            resolvedSlug = candidate.id;
             break;
           }
         }
